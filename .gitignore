@@ -1,5 +1,4 @@
-# Binary-only publish: ignore everything in the repo root except the shipped EXE.
+# Minimal public repo: no README, no binary — ship IR_Collect.exe only via GitHub Releases (zip).
 /*
 !/.gitattributes
 !/.gitignore
-!/IR_Collect.exe
