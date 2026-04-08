@@ -1,0 +1,5 @@
+# Binary-only publish: ignore everything in the repo root except the shipped EXE.
+/*
+!/.gitattributes
+!/.gitignore
+!/IR_Collect.exe
