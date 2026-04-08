@@ -1,6 +1,13 @@
-# Public repo: README + git metadata only. IR_Collect.exe ships via GitHub Releases (zip), not git.
+# Public mirror: root READMEs, selected docs; binary via GitHub Releases only.
 /*
 !/.gitattributes
 !/.gitignore
 !/README.md
 !/README.zh-TW.md
+!/docs/
+/docs/*
+!/docs/README.md
+!/docs/FIELD_SOP.md
+!/docs/USER_MANUAL.md
+!/docs/SPEC.md
+!/docs/CHANGELOG.md

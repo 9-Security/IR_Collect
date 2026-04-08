@@ -46,4 +46,16 @@ Prefer writing collection **output to removable media** to reduce footprint on t
 
 ---
 
-This GitHub repository is **minimal** (README + metadata). **Issue reports and discussions** are welcome; full developer documentation and build scripts live in the maintainer’s **private or separate source checkout**, not necessarily mirrored here.
+## Documentation (Traditional Chinese)
+
+These files are in-repo on GitHub (browse under **`docs/`**):
+
+| Document | Contents |
+|----------|----------|
+| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) | Short on-scene SOP: collection, first-pass triage, multi-host correlation, handoff/exports, quick troubleshooting |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | Full operator manual (GUI / CLI / import / investigation / exports) |
+| [docs/README.md](docs/README.md) | Project doc index, deeper usage notes (extends beyond this table) |
+| [docs/SPEC.md](docs/SPEC.md) | Development spec, version history, roadmap; **v0.22.0 draft** candidates (low-impact mode, memory handoff, non–Event-Log pivots, ShellBags parsing, guided hunt pack, governance, case/baseline diff) |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog, including recent doc additions |
+
+**Issue reports and discussions** are welcome. Build scripts and the rest of the source tree may live only in the maintainer’s full checkout; the published binary remains on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.

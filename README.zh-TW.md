@@ -46,4 +46,18 @@
 
 ---
 
-此 GitHub 儲存庫為**精簡公開**（README 與 git 設定為主）。歡迎 **Issues／討論**；完整開發規格、變更紀錄與建置腳本等在維護者的**完整原始碼工作區**，不一定同步於此 repo。
+## 文件（繁體中文）
+
+以下檔案已於 GitHub 本 repo 的 **`docs/`** 目錄公開，可直接點連結閱讀：
+
+| 檔案 | 說明 |
+|------|------|
+| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) | 現場短版 SOP：收集、第一時間判讀、多機關聯、交接匯出、快速排錯 |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 完整使用手冊（GUI／CLI／匯入／調查／匯出等） |
+| [docs/README.md](docs/README.md) | 專案文件索引與較完整的使用說明 |
+| [docs/SPEC.md](docs/SPEC.md) | 開發規格、版本歷程與 Roadmap；含 **v0.22.0 draft**（低擾動模式、Memory handoff、非 Event Log 補強、ShellBags、Guided Hunt Pack、治理、Case／Baseline Diff 等候選項） |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | 變更紀錄（含本次文件更新） |
+
+程式碼與建置腳本若未鏡像至此 repo，仍以維護者之**完整工作區**為準；**執行檔**請自 **[Releases 最新版 ZIP](https://github.com/9-Security/IR_Collect/releases/latest)** 下載。
+
+歡迎透過 **Issues／討論** 回饋。
