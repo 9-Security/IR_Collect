@@ -8,6 +8,8 @@
 /docs/*
 !/docs/README.md
 !/docs/FIELD_SOP.md
+!/docs/FIELD_SOP.zh-TW.md
 !/docs/USER_MANUAL.md
+!/docs/USER_MANUAL.zh-TW.md
 !/docs/SPEC.md
 !/docs/CHANGELOG.md

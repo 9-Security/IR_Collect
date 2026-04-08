@@ -15,6 +15,7 @@
 ### Docs
 - 同步更新 `README.md`、`docs/README.md`、`docs/SPEC.md`、`docs/REGRESSION_RUN.md`、`docs/SMOKE_RUN.md`，使文件與目前 acceptance-hardened 行為一致。
 - 新增 `docs/USER_MANUAL.md` 正式使用手冊與 `docs/FIELD_SOP.md` 現場短版 SOP，分離完整操作說明與現場應變流程。
+- `FIELD_SOP` / `USER_MANUAL` 增補 **繁體中文版**（`FIELD_SOP.zh-TW.md`、`USER_MANUAL.zh-TW.md`）；英文主檔維持 `FIELD_SOP.md`、`USER_MANUAL.md`，各檔頂端可切換語言。
 - `docs/SPEC.md` 補入下一版本候選更新項目（v0.22.0 draft），將低擾動模式、Memory handoff 強化、非 Event Log 補強、ShellBags 內建解析、Guided Hunt Pack、治理控制與 Case Diff 明確列入規劃。
 
 ---

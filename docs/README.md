@@ -25,13 +25,16 @@ build_release.bat  REM 一鍵正式發佈
 成功後皆產生 `IR_Collect.exe`。
 
 ### 專案文件 (Documentation)
-以下文件皆位於本目錄 `docs/` 內。若在本專案之**公開 GitHub 鏡像**閱讀，目前與原始碼主倉同步釋出的通常為本表內之 FIELD_SOP / USER_MANUAL / SPEC / CHANGELOG／本 README；其餘檔案請另於完整開發工作區或對應發佈渠道取得。
+以下文件皆位於本目錄 `docs/` 內。若在本專案之**公開 GitHub 鏡像**閱讀，目前與原始碼主倉同步釋出的通常為本表內之 FIELD_SOP／USER_MANUAL（雙語）/ SPEC / CHANGELOG／本 README；其餘檔案請另於完整開發工作區或對應發佈渠道取得。
+
+**操作文件雙語慣例：** `FIELD_SOP.md` / `USER_MANUAL.md` 為 **英文**；`FIELD_SOP.zh-TW.md` / `USER_MANUAL.zh-TW.md` 為 **繁體中文**；各檔頂端可切換語言連結。
+
 | 文件 | 說明 |
 |------|------|
 | **SPEC.md** | 開發規格、版本歷程、產出格式、功能規格、開發 Roadmap |
 | **README.md** | 本文件：使用說明、DFIR 注意、版本摘要 |
-| **FIELD_SOP.md** | 現場短版 SOP：收集、初步判讀、交接與快速排錯 |
-| **USER_MANUAL.md** | 正式使用手冊：GUI / CLI / 匯入 / 調查流程 / 匯出 / 排錯 |
+| **FIELD_SOP.md** / **FIELD_SOP.zh-TW.md** | 現場短版 SOP（英文／繁中）：收集、初步判讀、多機關聯、交接與快速排錯 |
+| **USER_MANUAL.md** / **USER_MANUAL.zh-TW.md** | 正式使用手冊（英文／繁中）：GUI / CLI / 匯入 / 調查流程 / 匯出 / 排錯 |
 | **CHANGELOG.md** | 版本變更紀錄（Keep a Changelog 格式） |
 | **ARTIFACTS.md** | 收集項目與可行性評估 |
 | **SMOKE_RUN.md** | End-to-end smoke run 檢查清單（手動收集／匯入／檢視） |

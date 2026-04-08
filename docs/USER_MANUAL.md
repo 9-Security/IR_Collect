@@ -1,68 +1,70 @@
-# IR_Collect 使用手冊
+# IR_Collect — User manual
 
-本手冊面向操作人員與事件調查分析師，重點是「如何使用工具完成收集、匯入、檢視與匯出」，不涵蓋開發與發版細節。若只需要現場短版流程，請先看 `docs/FIELD_SOP.md`。規格與版本歷程見 `docs/SPEC.md`，變更紀錄見 `docs/CHANGELOG.md`，技術文件索引見 `docs/README.md`。若你使用僅鏡像部分文件的公開 repo（例如 GitHub），以開發工作區內完整 `docs/` 為準；未列於該鏡像的檔案（如 `ARTIFACTS.md`）請至完整原始碼樹取得。
+**English** | [繁體中文](USER_MANUAL.zh-TW.md)
 
-## 1. 工具定位
+This manual is for operators and incident analysts. It explains **how** to collect, import, review, and export with the tool—not build or release engineering. For a short field playbook see **[FIELD_SOP.md](FIELD_SOP.md)** (English) or **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)** (Traditional Chinese). Specification and version history: `SPEC.md`. Changes: `CHANGELOG.md`. Doc index: `README.md`. If you use a **partial public mirror** (e.g. GitHub), treat the full `docs/` tree in the development workspace as authoritative; files not mirrored there (such as `ARTIFACTS.md`) live only in the full source tree.
 
-`IR_Collect` 是一個 Windows Incident Response 工具，支援：
+## 1. What the tool is
 
-- 本機證據收集
-- 既有案卷匯入
-- GUI / CLI 雙模式操作
-- 多主機案件管理
-- Fact Store、Entity search、Timeline、Investigation Graph 關聯分析
-- Summary JSON、完整 LOG JSON、HTML 報告匯出
-- 選用的外部記憶體採集與外部記憶體分析 handoff
+`IR_Collect` is a Windows incident-response tool that supports:
 
-本工具是 **Live Response** 工具，不是完整的離線鑑識映像平台。
+- On-host evidence collection
+- Import of existing case bundles
+- GUI and CLI operation
+- Multi-host case management
+- Fact Store, entity search, timeline, and Investigation Graph analysis
+- Summary JSON, full LOG JSON, and HTML report export
+- Optional external memory acquisition and external memory analysis handoff
 
-## 2. 使用前準備
+It is a **live-response** tool, not a full offline disk-imaging forensics platform.
 
-### 2.1 建議環境
+## 2. Before you start
 
-- Windows 7 到 Windows 11
-- 建議以系統管理員執行，才能取得較完整的 Event Log、Registry、Prefetch、MFT 等資料
-- 建議從外接儲存裝置執行，並讓輸出寫到外接儲存裝置
+### 2.1 Recommended environment
 
-### 2.2 現場操作注意事項
+- Windows 7 through Windows 11
+- Run **elevated (Administrator)** for richer Event Log, Registry, Prefetch, MFT, and related data.
+- Prefer running from **removable media** and writing output to removable media.
 
-- 工具會讀取系統資料，但仍會在輸出目錄寫入新檔案
-- 執行工具本身可能留下 Prefetch、頁面檔等執行痕跡
-- 若輸出寫到受調查磁碟，可能增加現場變動
-- 高嚴謹鑑識場景下，建議先做記憶體擷取，再進行後續分析
+### 2.2 On-scene considerations
 
-### 2.3 敏感設定
+- The tool reads system state but **writes new files** under the output directory.
+- Running the executable may leave traces (e.g. Prefetch, paging).
+- Writing output to the examined system disk increases on-scene change.
+- In high-rigor forensic settings, consider memory capture **before** follow-on collection/analysis.
 
-`config.ini` 可能包含：
+### 2.3 Sensitive configuration
+
+`config.ini` may contain:
 
 - `VirusTotalApiKey`
 - `AiApiKey`
 - `UploadApiKey`
-- Upload / AI endpoint
-- Event Log 視窗與上限
-- 暫存目錄是否在打包後刪除
+- Upload / AI endpoints
+- Event Log window and limits
+- Whether temp output is deleted after ZIP
 
-建議：
+Recommendations:
 
-- 將 `config.ini` 放在僅當前操作者可讀寫的位置
-- 不要將 `config.ini` 放在共用且可寫的目錄
-- 不要把 AI / Upload endpoint 指向未受控的外部服務
+- Keep `config.ini` in a location readable/writable only by the current operator.
+- Do not place `config.ini` in a world-writable shared folder.
+- Do not point AI / Upload endpoints at untrusted services.
 
-## 3. 五分鐘快速上手
+## 3. Five-minute quick start
 
-### 3.1 GUI 快速流程
+### 3.1 GUI
 
-1. 執行 `IR_Collect.exe`
-2. 建議接受 UAC 並以系統管理員身分執行
-3. 在 Dashboard 按 `Local Collect`
-4. 輸入 `Evidence ID`
-5. 等待收集完成
-6. 工具會自動載入剛產生的 ZIP
-7. 先看 `Summary`
-8. 再看 `Timeline Analysis`、`Facts`、`Event Logs`
-9. 需要交接時匯出 `Summary JSON`、`HTML` 或 `Export full LOG JSON`
+1. Run `IR_Collect.exe`
+2. Accept UAC; prefer **Run as administrator**
+3. On the Dashboard click `Local Collect`
+4. Enter an `Evidence ID`
+5. Wait for collection to finish
+6. The tool auto-loads the new ZIP
+7. Open `Summary` first
+8. Then `Timeline Analysis`, `Facts`, `Event Logs`
+9. For handoff export `Summary JSON`, `HTML`, or `Export full LOG JSON`
 
-### 3.2 CLI 快速流程
+### 3.2 CLI
 
 ```cmd
 IR_Collect.exe -c
@@ -70,62 +72,60 @@ IR_Collect.exe -c Case001
 IR_Collect.exe --help
 ```
 
-說明：
+Notes:
 
-- `-c` 不帶參數時會自動產生 `Evidence ID`
-- `-c <ID>` 會使用指定的證物編號
-- 收集完成後會產生 ZIP 與對應的 `.sha256`
+- `-c` with no argument auto-generates an Evidence ID
+- `-c <ID>` uses your ID
+- After collection you get a ZIP and matching `.sha256`
 
-## 4. GUI 操作說明
+## 4. GUI tour
 
-### 4.1 啟動後主畫面
+### 4.1 Main window
 
-主畫面分成兩個區域：
+- Left **Hosts List**: loaded hosts / cases
+- Right: host-specific tabs
 
-- 左側 `Hosts List`：顯示已載入的主機或案卷
-- 右側分析區：依主機顯示對應分頁
-
-尚未載入案卷時，右側主要是 Dashboard 與功能入口。
+With no case loaded, the right side is mostly Dashboard and entry points.
 
 ### 4.2 Local Collect
 
-用途：
+Use for:
 
-- 在目前主機直接執行收集
-- 適合現場 first-response
+- Collection on the current machine
+- On-scene first response
 
-操作：
+Steps:
 
-1. 按 `Local Collect`
-2. 輸入 `Evidence ID`
-3. 等待收集完成與打包
-4. 完成後工具會自動匯入剛生成的 ZIP
+1. Click `Local Collect`
+2. Enter `Evidence ID`
+3. Wait for collection and packaging
+4. The tool imports the new ZIP automatically
 
-完成後通常會得到：
+Typical outputs:
 
 - `<EvidenceId>.zip`
 - `<EvidenceId>.zip.sha256`
-- 若 `DeleteOutputDirAfterZip=1`，中間輸出目錄會被刪除
+- If `DeleteOutputDirAfterZip=1`, intermediate output may be deleted
 
 ### 4.3 Import Case
 
-用途：
+Use to:
 
-- 匯入先前收集好的 ZIP
-- 匯入已解壓的案卷資料夾
-- 匯入多個主機後進行跨主機比對
+- Import a previously collected ZIP
+- Import an extracted case folder
+- Import multiple hosts for cross-host review
 
-匯入後預設會：
+After import (defaults):
 
-- 將案卷解壓到暫存位置
-- 自動建立 Fact Store
-- 在 Hosts List 中新增主機
+- Case extracted to a temp area
+- Fact Store built automatically
+- Host appears in Hosts List
 
-若已關閉 `Auto Build Fact Store when case is loaded`，則匯入後不會自動建立 Fact Store。
+If `Auto Build Fact Store when case is loaded` is off, Fact Store is not built automatically.
 
-### 4.4 Dashboard 常用功能
+### 4.4 Dashboard highlights
 
-Dashboard 是全域分析入口，常用按鈕如下：
+Common actions:
 
 - `Find Shared Entities`
 - `Find Related Entities`
@@ -134,145 +134,120 @@ Dashboard 是全域分析入口，常用按鈕如下：
 - `Back To Last Shared Pivot`
 - `Export full LOG JSON`
 
-建議先匯入所有需要比對的主機，再進行 Dashboard 層級的跨主機關聯分析。
+Import every host you need **before** running cross-host workflows from the Dashboard.
 
 ### 4.5 Summary
 
-Summary 是每台主機最先要看的分頁。建議閱讀順序：
+Review **Summary** first for each host, in order:
 
 1. `collection_coverage`
 2. `load warnings`
 3. `parser notes`
 4. `event highlights`
-5. `memory acquisition / memory analysis`
+5. `memory acquisition` / `memory analysis`
 6. `fact store freshness`
 7. `analyst workflow`
 
-Summary 可做的事：
+You can:
 
-- 看本機收集是否完整
-- 看哪些步驟為 `partial`、`failed`、`missing`
-- 看 parser fallback 是否影響判讀
-- 編輯 analyst workflow sidecar
-- 匯出 `Summary JSON`
-- 匯出 `HTML Report`
-- 進入 AI 分析入口
+- See whether collection is complete
+- Find `partial`, `failed`, or `missing` steps
+- See parser fallback impact
+- Edit analyst workflow sidecar
+- Export `Summary JSON`
+- Export `HTML Report`
+- Open AI analysis entry points (if configured)
 
 ### 4.6 Timeline Analysis
 
-用途：
+Use to:
 
-- 將多來源資料合併成單一時間軸
-- 依來源、時間窗、Time Type / Confidence 篩選
-- 匯出 CSV / JSON
+- Merge multiple sources into one timeline
+- Filter by source, time window, time type / confidence
+- Export CSV / JSON
 
-目前 Timeline 會整合的重點來源包含：
+Key integrated sources include:
 
-- Process
-- MFT
-- Event Log
-- USN
-- BAM / DAM
-- BITS
-- Amcache
-- ShimCache Entries
-- SRUM Network / App
-- Activity Timeline
+- Process, MFT, Event Log, USN, BAM / DAM, BITS, Amcache, ShimCache entries, SRUM network/app, Activity Timeline
 
-若是從 Investigation Graph 按 `Open Timeline` 開啟：
+If opened via Investigation Graph `Open Timeline`:
 
-- 工具會帶入 graph edge 對應的 entity 與 trail
-- 預設以分鐘級時間窗聚焦
-- 可用 `Show full timeline` 還原完整時間軸
+- Entity and trail from the graph edge are applied
+- Default focus uses **minute-level** windowing
+- `Show full timeline` restores the full view
 
 ### 4.7 Facts
 
-`Facts` 分頁是正規化後的觀察事實，不是工具下的結論。建議將它視為：
+**Facts** are normalized observations—not tool verdicts. Use them to:
 
-- 快速檢視同一主機上可關聯的結構化事件
-- 驗證某一個 Entity 是否在多個來源同時出現
-- 檢查 provenance 與 parser note
+- Scan structured events on one host
+- Check whether an entity appears across sources
+- Inspect provenance and parser notes
 
-每筆 Fact 可能包含：
+Each fact may include:
 
-- Time
-- Time Type / Confidence
-- Source
-- Action
-- Entities
-- Details
+- Time, Time Type / Confidence, Source, Action, Entities, Details
 - CollectionStep / CollectionStatus / CollectionPrivilege
 - ParseLevel / FallbackUsed / ParserNote
 - SourceFile / RawRef
 
 ### 4.8 Event Logs
 
-Event Logs 分頁可檢視：
+View:
 
-- 原始 `.evtx`
-- 離線重建或收集時生成的 `*_filtered.csv`
+- Raw `.evtx`
+- `*_filtered.csv` from collection or offline rebuild
 
-事件詳情支援：
+Detail panes:
 
-- `Description`
-- `Parsed fields`
-- `Raw XML`
+- `Description`, `Parsed fields`, `Raw XML`
 
-若案卷只有 `.evtx` 而沒有 `*_filtered.csv`，工具會在匯入時嘗試離線重建分析用 CSV。
+If only `.evtx` exists, the tool tries to rebuild analysis CSVs on import.
 
 ### 4.9 Investigation Graph
 
-適合用來追：
+Good for:
 
-- 橫向移動
-- 帳號濫用
-- 共用 Path / Hash / User / RemoteIP
-- 同時間窗異常活動
+- Lateral movement, account abuse, shared paths/hashes/users/remote IPs, co-temporal anomalies
 
-常用操作：
+Common controls:
 
-- `Expand From Selected Edge`
-- `Back`
-- `Forward`
-- `Reset To Original Seed`
-- `Pin Edge`
-- `Open Facts`
-- `Open Timeline`
+- `Expand From Selected Edge`, `Back`, `Forward`, `Reset To Original Seed`, `Pin Edge`, `Open Facts`, `Open Timeline`
 
-建議做法：
+Suggested flow:
 
-1. 先用 `Find Shared Entities` 找共同實體
-2. 挑出可疑 entity 建圖
-3. 用 `Expand From Selected Edge` 逐步展開
-4. 適時用 `Open Timeline` 回到時間軸驗證
+1. `Find Shared Entities` for shared anchors
+2. Build from suspicious entities
+3. Expand stepwise with `Expand From Selected Edge`
+4. Use `Open Timeline` to validate timing
 
 ### 4.10 Rebuild Selected Host Event Logs / Fact Store
 
-用途：
+Rebuilds:
 
-- 重建某一台主機的 `*_filtered.csv`
-- 重建某一台主機的 Fact Store
+- That host’s `*_filtered.csv`
+- That host’s Fact Store
 
-適用情境：
+When:
 
-- 匯入的是舊案卷
-- 更新了 `EventLogDays` 或 `EventLogMaxEvents`
-- Summary 提示 `fact_store.db` 已 stale
-- 想重新整理單一主機分析資料，而不是清掉所有案卷
+- Old bundle import
+- Changed `EventLogDays` / `EventLogMaxEvents`
+- Summary shows stale `fact_store.db`
+- You want one host refreshed without clearing all cases
 
 ### 4.11 Clear all hosts
 
-`File -> Clear all hosts` 會：
+`File -> Clear all hosts`:
 
-- 清除所有已載入主機
-- 移除暫存解壓資料
-- 一併清除對應 Fact Store
+- Removes all loaded hosts
+- Deletes temp extraction
+- Clears associated Fact Stores
 
-這不是只清掉分析結果，而是整批移除已載入資料。
+This removes **all** loaded data, not just “analysis cache.”
 
-## 5. CLI 操作說明
+## 5. CLI
 
-### 5.1 基本命令
+### 5.1 Commands
 
 ```cmd
 IR_Collect.exe -c
@@ -280,296 +255,184 @@ IR_Collect.exe -c Case001
 IR_Collect.exe --help
 ```
 
-### 5.2 CLI 典型用途
+### 5.2 Typical uses
 
-- 遠端桌面到主機後快速落地收集
-- 用既有工具鏈批次呼叫
-- 現場只想要案卷，不需要馬上進 GUI 分析
+- Quick collection after RDP to a host
+- Batch invocation from another toolchain
+- Collect-only on scene without immediate GUI review
 
-### 5.3 CLI 產出
+### 5.3 Outputs
 
-收集完成後應至少看到：
+Expect at least:
 
 - `Case001.zip`
 - `Case001.zip.sha256`
 
-若部分步驟失敗：
+Partial failures:
 
-- 收集不會因單一子項失敗而整體中斷
-- 請檢查終端機摘要與 `logs/ir_collect.log`
-- 後續在 GUI Summary 中查看 `collection_coverage`
+- Collection does not abort entirely on one submodule failure
+- Read the console summary and `logs/ir_collect.log`
+- Later inspect `collection_coverage` in GUI Summary
 
-## 6. 輸出與檔案說明
+## 6. Outputs and files
 
-### 6.1 收集階段核心產物
+### 6.1 Core collection artifacts
 
-- `*.zip`：證據包
-- `*.zip.sha256`：ZIP SHA256
-- `collection_coverage.json`：各步驟收集狀態
-- `logs/ir_collect.log`：執行紀錄
+- `*.zip` case bundle
+- `*.zip.sha256`
+- `collection_coverage.json`
+- `logs/ir_collect.log`
 
-### 6.2 常見 artifact 類型
+### 6.2 Common artifact filenames
 
-- `system_info_full.txt`
-- `process_list.csv`
-- `services.csv`
-- `autoruns_registry.csv`
-- `scheduled_tasks.xml`
-- `EventLogs\*.evtx`
-- `EventLogs\*_filtered.csv`
-- `MFT_Dump.bin`
-- `mft_preview.csv`
-- `usn_journal.csv`
-- `recent_files.csv`
-- `filesystem_7days.csv`
-- `jump_lists.csv`
-- `file_integrity.csv`
-- `bam_dam.csv`
-- `bits_jobs.csv`
-- `wmi_persistence.csv`
-- `amcache_programs.csv`
-- `amcache_files.csv`
-- `shimcache.csv`
-- `shimcache_entries.csv`
-- `srum_network_usage.csv`
-- `srum_app_usage.csv`
+- `system_info_full.txt`, `process_list.csv`, `services.csv`
+- `autoruns_registry.csv`, `scheduled_tasks.xml`
+- `EventLogs\*.evtx`, `EventLogs\*_filtered.csv`
+- `MFT_Dump.bin`, `mft_preview.csv`, `usn_journal.csv`
+- `recent_files.csv`, `filesystem_7days.csv`, `jump_lists.csv`, `file_integrity.csv`
+- `bam_dam.csv`, `bits_jobs.csv`, `wmi_persistence.csv`
+- `amcache_programs.csv`, `amcache_files.csv`, `shimcache.csv`, `shimcache_entries.csv`
+- `srum_network_usage.csv`, `srum_app_usage.csv`
 
-### 6.3 分析與匯出產物
+### 6.3 Analysis / export artifacts
 
-下列檔案多數是匯入後或由 GUI 匯出產生，不一定存在於原始收集 ZIP：
+Often created **after** import or from GUI export—may not exist in the original ZIP:
 
-- `summary.json`
-- `full_log_v3` 對應 JSON 匯出
-- HTML report
-- `fact_store.db`
-- `analyst_workflow.json`
-- `<case>.zip.analyst.json`
+- `summary.json`, full `full_log_v3` JSON export, HTML report
+- `fact_store.db`, `analyst_workflow.json`, `<case>.zip.analyst.json`
 
-### 6.4 Memory 相關產物
+### 6.4 Memory-related artifacts
 
-若啟用外部記憶體採集：
+If external acquisition is enabled:
 
-- `Memory\*.raw`
-- `Memory\*.dmp`
-- `memory_acquisition.json`
+- `Memory\*.raw`, `Memory\*.dmp`, `memory_acquisition.json`
 
-若再啟用外部分析 handoff：
+If analysis handoff is enabled:
 
-- `MemoryAnalysis\*`
-- `memory_analysis.json`
+- `MemoryAnalysis\*`, `memory_analysis.json`
 
-重點：
+Remember:
 
-- `memory_acquisition.json` / `memory_analysis.json` 是 orchestration 與 metadata
-- 外部工具 sidecar 顯示 `complete` 不等於實際輸出一定存在
-- 以 `collection_coverage` 的 `Coverage` 為準確認實際收集是否完整
+- Sidecars describe orchestration/metadata
+- External tool `complete` ≠ guaranteed dump/output on disk
+- Trust `collection_coverage` **Coverage** for what actually landed
 
-## 7. collection_coverage 狀態判讀
+## 7. Reading `collection_coverage`
 
-`collection_coverage.json` 會標示每個 major step 的狀態：
+Per major step:
 
-- `complete`：預期 artifact 都在
-- `partial`：有收成功，但不完整
-- `failed`：執行失敗
-- `skipped`：被略過或未啟用
-- `missing`：預期有東西，但實際找不到對應 artifact
+- `complete`: expected artifacts present
+- `partial`: something collected but incomplete
+- `failed`: step failed
+- `skipped`: skipped or disabled
+- `missing`: expected artifact not found
 
-建議判讀原則：
+Workflow:
 
-- 先看 `overall_status`
-- 再看哪一個 step 不是 `complete`
-- 最後對照 `artifacts_missing`、`detail` 與 `logs/ir_collect.log`
+1. `overall_status`
+2. Any step not `complete`
+3. `artifacts_missing`, `detail`, and `logs/ir_collect.log`
 
-對調查最重要的是，不要把 `missing` 解讀成「該活動不存在」。
+**Do not** equate `missing` with “activity never occurred.”
 
-## 8. 建議調查流程
+## 8. Suggested investigation flows
 
-### 8.1 單機 triage
+### 8.1 Single-host triage
 
-1. 執行 `Local Collect`
-2. 看 `Summary`
-3. 看 `Timeline Analysis`
-4. 看 `Facts`
-5. 查 `Event Logs`
-6. 必要時匯出 `Summary JSON` 與 HTML
+1. `Local Collect` → `Summary` → `Timeline Analysis` → `Facts` → `Event Logs`
+2. Export Summary JSON / HTML as needed
 
-### 8.2 橫向移動調查
+### 8.2 Lateral movement
 
-1. 匯入多台主機
-2. 先用 `Find Shared Entities`
-3. 聚焦可疑帳號、RemoteIP、Share、Service、Task
-4. 建 `Investigation Graph`
-5. 用 `Open Timeline` 驗證時間關係
-6. 匯出完整 LOG JSON 交由他人或外部流程接手
+1. Import all hosts
+2. `Find Shared Entities`
+3. Focus users, RemoteIP, share, service, task
+4. `Build Investigation Graph` → `Open Timeline`
+5. Export full LOG JSON for handoff
 
-### 8.3 可疑程式執行調查
+### 8.3 Suspicious execution
 
-1. 看 `Processes`
-2. 看 `Timeline Analysis` 是否出現同一路徑、Hash、User
-3. 看 `Prefetch`、`Jump Lists`、`Recent Files`
-4. 看 `Amcache`、`ShimCache Entries`
-5. 必要時檢查 `MFT` 與 `USN`
+1. `Processes`, `Timeline Analysis` (path/hash/user)
+2. `Prefetch`, Jump Lists, Recent Files
+3. Amcache, ShimCache entries
+4. `MFT`, `USN` if needed
 
-### 8.4 Persistence 調查
+### 8.4 Persistence
 
-1. 看 `Autoruns`
-2. 看 `Scheduled Tasks`
-3. 看 `Services`
-4. 看 `BAM / DAM`
-5. 看 `WMI Persistence`
-6. 最後回到 `Facts` 做關聯
+1. Autoruns, Scheduled Tasks, Services
+2. BAM / DAM, WMI Persistence
+3. Return to `Facts` for correlation
 
-## 9. 進階功能
+## 9. Advanced features
 
 ### 9.1 Auto Build Fact Store
 
-預設為開啟。優點：
+Default **on**: faster path to Facts, entity search, and full LOG JSON export.
 
-- 匯入後可以直接查 Facts
-- 可以直接做 Entity search
-- 可以直接做完整 LOG JSON 匯出
-
-若關閉：
-
-- 匯入速度可能較快
-- 但關聯分析功能會受限
+**Off**: faster import, less correlation until you rebuild.
 
 ### 9.2 Write Fact Store to SQLite when building
 
-啟用後會在每台主機的 ExtractPath 下寫入 `fact_store.db`。
+Writes `fact_store.db` under each host ExtractPath—useful for large cases or repeat analysis.
 
-適合：
-
-- 大型案卷
-- 後續重複分析
-- 需要保存分析中介層
-
-注意：
-
-- 若未提供 `System.Data.SQLite.dll`，SQLite 寫入可能會被略過
-- GUI 仍可運作，但會少一層持久化
+Requires `System.Data.SQLite.dll` beside the EXE for SQLite writes; GUI still works without it (in-memory path only).
 
 ### 9.3 Memory acquisition
 
-用途：
-
-- 呼叫外部工具做記憶體擷取
-- 由本工具統一記錄時間、輸出、exit code、SHA256、權限脈絡
-
-限制：
-
-- 不內建採集驅動
-- 不解析 dump
-- 可能需要大量磁碟空間
+Calls **your** external acquisition tool; records timing, paths, exit codes, hashes, privilege context. **No** built-in dumper or dump parser; may need large disk.
 
 ### 9.4 Memory analysis handoff
 
-用途：
+Feeds dumps to **your** external analyzer and ingests outputs. Tool **orchestrates only**—do not treat sidecar status alone as a forensic conclusion.
 
-- 把已有 dump 交給外部分析器
-- 將外部工具輸出收進案卷
+## 10. Troubleshooting
 
-限制：
+### 10.1 Empty MFT tab
 
-- 本工具只做 orchestration，不做記憶體 verdict
-- 請不要把外部工具 sidecar 的狀態直接當成最終調查結論
+Causes: no `MFT_Dump.bin` / `mft_preview.csv`, MFT step failed, not elevated, AV/locks blocking `$MFT`.
 
-## 10. 常見問題排除
+Try: rerun elevated, check `logs/ir_collect.log` and Summary coverage.
 
-### 10.1 MFT 分頁是空的
+### 10.2 Incomplete Event Logs
 
-可能原因：
+Causes: `.evtx` without `*_filtered.csv`, export failure, tight `EventLogDays` / `EventLogMaxEvents`.
 
-- 這個案卷沒有 `MFT_Dump.bin` 或 `mft_preview.csv`
-- 收集時 MFT 步驟失敗
-- 沒有以系統管理員執行
-- 防毒或系統鎖定阻止了 `$MFT` 存取
+Try: Summary coverage/detail, `Rebuild Selected Host Event Logs`, log file.
 
-建議：
+### 10.3 Facts / entity search unavailable
 
-- 重新以系統管理員執行 `Local Collect`
-- 檢查 `logs/ir_collect.log`
-- 檢查 Summary 的 `collection_coverage`
+Usually: Fact Store not built, stale, or incomplete host data.
 
-### 10.2 Event Logs 顯示不完整
+Try: confirm Auto Build setting, `Rebuild Selected Host Fact Store`, Summary freshness warnings.
 
-可能原因：
+### 10.4 Memory sidecar “complete” but no dump
 
-- 只有 `.evtx` 沒有 `*_filtered.csv`
-- 單一 log 匯出失敗
-- `EventLogDays` / `EventLogMaxEvents` 太小
+External tool reported success without real output.
 
-建議：
+Use Summary / `collection_coverage` Coverage; verify analyzer paths; read `memory_acquisition.json` / `memory_analysis.json`.
 
-- 在 Summary 看 Event Logs 的 coverage 與 detail
-- 使用 `Rebuild Selected Host Event Logs`
-- 查看 `logs/ir_collect.log`
+### 10.5 Slow import or high memory
 
-### 10.3 Facts / Entity search 不能用
+Large cases, first open of heavy tabs, auto Fact Store build.
 
-通常表示：
+Stagger tab opens; consider SQLite persistence for huge hosts.
 
-- Fact Store 尚未建立
-- Fact Store 已 stale
-- 目前主機資料不完整
+### 10.6 ShellBags hard to read
 
-建議：
+Expected. The tool may collect `Registry\ShellBags_<SID>.reg`; use an external viewer (e.g. Eric Zimmerman ShellBags Explorer) for path/time interpretation.
 
-- 確認 `Auto Build Fact Store when case is loaded` 是否開啟
-- 使用 `Rebuild Selected Host Fact Store`
-- 在 Summary 檢查 freshness warning
+## 11. Operating habits
 
-### 10.4 Memory sidecar 顯示 complete，但找不到 dump
+- Prefer Administrator + removable output media.
+- **Summary before** deep Event Log dives.
+- Ground conclusions in `collection_coverage`.
+- Document parser fallback uncertainty.
+- Before multi-host work, ensure each host’s Fact Store is built and not stale.
+- Handoff: Summary JSON, HTML, and full LOG JSON as appropriate.
 
-這表示：
+## 12. Related documentation
 
-- 外部工具 sidecar 回報完成
-- 但預期輸出檔並不存在
-
-正確做法：
-
-- 以 Summary / `collection_coverage` 的 `Coverage` 為準
-- 檢查外部工具實際輸出路徑
-- 檢查 `memory_acquisition.json` 或 `memory_analysis.json`
-
-### 10.5 匯入後速度變慢或記憶體占用偏高
-
-可能原因：
-
-- 案卷很大
-- Timeline / Event Logs / CSV 類重型分頁首次開啟
-- 啟用了自動 Fact Store 建立
-
-建議：
-
-- 先完成必要檢視，再開啟重型分頁
-- 大案卷可考慮啟用 SQLite 持久化
-
-### 10.6 ShellBags 內容看不懂
-
-這是正常的。
-
-目前工具會收：
-
-- `Registry\ShellBags_<SID>.reg`
-
-但還原資料夾路徑與時間建議使用外部工具，例如 Eric Zimmerman 的 ShellBags Explorer。
-
-## 11. 操作建議
-
-- 現場執行優先使用系統管理員權限
-- 優先將輸出寫到外接儲存裝置
-- 先看 Summary，不要直接跳 Event Log
-- 先確認 `collection_coverage`，再做推論
-- 看到 parser notes 時，要把 fallback 納入判讀
-- 做跨主機關聯前，先確認每台主機的 Fact Store 已建立且不是 stale
-- 需要交接時，優先匯出 `Summary JSON`、HTML 與完整 LOG JSON
-
-## 12. 相關文件
-
-- `docs/README.md`：文件總覽與版本摘要
-- `docs/ARTIFACTS.md`：artifact 類型與可行性範圍
-- `docs/SMOKE_RUN.md`：手動驗證流程
-- `docs/REGRESSION_RUN.md`：回歸測試流程
-- `docs/SECURITY.md`：設定與輸入安全注意事項
-- `docs/SPEC.md`：完整輸出格式與規格
+- `README.md` — doc index and version summary
+- `ARTIFACTS.md` — artifact inventory (full tree, if available)
+- `SMOKE_RUN.md`, `REGRESSION_RUN.md`, `SECURITY.md` — full tree
+- `SPEC.md` — output formats and development specification

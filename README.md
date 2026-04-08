@@ -46,16 +46,16 @@ Prefer writing collection **output to removable media** to reduce footprint on t
 
 ---
 
-## Documentation (Traditional Chinese)
+## Documentation
 
-These files are in-repo on GitHub (browse under **`docs/`**):
+Files below live under **`docs/`** on GitHub. **Field SOP** and **User manual** are bilingual (**English** is the `*.md` default; **Traditional Chinese** uses `*.zh-TW.md`; language switcher at the top of each file).
 
 | Document | Contents |
 |----------|----------|
-| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) | Short on-scene SOP: collection, first-pass triage, multi-host correlation, handoff/exports, quick troubleshooting |
-| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | Full operator manual (GUI / CLI / import / investigation / exports) |
-| [docs/README.md](docs/README.md) | Project doc index, deeper usage notes (extends beyond this table) |
-| [docs/SPEC.md](docs/SPEC.md) | Development spec, version history, roadmap; **v0.22.0 draft** candidates (low-impact mode, memory handoff, non–Event-Log pivots, ShellBags parsing, guided hunt pack, governance, case/baseline diff) |
-| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog, including recent doc additions |
+| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) / [docs/FIELD_SOP.zh-TW.md](docs/FIELD_SOP.zh-TW.md) | Short on-scene SOP: collection, first-pass triage, multi-host correlation, handoff/exports, troubleshooting |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) / [docs/USER_MANUAL.zh-TW.md](docs/USER_MANUAL.zh-TW.md) | Full operator manual (GUI / CLI / import / investigation / exports) |
+| [docs/README.md](docs/README.md) | Project doc index (Chinese), deeper usage notes |
+| [docs/SPEC.md](docs/SPEC.md) | Development spec, version history, roadmap; **v0.22.0 draft** candidates |
+| [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog |
 
 **Issue reports and discussions** are welcome. Build scripts and the rest of the source tree may live only in the maintainer’s full checkout; the published binary remains on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.

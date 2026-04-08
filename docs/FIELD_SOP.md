@@ -1,23 +1,25 @@
-# IR_Collect 現場 SOP
+# IR_Collect — Field SOP (short)
 
-本文件是給現場應變人員的短版操作流程。若需要完整功能說明，請看 `docs/USER_MANUAL.md`。
+**English** | [繁體中文](FIELD_SOP.zh-TW.md)
 
-## 1. 現場前檢查
+Short on-scene playbook for responders. For full operator documentation see **[USER_MANUAL.md](USER_MANUAL.md)** (English) or **[USER_MANUAL.zh-TW.md](USER_MANUAL.zh-TW.md)** (Traditional Chinese).
 
-- 優先以系統管理員執行 `IR_Collect.exe`
-- 優先從外接儲存裝置執行，並讓輸出寫到外接儲存裝置
-- 確認磁碟空間足夠，尤其若有啟用 Memory acquisition
-- 若案件敏感，先確認 `config.ini` 內 AI / Upload endpoint 是否符合政策
+## 1. Pre-flight
 
-## 2. 快速收集
+- Prefer running `IR_Collect.exe` **elevated (Administrator)**.
+- Prefer running from **removable media** and writing output to removable media.
+- Confirm free disk space, especially if Memory acquisition is enabled.
+- For sensitive matters, verify `config.ini` AI / Upload endpoints against policy **before** collection.
+
+## 2. Quick collection
 
 ### GUI
 
-1. 執行 `IR_Collect.exe`
-2. 按 `Local Collect`
-3. 輸入 `Evidence ID`
-4. 等待收集完成
-5. 確認工具自動載入剛產生的 ZIP
+1. Run `IR_Collect.exe`
+2. Click `Local Collect`
+3. Enter an `Evidence ID`
+4. Wait for collection to finish
+5. Confirm the tool auto-loads the new ZIP
 
 ### CLI
 
@@ -26,28 +28,28 @@ IR_Collect.exe -c
 IR_Collect.exe -c Case001
 ```
 
-收集完成後應看到：
+After collection you should see:
 
 - `<EvidenceId>.zip`
 - `<EvidenceId>.zip.sha256`
 
-## 3. 第一時間必看
+## 3. Read first (Summary)
 
-收集或匯入完成後，先看 `Summary`，順序如下：
+After collect or import, open **Summary** in this order:
 
 1. `collection_coverage`
 2. `load warnings`
 3. `parser notes`
-4. `memory acquisition / memory analysis`
+4. `memory acquisition` / `memory analysis`
 5. `fact store freshness`
 
-原則：
+Rules of thumb:
 
-- 先確認收集是否完整，再開始推論
-- 不要把 `missing` 解讀成「沒有這個活動」
-- 看到 parser fallback 或 sidecar 異常時，要把不確定性寫進判讀
+- Confirm collection completeness **before** inferring activity.
+- Do **not** read `missing` as “this never happened.”
+- If you see parser fallback or odd sidecars, record the uncertainty in your notes.
 
-## 4. 單機調查最短路徑
+## 4. Single-host shortest path
 
 1. `Summary`
 2. `Timeline Analysis`
@@ -56,75 +58,75 @@ IR_Collect.exe -c Case001
 5. `Processes`
 6. `Persistence`
 
-## 5. 多機關聯最短路徑
+## 5. Multi-host shortest path
 
-1. 匯入所有主機
-2. Dashboard 執行 `Find Shared Entities`
-3. 聚焦可疑 `User`、`RemoteIP`、`Share`、`ServiceName`、`TaskName`
-4. 執行 `Build Investigation Graph`
-5. 用 `Open Timeline` 驗證時間關係
-6. 必要時回到 `Facts` 看 provenance
+1. Import every host
+2. On Dashboard run `Find Shared Entities`
+3. Focus suspicious `User`, `RemoteIP`, `Share`, `ServiceName`, `TaskName`
+4. Run `Build Investigation Graph`
+5. Use `Open Timeline` to validate time relationships
+6. Return to `Facts` for provenance as needed
 
-## 6. 匯出交接
+## 6. Handoff exports
 
-最常用的交接輸出：
+Most common:
 
 - `Summary JSON`
 - `HTML Report`
 - `Export full LOG JSON`
 
-建議：
+Suggestions:
 
-- 給人工交接優先用 HTML + Summary JSON
-- 給後續分析流程或外部工具優先用完整 LOG JSON
+- Human handoff: HTML + Summary JSON first
+- Downstream automation / external tooling: full LOG JSON
 
-## 7. 何時重建分析資料
+## 7. When to rebuild analytics
 
-遇到下列情況時，使用 `Rebuild Selected Host Event Logs / Fact Store`：
+Use `Rebuild Selected Host Event Logs / Fact Store` when:
 
-- 匯入的是舊案卷
-- `fact_store.db` 顯示 stale
-- Event Log filtered CSV 不完整
-- 調整了 `EventLogDays` 或 `EventLogMaxEvents`
+- Importing an older bundle
+- `fact_store.db` shows stale
+- Event Log filtered CSVs look incomplete
+- You changed `EventLogDays` or `EventLogMaxEvents`
 
-## 8. Memory 功能判讀
+## 8. Reading Memory features
 
-- `memory_acquisition.json` / `memory_analysis.json` 是 sidecar，不是最終結論
-- sidecar 顯示 `complete`，不代表 dump 或分析輸出一定存在
-- 一律以 `Summary` 與 `collection_coverage` 的 `Coverage` 為準
+- `memory_acquisition.json` / `memory_analysis.json` are **sidecars**, not final findings.
+- Sidecar `complete` does **not** guarantee the dump or analyzer output exists.
+- Treat **Summary** and `collection_coverage` **Coverage** as source of truth.
 
-## 9. 現場不要做的事
+## 9. Do not (on scene)
 
-- 不要先跳進 Event Logs 細看，而忽略 `collection_coverage`
-- 不要把工具輸出的 facts 直接當成惡意判決
-- 不要把外部 memory 工具的 sidecar 狀態當成最終證據
-- 不要把輸出寫回受調查主機的系統碟，除非沒有其他選擇
+- Do not dive into Event Logs before reading `collection_coverage`.
+- Do not treat tool-emitted facts as automatic malware verdicts.
+- Do not treat external memory sidecar status as definitive evidence alone.
+- Do not write output to the system disk of the examined host unless you have no alternative.
 
-## 10. 快速排錯
+## 10. Quick troubleshooting
 
-### MFT 沒資料
+### Empty MFT tab
 
-- 重新以系統管理員執行
-- 檢查 `logs/ir_collect.log`
-- 檢查 Summary 的 MFT coverage
+- Re-run elevated as Administrator
+- Check `logs/ir_collect.log`
+- Check MFT coverage in Summary
 
-### Event Logs 不完整
+### Incomplete Event Logs
 
-- 看 Summary 的 Event Logs coverage
-- 重建 Selected Host Event Logs
-- 檢查 `logs/ir_collect.log`
+- Check Event Logs coverage in Summary
+- Rebuild Selected Host Event Logs
+- Check `logs/ir_collect.log`
 
-### Facts / Entity search 不能用
+### Facts / Entity search unavailable
 
-- 確認 Fact Store 已建立
-- 檢查是否 stale
-- 重建 Selected Host Fact Store
+- Confirm Fact Store was built
+- Check for stale state
+- Rebuild Selected Host Fact Store
 
-### Memory 顯示 complete 但沒 dump
+### Memory shows complete but no dump
 
-- 以 `collection_coverage` 為準
-- 查 `memory_acquisition.json` 或 `memory_analysis.json`
+- Trust `collection_coverage`
+- Inspect `memory_acquisition.json` or `memory_analysis.json`
 
-## 11. 一句話原則
+## 11. One-line rule
 
-先看收集完整性，再看時間軸，再做關聯，最後才下結論。
+**Coverage first, timeline second, correlation third, conclusions last.**
