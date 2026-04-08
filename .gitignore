@@ -1,4 +1,6 @@
-# Minimal public repo: no README, no binary — ship IR_Collect.exe only via GitHub Releases (zip).
+# Public repo: README + git metadata only. IR_Collect.exe ships via GitHub Releases (zip), not git.
 /*
 !/.gitattributes
 !/.gitignore
+!/README.md
+!/README.zh-TW.md
