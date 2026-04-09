@@ -2,7 +2,7 @@
 
 **English** | [中文（繁體）](README.zh-TW.md)
 
-Portable Windows **live-response** evidence collection and review: one executable, GUI or CLI, facts-oriented workspace (timeline, entity search, investigation graph). **Not** a silent imaging platform or a full in-memory forensics suite.
+**Windows rapid on-scene collection + facts-based correlation foundation.** One portable executable, GUI or CLI—not a silent imaging platform or a full in-memory forensics suite.
 
 ## Download
 
@@ -10,52 +10,68 @@ Portable Windows **live-response** evidence collection and review: one executabl
 
 - **Runtime:** .NET Framework 4.5 or later (typical on Windows 7+).
 - **GUI:** double-click `IR_Collect.exe`.
-- **CLI collection:** `IR_Collect.exe -c` (run from an elevated prompt when you need full logs, raw volumes, etc.).
+- **CLI collection:** `IR_Collect.exe -c` (prefer an elevated prompt for full logs, raw volumes, etc.).
+- Prefer collection **output on removable media** to limit change on the examined system.
 
-Prefer writing collection **output to removable media** to reduce footprint on the system under examination.
+## Where it fits (early–mid incident)
 
-## What you get
+Best when you need fast answers to:
 
-- Broad **collection**: processes, persistence, Event Logs (full EVTX + filtered CSV), MFT, USN, Registry exports, browsers, Prefetch, Jump Lists, Amcache, ShimCache, SRUM, and more.
-- **Normalized “facts”** alongside raw artifacts: Fact Store, timeline, entity search; exports such as HTML summary, summary JSON, full LOG JSON, and workflow sidecars.
-- **Lateral movement / identity–centric log structure** (RDP, SMB, Kerberos, logons, services/tasks, etc.) for pivoting and graphing—**without** the tool labeling something “malicious” for you (facts-only design).
-- **Coverage / parser transparency** fields (e.g. collection coverage, timestamps confidence, parser notes) so “we didn’t collect it” is less often confused with “it never happened.”
-- **Optional memory path:** external acquisition and external analysis tools can be wired in via **Advanced → Settings**; the app does not embed a memory dumper or a full dump parser.
+- **Which hosts** might be in scope or affected.
+- **Which account, process, file, or remote endpoint** deserves follow-up.
+- **How lateral movement** likely progressed.
+- **What was truly not observed** versus **what was never collected** (coverage vs. absence of activity).
 
-## What you should not expect
+*Assessment is grounded in this repository’s documentation and modules—not a substitute for findings from your own cases.*
 
-- **Live response tradeoffs:** it creates an output directory and its own run artifacts; not a replacement for full dead-disk workflows or strict lowest-touch lab procedure by itself.
-- **Event Log dependency:** many high-sensitivity storylines assume logs exist and were retained—cleared or disabled logging hurts visibility.
-- **Memory depth:** advanced fileless / in-memory stories still depend heavily on your external tools and process.
-- **Governance:** there is **no built-in redaction**; optional AI/upload features need **your** policy (keys, endpoints, allowlists). Treat defaults as unsafe for sensitive environments until configured.
+## Practical value
 
----
+- **Fast single-host triage on Windows:** one EXE, GUI/CLI, built for first-touch live response.
+- **Broad collection surface:** processes, persistence, Event Logs, MFT, USN, Registry exports, browsers, Prefetch, Jump Lists, Amcache, ShimCache, SRUM—strong for suspicious execution, persistence, and user activity.
+- **Not just raw drops:** facts normalization (Fact Store) so you can narrow scope with **timeline**, **entity search**, and **graph**, then return to raw artifacts to verify.
+- **Lateral movement and identity abuse:** structured work around RDP, SMB, Kerberos, logons, services/tasks, and **cross-host Investigation Graph**.
+- **Pivoting when logs are thin:** Jump Lists, BITS, SRUM, stored credentials, Kerberos tickets, and related artifacts still support pivoting alongside Event Logs.
+- **Handoff-friendly:** Summary JSON, HTML report, and full LOG JSON for the next analyst, external tools, or reporting workflows.
 
-<details>
-<summary><strong>Optional: longer positioning note</strong> (design-level; not validated on real cases)</summary>
+## Strengths
 
-**Summary:** IR_Collect fits **early–mid** incident work when you need to narrow *who / what / which file / which remote host or share / which window in time*. It is intentionally **not** a centralized SOAR/SIEM, a memory framework, or an auto-verdict engine.
+- **Facts-only posture:** no built-in “malware” verdicts—fewer heuristic mistakes poisoning the narrative.
+- **Raw + normalized together:** quick triage today, reproducible review tomorrow.
+- **`collection_coverage`, parser notes, and time confidence** help separate “we didn’t see it” from “we didn’t collect it.”
+- **Multi-host graph, shared entities, and timeline handoff** support sensible scoping.
+- **Memory acquisition and analysis handoff** stay in the same case narrative (orchestration, sidecars, coverage)—without parsing memory images inside the tool.
 
-**Strengths (design intent):** facts-only outputs; raw + normalized together; dual EVTX/CSV log story; regression/self-test discipline in development; graph + minute-level timeline handoff for investigation narrative.
+## Limits
 
-**Limits:** export-only treatment for some artifacts (e.g. ShellBags) until parsed in-app; junior analysts still carry interpretation load; roadmap items include stricter “low impact” modes, richer non–Event-Log pivots, redaction profiles, and stronger config/upload controls.
+- **Still live response:** writes an output tree and leaves its own execution traces—not a zero-footprint replacement for dead-box / offline lab workflows.
+- **Event Logs remain important:** cleared, disabled, or short-retention logs still blunt many storylines.
+- **Memory:** external tool orchestration and validation, not embedded Volatility-class analysis—deep fileless or in-memory work still needs your specialist stack.
+- **Some artifacts are first-stage parsing** (e.g. ShellBags): useful, but not full semantic recovery; see the manual and spec for known caveats.
+- **Facts-only means analyst-heavy work:** great evidence packaging, not automatic attribution, prioritization, or remediation decisions.
+- **Large cases:** import time, memory use, and Fact Store freshness still require operational discipline.
 
-**One line:** a **fast Windows collection and correlation base**—strong at structuring evidence and cross-source pivot; weaker at zero-footprint forensics, deep memory analytics, and automated attribution.
+## Governance (v0.22+)
 
-</details>
+Separate **AI** and **Upload** endpoint allowlists; optional **redaction profile** applies only to the JSON sent for **AI Analyze** (not to exported Summary files or ZIP contents). **Collection mode profile** (`Standard` / `TriageFast` / `ForensicStrict`) in **Advanced → Settings** is recorded in `collection_coverage.json`; `ForensicStrict` blocks post-collect ZIP upload and in-app **AI Analyze**—still **not** a zero-footprint guarantee. Details: `docs/SECURITY.md`, `docs/USER_MANUAL.md`.
+
+## In one sentence
+
+If you need **fast collection, timelines, cross-source and cross-host correlation, and clean handoffs**, this tool has real operational value. If you need **silent imaging, deep memory analytics, or automated malicious verdicts**, it is not that class of product.
+
+**Sweet spot:** Windows endpoint **initial assessment, scoping, lateral movement tracing**, and **evidence packaging before handoff**.
 
 ---
 
 ## Documentation
 
-Files below live under **`docs/`** on GitHub. **Field SOP** and **User manual** are bilingual (**English** is the `*.md` default; **Traditional Chinese** uses `*.zh-TW.md`; language switcher at the top of each file).
+Under **`docs/`** on GitHub. **Field SOP** and **User manual** are bilingual (English `*.md`, Traditional Chinese `*.zh-TW.md`; language links at the top of each file).
 
 | Document | Contents |
 |----------|----------|
-| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) / [docs/FIELD_SOP.zh-TW.md](docs/FIELD_SOP.zh-TW.md) | Short on-scene SOP: collection, first-pass triage, multi-host correlation, handoff/exports, troubleshooting |
-| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) / [docs/USER_MANUAL.zh-TW.md](docs/USER_MANUAL.zh-TW.md) | Full operator manual (GUI / CLI / import / investigation / exports) |
-| [docs/README.md](docs/README.md) | Project doc index (Chinese), deeper usage notes |
-| [docs/SPEC.md](docs/SPEC.md) | Development spec, version history, roadmap; **v0.22.0 draft** candidates |
+| [docs/FIELD_SOP.md](docs/FIELD_SOP.md) / [docs/FIELD_SOP.zh-TW.md](docs/FIELD_SOP.zh-TW.md) | Short on-scene SOP |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) / [docs/USER_MANUAL.zh-TW.md](docs/USER_MANUAL.zh-TW.md) | Full operator manual |
+| [docs/README.md](docs/README.md) | Doc index (Chinese-forward) |
+| [docs/SPEC.md](docs/SPEC.md) | Specification, version history, roadmap |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog |
 
-**Issue reports and discussions** are welcome. Build scripts and the rest of the source tree may live only in the maintainer’s full checkout; the published binary remains on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.
+**Issues and discussions** are welcome. The full source tree may exist only in the maintainer’s checkout; the shipping binary is always on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.
