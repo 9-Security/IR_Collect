@@ -6,17 +6,25 @@
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-04-09
+
+### Added
+- **WP-A 出站治理**：AI 與 ZIP 上傳各用 endpoint allowlist；空清單預設阻擋對應 POST。Summary → **AI Analyze** 可選 redaction profile（僅影響將 POST 之 JSON）；Summary JSON 檔與 ZIP 內文不改寫。
+- **WP-E Collection mode profile**：Settings 可選 `Standard` / `TriageFast` / `ForensicStrict`；寫入 `collection_coverage.json` 與分析師匯出。`ForensicStrict` 阻擋 Local Collect 後 ZIP 上傳與 **AI Analyze**，並加強收集前風險提示（非零足跡承諾）。
+- **WP-D Jump List 正規化**：`jump_lists.csv` 納入 Fact Store／Timeline／Correlation Source；BITS `RemoteName` 多段衍生實體；Unified Timeline 不再重複餵入 raw jump CSV。
+- **WP-C ShellBags 第一階段**：產生 `Registry\shellbags.csv`、`ShellBagsNormalizer`、UI **ShellBags (parsed)**、Correlation/Timeline/Entity `Sid`。
+- **Guided Hunt Pack v1 + 服務與身分跡證**：`ServiceNormalizer`；`logon_sessions` / `network_resources` / `server_connections` / `stored_credentials` / `kerberos_tickets` 納入 Fact Store overlay；ATT&CK 對映、可解釋規則（唯讀 facts）。
+- **Memory handoff 一等公民**：sidecar `schema=*_v2`、preset／驗證／診斷欄位；Settings 擴充；Memory 可正規化回 Summary／export（仍不解析 dump 內文）。
+
 ### Fixed
-- **Strict acceptance hardening**：`collection_coverage.json` 的 Event Logs 狀態改為逐一比對 `.evtx` 與 `*_filtered.csv`，缺任何一對即降為 `partial`；若 overall 存在 `missing` 也不再誤顯示為 `complete`。
-- **Memory orchestration clarity**：Memory acquisition / analysis handoff 的 analyst-facing 輸出改為同時列出 `Coverage` 與 `Sidecar`，避免把外部工具回傳的 `complete` 誤讀成實際成功；memory-analysis handoff 另拒絕 case root 與保留證物目錄作為輸出路徑。
-- **Summary / HTML / summary_v3 consistency**：Summary 文字區、HTML report、`summary.json` 現在一致保留跨來源 parser notes；HTML 不再把缺失 artifact count 顯示為 `-1`；`summary_v3` 對缺失 artifact counts 會輸出 `0`，並持續保留 `collection_coverage` 作為缺失語意來源。
-- **Timeline graph handoff**：由 graph 開啟 Timeline 時改為 structured entity match 優先，且沿用分鐘級時間窗，而不是把 `From / To` 放大成整天。
+- **Strict acceptance hardening**：`collection_coverage.json` 之 Event Logs 改為逐對 `.evtx` / `*_filtered.csv`；有 `missing` 時 overall 不誤標 `complete`。
+- **Memory orchestration clarity**：analyst 面向輸出併列 `Coverage` 與 `Sidecar`；handoff 拒絕 case root／證物目錄為分析輸出路徑。
+- **Summary / HTML / summary_v3 consistency**：跨來源 parser notes 一致；HTML 缺失計數不顯示 `-1`；`summary_v3` 缺失數以 `0` 表示。
+- **Timeline graph handoff**：structured entity match 優先、分鐘級時間窗。
 
 ### Docs
-- 同步更新 `README.md`、`docs/README.md`、`docs/SPEC.md`、`docs/REGRESSION_RUN.md`、`docs/SMOKE_RUN.md`，使文件與目前 acceptance-hardened 行為一致。
-- 新增 `docs/USER_MANUAL.md` 正式使用手冊與 `docs/FIELD_SOP.md` 現場短版 SOP，分離完整操作說明與現場應變流程。
-- `FIELD_SOP` / `USER_MANUAL` 增補 **繁體中文版**（`FIELD_SOP.zh-TW.md`、`USER_MANUAL.zh-TW.md`）；英文主檔維持 `FIELD_SOP.md`、`USER_MANUAL.md`，各檔頂端可切換語言。
-- `docs/SPEC.md` 補入下一版本候選更新項目（v0.22.0 draft），將低擾動模式、Memory handoff 強化、非 Event Log 補強、ShellBags 內建解析、Guided Hunt Pack、治理控制與 Case Diff 明確列入規劃。
+- README、`docs/README`、SPEC、REGRESSION_RUN、SMOKE_RUN 與 acceptance 行為對齊。
+- `USER_MANUAL` / `FIELD_SOP` 英繁雙語；SPEC 版本歷程詳載 v0.22.0 各工作包。
 
 ---
 
