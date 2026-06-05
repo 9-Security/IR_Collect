@@ -16,9 +16,10 @@
 - **Jump List 讀取強化**：`ParseJumpListFile` 修正忽略 `FileStream.Read` 回傳值（部分讀取殘留零尾被誤解析）並加上 16 MB 上限，避免使用者目錄下被竄改的超大檔造成 OOM。
 - **Fact Store 併發安全**：以單一 lock 保護 `FactStore.Facts`／`EntityIndex` 的變更與讀取，避免背景重建（`AugmentFactStoreWithRebuiltEventLogs`）與 UI 端 pivot／graph／entity search 同時存取造成 `InvalidOperationException` 或讀到半建好的索引。
 - **Entity search 結果上限**：Dashboard Entity search 對結果加上 5000 筆上限與截斷提示，避免廣泛實體在大型多主機 Fact Store 上把非 virtual ListView 灌爆造成 UI 卡死／OOM。
+- **SQLite DLL 載入完整性驗證（防 DLL planting）**：`FactStorePersistence.GetSqliteAssembly` 在 `Assembly.LoadFrom` 前先以 `SignatureHelper` 驗證 `System.Data.SQLite.dll`，僅在 Authenticode 簽章 `Signed-Trusted` 時才載入；未簽章／不受信任／不存在一律拒絕並記錄原因（SQLite 功能優雅降級）。同時降低用過舊引擎解析不受信任瀏覽器 SQLite DB 的 CVE 曝險。
 
 ### Added
-- **Regression 覆蓋**：`IRCollectSelfTests` 新增 7 項——cmd 引數跳脫、`fact_store.db` fail-soft（略過／不支援 schema／全毀）、fact 時間 UTC 對齊與混合 Kind 時間窗查詢、EventLog 缺時間保留。
+- **Regression 覆蓋**：`IRCollectSelfTests` 新增 10 項——cmd 引數跳脫、`fact_store.db` fail-soft（略過／不支援 schema／全毀）、fact 時間 UTC 對齊與混合 Kind 時間窗查詢、EventLog 缺時間保留、Fact Store 併發 append 交換語意與並行讀寫無例外、SQLite DLL 未簽章/缺檔拒載。
 
 ## [0.22.0] — 2026-04-09
 
