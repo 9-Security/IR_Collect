@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.22.1] — 2026-06-06
+
 ### Fixed
 - **Fact timebase 一致性（關聯引擎）**：MFT／ShellBags 之 fact 帶 `Kind=Utc`，EventLog／Process／Activity 為 naive-local，而 `DateTime` 比較忽略 `Kind`，導致跨來源關聯依主機 UTC offset 錯位。新增 `FactStore.ToComparableUtc`（naive=local→UTC、Local→UTC、Utc passthrough，MinValue/MaxValue sentinel 保留；與 `NormalizeFactTimeForJson` 匯出政策一致），並套用於 `FactStore.GetByTimeRange` 與 `SharedEntityPivot` 時間窗篩選／bucketing。**不**改寫各 collector 來源時間（MFT MACB 仍為 UTC，避免變更鑑識可見時間語意）。
 - **External command 穩定性**：`CommandHelper.RunCore` 改為以背景執行緒抽乾 stderr、主執行緒讀 stdout，避免單一管線緩衝區塞滿造成的 deadlock；並加上逾時上限（5 分鐘）與逾時 kill，避免 `wmic`／`fsutil`／`systeminfo` 等卡住整個收集。
