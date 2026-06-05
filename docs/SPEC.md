@@ -1,7 +1,7 @@
 # IR Collector 開發規格手冊 (Development Specification)
 
 **專案名稱**: IR_Collect
-**版本**: v0.22.1
+**版本**: v0.22.2
 **最後更新時間**: 2026-06-06
 **開發者**: Antigravity (collaborating with User)
 

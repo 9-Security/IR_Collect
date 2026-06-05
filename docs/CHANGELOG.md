@@ -6,6 +6,27 @@
 
 ## [Unreleased]
 
+## [0.22.2] — 2026-06-06
+
+### Fixed
+- **config.ini 機密 ACL 保護**：`ConfigManager.Save` 寫入後 best-effort 將 ACL 鎖到當前使用者（停用繼承、移除其他規則、僅授當前使用者 FullControl）；FAT/exFAT 等非 NTFS 優雅降級。降低明文 API key 在可預期位置被讀取的風險。
+- **分析師匯出 CSV 公式注入中和**：新增 `CsvUtils.EscapeFieldForExport`（與收集端 `EscapeField` 分離、收集 CSV 維持位元穩定）；對開頭為 `= + - @ \t \r` 的值加 `'` 前綴。套用於 Timeline 匯出 CSV（其餘分析師匯出為 JSON，已安全）。
+- **Registry SAM/SECURITY 失敗對稱**：`RegistryCollector` 不再因 SAM 在非 LocalSystem 下失敗而將整個 Registry 步驟標為失敗（與 SECURITY 一致處理）。
+- **記憶體 handoff 引數治理註記**：`memory_acquisition.json` / `memory_analysis.json` 新增 `args_governance_note`，標明工具引數為操作者提供、未驗證，僅 `{OutputPath}`/`{OutputDir}` 受治理。
+- **AI / Upload POST 連線洩漏修正**：失敗時釋放 `WebException.Response`，並帶出伺服器錯誤內文。
+- **USN 串流寫檔（防 OOM）**：`CommandHelper.RunToFile` 改為串流 stdout 至檔案（不整段 buffer），含逾時、stderr 抽乾、exit code 檢查與失敗時清除半成品檔。
+- **Jump List LNK Unicode 路徑**：`TryParseLnkLocalPath` 依 MS-SHLLINK 重寫，依 LinkFlags／LinkInfoHeaderSize 正確使用 `LocalBasePathOffsetUnicode`(0x1C) 或 ANSI(0x10)，修正現代 jump-list LNK 路徑讀錯。
+- **MFT run-list 邊界**：`MftDumper.ParseRunList` clamp `end` 至 buffer 長度並逐 run 做邊界檢查，畸形/截斷的 record-0 不再丟例外（原本被吞掉→靜默截斷 $MFT）。
+- **MFT fact action 正確性**：`MftNormalizer` 在 Created 無效退回 Modified 時，Action 改標 `Modified`（原本永遠標 `Created`，造成時間軸假建立事件）。
+- **EventLog 5145 絕對路徑**：額外輸出 `ShareLocalPath + RelativeTargetName` 組成之絕對路徑，使 SMB 檔案存取可與 MFT/USN/Amcache 絕對路徑關聯（相對片段仍保留）。
+- **SRUM SID 解碼**：`SrumExporter.DecodeIdBlob` 建 SID 前要求 revision byte=0x01 與正確長度，避免 UTF-16 AppId 文字被誤判成假 SID 字串。
+
+### Changed
+- **專案開源（MIT）**：原本僅釋出 binary 的公開鏡像改為發佈完整原始碼（`.gitignore` 改為追蹤 source、排除 build 產物/執行期狀態/證物）；新增 GitHub Actions CI（每次 push/PR build + 跑 self-tests）。
+
+### Added
+- **Regression 覆蓋**：`IRCollectSelfTests` 自 v0.22.1 起新增 10 項（config ACL、CSV 匯出中和、RunToFile 串流、記憶體引數註記 round-trip、LNK ANSI+Unicode、MFT run-list 邊界、MFT action、5145 絕對路徑、SRUM SID 辨識），共 114 項。
+
 ## [0.22.1] — 2026-06-06
 
 ### Fixed
