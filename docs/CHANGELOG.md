@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [0.22.1] — 2026-06-06
+
+### Fixed
+- **Fact timebase 一致性（關聯引擎）**：MFT／ShellBags 之 fact 帶 `Kind=Utc`，EventLog／Process／Activity 為 naive-local，而 `DateTime` 比較忽略 `Kind`，導致跨來源關聯依主機 UTC offset 錯位。新增 `FactStore.ToComparableUtc`（naive=local→UTC、Local→UTC、Utc passthrough，MinValue/MaxValue sentinel 保留；與 `NormalizeFactTimeForJson` 匯出政策一致），並套用於 `FactStore.GetByTimeRange` 與 `SharedEntityPivot` 時間窗篩選／bucketing。**不**改寫各 collector 來源時間（MFT MACB 仍為 UTC，避免變更鑑識可見時間語意）。
+- **External command 穩定性**：`CommandHelper.RunCore` 改為以背景執行緒抽乾 stderr、主執行緒讀 stdout，避免單一管線緩衝區塞滿造成的 deadlock；並加上逾時上限（5 分鐘）與逾時 kill，避免 `wmic`／`fsutil`／`systeminfo` 等卡住整個收集。
+- **cmd 引數跳脫**：`EscapeArgForCmd` 修正——移除引號內錯誤的 `^&`／`\"`（前者注入多餘 `^`、後者會提早結束 cmd 引號狀態），改為去除非法的雙引號後，僅在含 metacharacter 時以雙引號包裹。
+- **AI redaction ReDoS**：所有 redaction regex 加上 1 秒 `matchTimeout`，重寫有歧義的 `RxUnixProfilePath`；逾時時 **fail-closed**（整段以 `[redacted]` 取代，不外洩）。
+- **`fact_store.db` 載入 fail-soft**：單一損毀／缺 `SchemaVersion` 的 fact 列改為略過並計數，不再丟棄整個案卷；僅在 schema 版本整體不支援或「有列但無一可讀」時硬性失敗。略過數以 Load warning 呈現，提示重建 Fact Store。
+- **EventLog 缺時間事件保留**：`EventLogNormalizer` 對 `TimeCreated` 缺失／無法解析的列不再整列丟棄，改為以 `UnknownTime`／`Low` confidence 保留 fact 與其實體（含 `FallbackUsed` 與 ParserNote），避免遺失 4624／4769／5145 等高價值橫向移動事實。
+- **Jump List 讀取強化**：`ParseJumpListFile` 修正忽略 `FileStream.Read` 回傳值（部分讀取殘留零尾被誤解析）並加上 16 MB 上限，避免使用者目錄下被竄改的超大檔造成 OOM。
+- **Fact Store 併發安全**：以單一 lock 保護 `FactStore.Facts`／`EntityIndex` 的變更與讀取，避免背景重建（`AugmentFactStoreWithRebuiltEventLogs`）與 UI 端 pivot／graph／entity search 同時存取造成 `InvalidOperationException` 或讀到半建好的索引。
+- **Entity search 結果上限**：Dashboard Entity search 對結果加上 5000 筆上限與截斷提示，避免廣泛實體在大型多主機 Fact Store 上把非 virtual ListView 灌爆造成 UI 卡死／OOM。
+- **SQLite DLL 載入完整性驗證（防 DLL planting）**：`FactStorePersistence.GetSqliteAssembly` 在 `Assembly.LoadFrom` 前先以 `SignatureHelper` 驗證 `System.Data.SQLite.dll`，僅在 Authenticode 簽章 `Signed-Trusted` 時才載入；未簽章／不受信任／不存在一律拒絕並記錄原因（SQLite 功能優雅降級）。同時降低用過舊引擎解析不受信任瀏覽器 SQLite DB 的 CVE 曝險。
+
+### Added
+- **Regression 覆蓋**：`IRCollectSelfTests` 新增 10 項——cmd 引數跳脫、`fact_store.db` fail-soft（略過／不支援 schema／全毀）、fact 時間 UTC 對齊與混合 Kind 時間窗查詢、EventLog 缺時間保留、Fact Store 併發 append 交換語意與並行讀寫無例外、SQLite DLL 未簽章/缺檔拒載。
+
 ## [0.22.0] — 2026-04-09
 
 ### Added
