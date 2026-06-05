@@ -1,0 +1,35 @@
+name: build-and-test
+
+# Build the review executable (with INCLUDE_TESTS) and run the headless self-tests
+# on every push to main and every pull request. .NET Framework's csc is preinstalled
+# on the windows-latest runner, so this matches the local build_review.bat flow.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build review exe (INCLUDE_TESTS, no signing)
+        shell: cmd
+        run: call build_review.bat
+
+      - name: Run headless self-tests
+        shell: cmd
+        run: |
+          IR_Collect_review.exe -test
+          if %ERRORLEVEL% neq 0 (echo Self-tests failed & exit /b %ERRORLEVEL%)
+
+      - name: Upload test result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-test-result
+          path: ${{ runner.temp }}\IR_Collect_TestResult.txt
+          if-no-files-found: ignore
