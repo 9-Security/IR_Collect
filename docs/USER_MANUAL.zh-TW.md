@@ -41,6 +41,9 @@
 - `AiApiKey`
 - `UploadApiKey`
 - Upload / AI endpoint
+- `AiEndpointAllowlist` / `UploadEndpointAllowlist`（以 `|` 分隔的 URL 前綴；**空清單**則阻擋該管道出站 POST）
+- `CollectionModeProfile`（`Standard` / `TriageFast` / `ForensicStrict`；與其他選項一併於 **Advanced → Settings** 設定）
+- `AiExportRedactionProfile`（`None` / `Basic` / `Strict`；**僅**影響 **AI Analyze** 要 POST 的 JSON）
 - Event Log 視窗與上限
 - 暫存目錄是否在打包後刪除
 
@@ -49,6 +52,9 @@
 - 將 `config.ini` 放在僅當前操作者可讀寫的位置
 - 不要將 `config.ini` 放在共用且可寫的目錄
 - 不要把 AI / Upload endpoint 指向未受控的外部服務
+- 於 **Advanced → Settings** 設定 **AI** 與 **Upload** 各自允許的 `http(s)://主機:埠/路徑前綴`；**allowlist 為空時，該管道預設不允許 POST**，直到至少加入一筆與設定之 endpoint 相符的前綴
+- **AI Analyze** 會依 **redaction profile** 處理「即將送出」的 JSON；**匯出 Summary JSON** 與 **ZIP 上傳**不會被 profile 改寫內容（上傳僅做允許／拒絕目的地）
+- **Collection mode profile**：`collection_coverage.json` 與 analyst 匯出（`summary.json`、`full_log_v3` 的 host 摘要、以及 Summary／HTML／parser notes 於有案卷紀錄時）會帶入本次模式。**TriageFast** 以標記與收集前提示為主。**ForensicStrict** 會加強收集前警示（含預定輸出資料夾路徑）、在該 profile 作用下**禁止** **AI Analyze**，且在 **Local Collect** 完成後**禁止**自動 **ZIP 上傳**（即使已設定 Upload endpoint 與 allowlist）。此模式**不**主張 zero-footprint、鑑識映像或單靠本工具即構成完整低擾動鑑識方案。
 
 ## 3. 五分鐘快速上手
 
@@ -158,7 +164,7 @@ Summary 可做的事：
 - 編輯 analyst workflow sidecar
 - 匯出 `Summary JSON`
 - 匯出 `HTML Report`
-- 進入 AI 分析入口
+- 進入 AI 分析入口（若 endpoint 不在 **AI allowlist**，將無法 POST；送出前會顯示 endpoint 與 redaction profile）
 
 ### 4.6 Timeline Analysis
 
@@ -180,6 +186,9 @@ Summary 可做的事：
 - ShimCache Entries
 - SRUM Network / App
 - Activity Timeline
+- **ShellBags**（當案卷內已有 `Registry\shellbags.csv` 時）
+
+ShellBags 列於時間軸時，若 CSV 帶有時間戳，屬 **ObservedTime** 且信心為 **low**：該時間為來源 `ShellBags_*.reg` 匯出檔之 **UTC LastWriteTime**，**並非**登錄機碼在系統上的 LastWriteTime（`.reg` 匯出不包含逐鍵時間戳）。
 
 若是從 Investigation Graph 按 `Open Timeline` 開啟：
 
@@ -326,6 +335,7 @@ IR_Collect.exe --help
 - `filesystem_7days.csv`
 - `jump_lists.csv`
 - `file_integrity.csv`
+- `Registry\ShellBags_*.reg`、`Registry\shellbags.csv`（後者為平台解析列，供 UI／Fact Store；若 `.reg` 較新會於匯入時重算）
 - `bam_dam.csv`
 - `bits_jobs.csv`
 - `wmi_persistence.csv`
@@ -404,6 +414,8 @@ IR_Collect.exe --help
 5. 用 `Open Timeline` 驗證時間關係
 6. 匯出完整 LOG JSON 交由他人或外部流程接手
 
+**缺少關鍵 Event Log**（例如無 Security／TerminalServices 篩選匯出）時，可改以非日誌 facts 做 pivot：**Entity search**／Dashboard **Source** 選 **JumpList**（`jump_lists.csv`：`Path`、`User`、`AppId`、UNC 衍生欄位）、**BITS**（工作 `RemoteName` 衍生之 `ShareName`、`Workstation`、`RemoteIP`）、**SRUM**（`RemoteIP`、`AppId`、`Path`）。皆為跡證觀察事實，工具內建不輸出惡意判定。
+
 ### 8.3 可疑程式執行調查
 
 1. 看 `Processes`
@@ -458,6 +470,12 @@ IR_Collect.exe --help
 - 呼叫外部工具做記憶體擷取
 - 由本工具統一記錄時間、輸出、exit code、SHA256、權限脈絡
 
+設定：
+
+- **Arguments preset**：`custom` 時下方欄位為**完整**引數模板；**非** `custom` 時下方欄位為接在 preset 核心之後的**額外**參數（仍可做 `{OutputPath}` / `{OutputDir}` 展開）
+- `collection_coverage.json` 的 **Coverage** 會以磁碟為準與 `memory_acquisition.json` 交叉檢查；不一致時 Detail 會含 `[Coverage]`
+- 寫入 sidecar 前若預期 dump 仍不存在，可能另註記 `[Reconciled]`（與 `[Coverage]` 的說明並列於 Summary / HTML / `summary.json` / `full_log_v3` 的共用提示）
+
 限制：
 
 - 不內建採集驅動
@@ -470,6 +488,11 @@ IR_Collect.exe --help
 
 - 把已有 dump 交給外部分析器
 - 將外部工具輸出收進案卷
+
+設定：
+
+- **Arguments preset** 可選預設雙引號（輸入檔 + 分析輸出目錄）或 **Custom** 模板
+- **Coverage** 會核對 sidecar 列舉的輸出檔與磁碟；若列了檔案但磁碟為空，寫入前可能降級並加上 `[Reconciled]`
 
 限制：
 
@@ -530,9 +553,10 @@ IR_Collect.exe --help
 
 正確做法：
 
-- 以 Summary / `collection_coverage` 的 `Coverage` 為準
-- 檢查外部工具實際輸出路徑
-- 檢查 `memory_acquisition.json` 或 `memory_analysis.json`
+- 以 Summary / `collection_coverage` 的 **Coverage**（磁碟核對）為準；**Sidecar** 僅代表工具執行脈絡
+- Detail 可能出現 `[Coverage]`（coverage 步驟加注）或 `[Reconciled]`（寫入 sidecar 前磁碟核對）
+- 檢查工具路徑、是否因未提高權限而跳過（`MemoryAcquireSkipIfNotElevated`）、逾時、輸出目錄權限
+- 讀取 `memory_acquisition.json` / `memory_analysis.json` 的 stdout/stderr 尾段與 `ToolArgs`
 
 ### 10.5 匯入後速度變慢或記憶體占用偏高
 

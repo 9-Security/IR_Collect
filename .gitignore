@@ -1,15 +1,25 @@
-# Public mirror: root READMEs, selected docs; binary via GitHub Releases only.
-/*
-!/.gitattributes
-!/.gitignore
-!/README.md
-!/README.zh-TW.md
-!/docs/
-/docs/*
-!/docs/README.md
-!/docs/FIELD_SOP.md
-!/docs/FIELD_SOP.zh-TW.md
-!/docs/USER_MANUAL.md
-!/docs/USER_MANUAL.zh-TW.md
-!/docs/SPEC.md
-!/docs/CHANGELOG.md
+# IR_Collect — source is tracked; build outputs, runtime state, and collected
+# evidence are NOT. (This repo previously published binaries only; it is now open source.
+# Binaries continue to ship via GitHub Releases.)
+
+# ---- Build outputs ----
+*.exe
+*.zip
+*.zip.sha256
+/dist/
+
+# ---- Runtime / user state (may contain API keys, endpoints, or real evidence) ----
+config.ini
+/logs/
+/IR_Output_*/
+
+# ---- Test / verification scratch dirs (may hold real artifact data) ----
+/tmp_*/
+
+# ---- Assistant working notes (kept under ~/.claude, never in the repo) ----
+/memory/
+
+# ---- IDE / OS cruft ----
+.vs/
+*.user
+Thumbs.db
