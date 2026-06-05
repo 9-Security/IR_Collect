@@ -1,0 +1,138 @@
+using System;
+using System.Windows.Forms;
+using System.Runtime.InteropServices;
+#if INCLUDE_TESTS
+using IR_Collect.Tests;
+#endif
+
+namespace IR_Collect
+{
+    static class Program
+    {
+        [DllImport("kernel32.dll")]
+        static extern bool AttachConsole(int dwProcessId);
+        private const int ATTACH_PARENT_PROCESS = -1;
+
+        [DllImport("kernel32.dll")]
+        static extern bool FreeConsole();
+
+        [STAThread]
+        static void Main(string[] args)
+        {
+            // Hybrid Mode Logic
+            if (args.Length > 0)
+            {
+                // CLI Mode
+                AttachConsole(ATTACH_PARENT_PROCESS);
+                
+                string mode = args[0].ToLower();
+                if (mode == "-h" || mode == "--help")
+                {
+                    Console.WriteLine("\nIR_Collect — Windows DFIR Artifact Collector & Analyzer");
+                    Console.WriteLine("");
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  IR_Collect.exe                 Launch GUI");
+                    Console.WriteLine("  IR_Collect.exe -c [EvidenceID]  Run collection (CLI). Output: <EvidenceID>.zip in current directory.");
+                    Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
+#if INCLUDE_TESTS
+                    Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
+#endif
+                    Console.WriteLine("");
+                    Console.WriteLine("Examples:");
+                    Console.WriteLine("  IR_Collect.exe -c              Collect with auto-generated ID");
+                    Console.WriteLine("  IR_Collect.exe -c MyCase-001   Collect with ID MyCase-001");
+                    Console.WriteLine("");
+                }
+                else if (mode == "-c" || mode == "--collect")
+                {
+                    Console.WriteLine("\n[+] Starting IR Collection in CLI Mode...");
+                    string evidenceId = args.Length > 1 ? args[1] : null;
+                    try
+                    {
+                        var cfgCli = new ConfigManager();
+                        string cliProfile = CollectionModeProfileHelper.GetActive(cfgCli);
+                        Console.WriteLine("[i] Collection mode profile: " + cliProfile);
+                        if (CollectionModeProfileHelper.IsTriageFast(cliProfile))
+                        {
+                            Console.WriteLine("[i] TriageFast: live response still changes the host; outputs are labeled for faster triage workflows (not a footprint guarantee).");
+                        }
+                        if (CollectionModeProfileHelper.IsForensicStrict(cliProfile))
+                        {
+                            string outName = Collector.GetCollectionOutputDirectoryName(evidenceId);
+                            string outFull;
+                            try { outFull = System.IO.Path.GetFullPath(outName); }
+                            catch { outFull = outName; }
+                            Console.WriteLine("[!] ForensicStrict: live-response collection can perturb the system; this is not zero-footprint or a full low-impact forensic suite.");
+                            Console.WriteLine("[!] Output workspace directory (before ZIP): " + outFull);
+                            Console.WriteLine("[!] Prefer an isolated output volume when possible; writing on a suspect disk can be risky.");
+                            Console.WriteLine("[!] Outbound ZIP upload and in-app AI Analyze are blocked while ForensicStrict is selected in Settings.");
+                        }
+
+                        var result = Collector.RunCollectionDetailed(evidenceId, null);
+                        string zipPath = result != null ? result.ZipPath : null;
+                        if (result != null && result.HasErrors)
+                        {
+                            Console.WriteLine("[!] Collection completed with errors.");
+                            Console.WriteLine("[!] Failed steps: " + result.BuildFailureSummary());
+                            if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
+                            FreeConsole();
+                            Environment.Exit(2);
+                        }
+                        if (result != null && result.HasCoverageGaps)
+                        {
+                            Console.WriteLine("[!] Collection completed with coverage gaps.");
+                            if (result.CoverageReport != null)
+                            {
+                                Console.WriteLine(string.Format(
+                                    "[!] Coverage: {0} (complete {1}, partial {2}, failed {3}, skipped {4}, missing {5})",
+                                    string.IsNullOrWhiteSpace(result.CoverageReport.OverallStatus) ? "unknown" : result.CoverageReport.OverallStatus,
+                                    result.CoverageReport.CompletedSteps,
+                                    result.CoverageReport.PartialSteps,
+                                    result.CoverageReport.FailedSteps,
+                                    result.CoverageReport.SkippedSteps,
+                                    result.CoverageReport.MissingSteps));
+                            }
+                            if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
+                            FreeConsole();
+                            Environment.Exit(0);
+                        }
+                        Console.WriteLine("[+] Collection Complete.");
+                        if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[!] Collection failed: " + ex.Message);
+                        if (ex.InnerException != null) Console.WriteLine("[!] Inner: " + ex.InnerException.Message);
+                        FreeConsole();
+                        Environment.Exit(1);
+                    }
+                }
+#if INCLUDE_TESTS
+                else if (mode == "-test" || mode == "--test")
+                {
+                    int testExit = IRCollectSelfTests.RunAndWriteResultFile();
+                    FreeConsole();
+                    Environment.Exit(testExit);
+                }
+#endif
+                else
+                {
+                    Console.WriteLine("\n[!] Unknown argument: " + args[0]);
+                    Console.WriteLine("Use -h or --help for usage.");
+                    FreeConsole();
+                    Environment.Exit(1);
+                }
+
+                // Detach console before exiting so the command prompt returns
+                FreeConsole(); 
+            }
+            else
+            {
+                // GUI Mode
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new MainForm());
+            }
+        }
+    }
+}

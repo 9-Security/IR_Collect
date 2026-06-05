@@ -41,6 +41,9 @@ It is a **live-response** tool, not a full offline disk-imaging forensics platfo
 - `AiApiKey`
 - `UploadApiKey`
 - Upload / AI endpoints
+- `AiEndpointAllowlist` / `UploadEndpointAllowlist` (pipe-separated URL prefixes; empty list blocks outbound for that path)
+- `CollectionModeProfile` (`Standard` / `TriageFast` / `ForensicStrict`; controlled in **Advanced → Settings** alongside other options—do not rely on undocumented `config.ini`-only toggles)
+- `AiExportRedactionProfile` (`None` / `Basic` / `Strict`; affects **AI Analyze** POST body only)
 - Event Log window and limits
 - Whether temp output is deleted after ZIP
 
@@ -49,6 +52,9 @@ Recommendations:
 - Keep `config.ini` in a location readable/writable only by the current operator.
 - Do not place `config.ini` in a world-writable shared folder.
 - Do not point AI / Upload endpoints at untrusted services.
+- Configure **Advanced → Settings** allowlists: each outbound channel (AI vs Upload) must list allowed `http(s)://host:port/path-prefix` entries. An **empty** allowlist **blocks** POSTs for that channel until you add at least one prefix that matches your configured endpoint.
+- **AI Analyze** applies the selected **redaction profile** to the JSON being posted. **Export Summary JSON** and **ZIP upload** are not rewritten by the profile (upload is allow/deny only).
+- **Collection mode profile** adds operator-facing posture labels recorded in `collection_coverage.json` and analyst exports (`summary.json`, `full_log_v3` host summaries, Summary/HTML/parser notes when present). **TriageFast** is mainly labeling plus an informational pre-collect reminder. **ForensicStrict** adds stronger pre-collect warnings (including the planned output folder path), blocks **AI Analyze** entirely while active, and blocks automatic **ZIP upload** after **Local Collect** even if an upload endpoint and allowlist are configured. It does **not** claim zero-footprint, forensic disk imaging, or a complete low-touch forensic program by itself.
 
 ## 3. Five-minute quick start
 
@@ -156,7 +162,7 @@ You can:
 - Edit analyst workflow sidecar
 - Export `Summary JSON`
 - Export `HTML Report`
-- Open AI analysis entry points (if configured)
+- Open AI analysis entry points (if configured). Before posting, the tool shows the target endpoint and redaction profile; posting is refused if the endpoint is not on the **AI allowlist**.
 
 ### 4.6 Timeline Analysis
 
@@ -168,7 +174,9 @@ Use to:
 
 Key integrated sources include:
 
-- Process, MFT, Event Log, USN, BAM / DAM, BITS, Amcache, ShimCache entries, SRUM network/app, Activity Timeline
+- Process, MFT, Event Log, USN, BAM / DAM, BITS, Amcache, ShimCache entries, SRUM network/app, Activity Timeline, **ShellBags** (when `Registry\shellbags.csv` exists)
+
+ShellBags timeline rows use **ObservedTime** at **low** confidence when a CSV time is present: that timestamp is the **UTC last-write time of the source `ShellBags_*.reg` export file**, not the original registry key last modified time (registry exports do not embed per-key timestamps).
 
 If opened via Investigation Graph `Open Timeline`:
 
@@ -290,6 +298,7 @@ Partial failures:
 - `EventLogs\*.evtx`, `EventLogs\*_filtered.csv`
 - `MFT_Dump.bin`, `mft_preview.csv`, `usn_journal.csv`
 - `recent_files.csv`, `filesystem_7days.csv`, `jump_lists.csv`, `file_integrity.csv`
+- `Registry\ShellBags_*.reg`, `Registry\shellbags.csv` (parsed rows for UI / Fact Store; regenerated on import when `.reg` is newer)
 - `bam_dam.csv`, `bits_jobs.csv`, `wmi_persistence.csv`
 - `amcache_programs.csv`, `amcache_files.csv`, `shimcache.csv`, `shimcache_entries.csv`
 - `srum_network_usage.csv`, `srum_app_usage.csv`
@@ -350,6 +359,8 @@ Workflow:
 4. `Build Investigation Graph` → `Open Timeline`
 5. Export full LOG JSON for handoff
 
+**Without key Event Logs** (for example, no Security or TerminalServices exports), pivot on non-log facts: **Entity search** / `Source` filter on **JumpList** (`jump_lists.csv` facts: Path, User, AppId, derived UNC fields), **BITS** (ShareName / Workstation / RemoteIP from job `RemoteName`), and **SRUM** (RemoteIP, AppId, Path). These are observations from artifacts only—no built-in malicious verdict.
+
 ### 8.3 Suspicious execution
 
 1. `Processes`, `Timeline Analysis` (path/hash/user)
@@ -381,9 +392,13 @@ Requires `System.Data.SQLite.dll` beside the EXE for SQLite writes; GUI still wo
 
 Calls **your** external acquisition tool; records timing, paths, exit codes, hashes, privilege context. **No** built-in dumper or dump parser; may need large disk.
 
+**Settings**: use **Arguments preset** for common layouts (quoted output path only, WinPMEM-style `-o`, or fully **Custom** template). For **non-Custom** presets, `MemoryAcquireToolArgs` is **appended after** the preset core (extra switches only, or placeholders if needed). **Coverage** rows in `collection_coverage.json` reconcile disk artifacts against `memory_acquisition.json`; if they disagree, the detail includes `[Coverage]`. Before saving the sidecar, the collector may append `[Reconciled]` if the dump path had no file at finalize. Summary / HTML / `summary.json` / `full_log_v3` share one note explaining `[Coverage]` vs `[Reconciled]`.
+
 ### 9.4 Memory analysis handoff
 
 Feeds dumps to **your** external analyzer and ingests outputs. Tool **orchestrates only**—do not treat sidecar status alone as a forensic conclusion.
+
+**Settings**: **Arguments preset** chooses the default dual-quoted `{InputPath}` + `{OutputDir}` layout or a **Custom** template. **Coverage** reconciles listed outputs against disk; sidecar may be downgraded with `[Reconciled]` if listed files are missing at finalize even though accounting claimed success.
 
 ## 10. Troubleshooting
 
@@ -409,7 +424,7 @@ Try: confirm Auto Build setting, `Rebuild Selected Host Fact Store`, Summary fre
 
 External tool reported success without real output.
 
-Use Summary / `collection_coverage` Coverage; verify analyzer paths; read `memory_acquisition.json` / `memory_analysis.json`.
+Use Summary / `collection_coverage` **Coverage** (authoritative for disk); check **Sidecar** for tool-reported fields. Details may include `[Coverage]` (coverage builder) or `[Reconciled]` (pre-save disk check). Verify tool paths, elevation (`MemoryAcquireSkipIfNotElevated`), timeouts, and output-folder permissions; read `memory_acquisition.json` / `memory_analysis.json`.
 
 ### 10.5 Slow import or high memory
 
