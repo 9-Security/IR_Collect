@@ -72,7 +72,11 @@ namespace IR_Collect.MFT
                     // Basic Signature Check "FILE"
                     if (recordBuffer[0] == 0x46 && recordBuffer[1] == 0x49 && recordBuffer[2] == 0x4C && recordBuffer[3] == 0x45)
                     {
-                        try 
+                        // NTFS stores an Update Sequence Number in the last 2 bytes of every 512-byte
+                        // sector and the real bytes in the Update Sequence Array; restore them before
+                        // reading attributes, or any field crossing a sector boundary is corrupted.
+                        ApplyUsnFixup(recordBuffer, recordSize);
+                        try
                         {
                             MftEntry entry = ParseRecord(recordBuffer, recordIndex);
                             if (entry != null) result.Entries.Add(entry);
@@ -92,7 +96,48 @@ namespace IR_Collect.MFT
             return result;
         }
 
-        private static MftEntry ParseRecord(byte[] data, uint index)
+        /// <summary>
+        /// Apply the NTFS fixup (Update Sequence Array) to a record buffer in place. The record header
+        /// holds the USA offset at 0x04 and the USA entry count at 0x06 (1 signature word + one word per
+        /// sector). The signature word must currently occupy the last 2 bytes of each sector; those are
+        /// overwritten with the corresponding USA word, restoring the original on-disk bytes.
+        /// Returns true if a fixup was applied. internal for self-tests.
+        /// </summary>
+        internal static bool ApplyUsnFixup(byte[] data, int recordSize)
+        {
+            if (data == null || recordSize < 512 || data.Length < recordSize) return false;
+            ushort usaOffset = BitConverter.ToUInt16(data, 0x04);
+            ushort usaCount = BitConverter.ToUInt16(data, 0x06);
+            if (usaCount < 2) return false;                                   // need signature + >=1 sector
+            int sectors = usaCount - 1;
+            if (sectors * 512 > recordSize) return false;                    // USA bigger than the record
+            if (usaOffset < 0x2A || usaOffset + usaCount * 2 > recordSize) return false;
+            for (int i = 1; i <= sectors; i++)
+            {
+                int sectorEnd = i * 512 - 2;                                 // last 2 bytes of sector i
+                if (sectorEnd + 1 >= recordSize) break;
+                int usaEntry = usaOffset + i * 2;
+                data[sectorEnd] = data[usaEntry];
+                data[sectorEnd + 1] = data[usaEntry + 1];
+            }
+            return true;
+        }
+
+        // Rank of a $FILE_NAME namespace byte (offset 0x41 of the attribute content) so the human-facing
+        // Win32 long name wins over a DOS 8.3 short name: Win32&DOS(3) > Win32(1) > POSIX(0) > DOS(2).
+        internal static int NamespaceRank(byte ns)
+        {
+            switch (ns)
+            {
+                case 3: return 3;   // Win32 & DOS (single combined name)
+                case 1: return 2;   // Win32 (long name)
+                case 0: return 1;   // POSIX
+                case 2: return 0;   // DOS (8.3 short name)
+                default: return 0;
+            }
+        }
+
+        internal static MftEntry ParseRecord(byte[] data, uint index)
         {
             // Simple Parser logic
             // Offset 0x16: Flags (0x01 = InUse, 0x02 = Directory)
@@ -105,6 +150,7 @@ namespace IR_Collect.MFT
             ushort firstAttrOffset = BitConverter.ToUInt16(data, 0x14);
             
             string filename = "";
+            int bestNameRank = -1;   // best $FILE_NAME namespace seen so far (prefer Win32 over DOS 8.3)
             ulong parentRef = 0;
             long fileSize = 0;
 
@@ -148,14 +194,24 @@ namespace IR_Collect.MFT
                     int attrContentStart = offset + contentOffset;
                     if (attrContentStart + 66 > data.Length) { offset += (int)attrLen; continue; }
                     byte nameLen = data[attrContentStart + 64];
+                    byte ns = data[attrContentStart + 65];
                     if (attrContentStart + 66 + (nameLen * 2) <= data.Length)
                     {
+                        // Parent ref and the FN timestamps are identical across a record's $FILE_NAME
+                        // namespaces, so capture them from any one.
                         parentRef = BitConverter.ToUInt64(data, attrContentStart);
                         fnCreated = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x08));
                         fnModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x10));
                         fnMftModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x18));
                         fnAccessed = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x20));
-                        filename = Encoding.Unicode.GetString(data, attrContentStart + 66, nameLen * 2);
+                        // But keep the name from the highest-ranked namespace (Win32 long name beats the
+                        // DOS 8.3 short name) rather than letting the last attribute win.
+                        int rank = NamespaceRank(ns);
+                        if (rank > bestNameRank)
+                        {
+                            filename = Encoding.Unicode.GetString(data, attrContentStart + 66, nameLen * 2);
+                            bestNameRank = rank;
+                        }
                     }
                 }
 

@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **MFT NTFS USN/fixup（重大正確性，Phase 2.3）**：`MftParser` 現在於讀屬性前套用 NTFS Update Sequence fixup（header 0x04=usaOffset、0x06=usaCount；還原每個 512-byte sector 末 2 bytes）。先前未還原 → 任何跨越 record offset 510-511／1022-1023 的欄位都會被 USN 覆蓋而毀損（差異化驗證實證：`tokenbinding.dll` 被讀成 `tokenbindi?g.dll`）。
+- **MFT 取 Win32 長檔名而非 DOS 8.3（Phase 2.3）**：`$FILE_NAME` 解析改讀 namespace byte（content+0x41），依 Win32&DOS(3) > Win32(1) > POSIX(0) > DOS(2) 取最高者，而非用最後一個屬性覆蓋（先前會輸出 `ENTRIE~1.JSO` 而非 `entries.json`）。
+- **差異化 harness UTF-8 讀取**：`DiffValidate.ps1` 改以 UTF-8 明確讀取我方 JSON 與 MFTECmd/LECmd/JLECmd 的 CSV（PowerShell 5.1 預設 ANSI 會把 CJK 檔名 mojibake 成假 mismatch）。
+- 對真實 2.8 GB `$MFT`（280 萬筆）重跑差異化驗證：時間戳維持 100% 一致，檔名 mismatch 自 ~6,860 降至 ~2,030（match 54,320→59,150）。殘餘多為 record 索引/`$ATTRIBUTE_LIST` 延伸記錄造成的「同 EntryNumber 不同檔」差異，列為下一個 2.3 子項。
+
 ### Added
 - **解析器 fixture 語料庫（Phase 2.1）**：新增 `tests/fixtures/`，以位元組層級保存 IR_Collect 自有解析器的決定性測試樣本——LNK（Unicode/ANSI LocalBasePath + 截斷/無 LinkInfo）、MFT run-list（合法/over-claim 截斷/零長度 run）、SRUM 身分 blob（合法 SID / UTF-16 AppId / subAuth 溢位畸形），共 11 個樣本，含 `manifest.json` 與 `README.md`。每個已修復的解析器 bug 都有一個獨立於 inline 測試碼的常駐回歸守門。
 - **語料庫產生器與漂移守門**：新增 `IR_Collect_review.exe -make-fixtures [dir]`（由 `FixtureCorpus.Build()` 決定性重建語料庫，預設 `tests\fixtures`）。`-test` 新增 `FixtureCorpus_*`：對每個已提交檔案以真實解析器驗證**並**在記憶體重建後做位元組相等比對，使已提交語料庫無法與產生器靜默漂移（已負向驗證：竄改一個 byte 即 FAIL）。Self-tests 共 115 項。

@@ -74,7 +74,9 @@ function Get-OurPaths($kindArg, $file) {
     $tmp = [System.IO.Path]::GetTempFileName()
     try {
         & $ReviewExe -parse $kindArg "$file" "$tmp" | Out-Null
-        $json = Get-Content $tmp -Raw -ErrorAction SilentlyContinue
+        # Read as UTF-8 explicitly: PowerShell 5.1 Get-Content defaults to ANSI and would mojibake
+        # non-ASCII (e.g. CJK) paths, producing false mismatches.
+        $json = if (Test-Path $tmp) { [IO.File]::ReadAllText($tmp, [Text.Encoding]::UTF8) } else { "" }
         if ([string]::IsNullOrWhiteSpace($json)) { return @() }
         $obj = $json | ConvertFrom-Json
         if ($obj.ok -ne $true) { return @() }
@@ -142,7 +144,7 @@ function Validate-Lnk {
 
     $csv = Invoke-EzCsv $exe $stage
     if (-not $csv) { Write-Host "SKIP: LECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
-    $rows = Import-Csv $csv
+    $rows = Import-Csv $csv -Encoding UTF8
 
     $match = 0; $mismatch = 0; $idlistOnly = 0
     $mismatches = @()
@@ -202,7 +204,7 @@ function Validate-JumpList {
 
     $csv = Invoke-EzCsv $exe $dir
     if (-not $csv) { Write-Host "SKIP: JLECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
-    $rows = Import-Csv $csv
+    $rows = Import-Csv $csv -Encoding UTF8
 
     # Build reference path set per source jump list file.
     $refByFile = @{}
@@ -284,7 +286,7 @@ function Validate-Mft {
     # Our side FIRST: -parse mft -> JSON entries (bounded by the MftParseLimit, ~60k).
     $tmp = [System.IO.Path]::GetTempFileName()
     & $ReviewExe -parse mft "$($mft.FullName)" "$tmp" | Out-Null
-    $json = Get-Content $tmp -Raw -ErrorAction SilentlyContinue
+    $json = if (Test-Path $tmp) { [IO.File]::ReadAllText($tmp, [Text.Encoding]::UTF8) } else { "" }
     Remove-Item $tmp -Force -ErrorAction SilentlyContinue
     if ([string]::IsNullOrWhiteSpace($json)) { Write-Host "SKIP: our -parse mft produced no output." -ForegroundColor Yellow; $script:skipped = $true; return }
     $obj = $json | ConvertFrom-Json
@@ -299,8 +301,9 @@ function Validate-Mft {
     foreach ($e in $ours) { [void]$ourRecs.Add([string]$e.rec) }
 
     # Reference map: EntryNumber -> filename + timestamps, but ONLY for records we also emitted.
+    # MFTECmd writes UTF-8; read it as such so non-ASCII filenames are not mojibake'd into mismatches.
     $ref = @{}
-    Import-Csv $csv.FullName | ForEach-Object {
+    Import-Csv $csv.FullName -Encoding UTF8 | ForEach-Object {
         $en = $_.EntryNumber
         if ($null -eq $en -or $en -eq "") { return }
         if (-not $ourRecs.Contains([string]$en)) { return }
