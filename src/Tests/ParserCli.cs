@@ -32,6 +32,12 @@ namespace IR_Collect.Tests
                 return 2;
             }
 
+            // MFT has its own richer JSON shape and streams the file record-by-record via MftParser,
+            // so it must be dispatched BEFORE the whole-file read below: a real $MFT routinely exceeds
+            // 2 GB and File.ReadAllBytes would throw on it.
+            if (string.Equals(kind, "mft", StringComparison.OrdinalIgnoreCase))
+                return RunMft(file, o);
+
             byte[] data;
             try { data = File.ReadAllBytes(file); }
             catch (Exception ex)
@@ -39,10 +45,6 @@ namespace IR_Collect.Tests
                 o.WriteLine("{\"ok\":false,\"kind\":" + J(kind) + ",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
                 return 2;
             }
-
-            // MFT has its own richer JSON shape (record + path + timestamps), handled separately.
-            if (string.Equals(kind, "mft", StringComparison.OrdinalIgnoreCase))
-                return RunMft(file, o);
 
             List<string> paths;
             try

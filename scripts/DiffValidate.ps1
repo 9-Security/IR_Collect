@@ -281,22 +281,7 @@ function Validate-Mft {
     $csv = Get-ChildItem $outdir -Filter *.csv -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
     if (-not $csv) { Write-Host "SKIP: MFTECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
 
-    # Reference map: EntryNumber -> filename + timestamps (in-use file records only, to match our emit).
-    $ref = @{}
-    Import-Csv $csv.FullName | ForEach-Object {
-        $en = $_.EntryNumber
-        if ($null -eq $en -or $en -eq "") { return }
-        if (-not $ref.ContainsKey($en)) {
-            $ref[$en] = [PSCustomObject]@{
-                FileName = $_.FileName
-                Created  = (Normalize-MftTime $_.Created0x10)
-                Modified = (Normalize-MftTime $_.LastModified0x10)
-            }
-        }
-    }
-    Write-Host ("MFTECmd records: " + $ref.Count)
-
-    # Our side: -parse mft -> JSON entries
+    # Our side FIRST: -parse mft -> JSON entries (bounded by the MftParseLimit, ~60k).
     $tmp = [System.IO.Path]::GetTempFileName()
     & $ReviewExe -parse mft "$($mft.FullName)" "$tmp" | Out-Null
     $json = Get-Content $tmp -Raw -ErrorAction SilentlyContinue
@@ -306,6 +291,28 @@ function Validate-Mft {
     if ($obj.ok -ne $true) { Write-Host ("FAIL: -parse mft error: " + $obj.error) -ForegroundColor Red; $script:failures++; return }
     $ours = @($obj.entries)
     Write-Host ("IR_Collect records emitted (limit " + $obj.limit + "): " + $ours.Count)
+
+    # Set of EntryNumbers we emitted, so we only keep the matching MFTECmd rows. A full $MFT can hold
+    # millions of records; loading them all into a hashtable is what OOM'd the first run. By filtering
+    # to our ~60k set while streaming, the reference map stays bounded and memory stays flat.
+    $ourRecs = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($e in $ours) { [void]$ourRecs.Add([string]$e.rec) }
+
+    # Reference map: EntryNumber -> filename + timestamps, but ONLY for records we also emitted.
+    $ref = @{}
+    Import-Csv $csv.FullName | ForEach-Object {
+        $en = $_.EntryNumber
+        if ($null -eq $en -or $en -eq "") { return }
+        if (-not $ourRecs.Contains([string]$en)) { return }
+        if (-not $ref.ContainsKey($en)) {
+            $ref[$en] = [PSCustomObject]@{
+                FileName = $_.FileName
+                Created  = (Normalize-MftTime $_.Created0x10)
+                Modified = (Normalize-MftTime $_.LastModified0x10)
+            }
+        }
+    }
+    Write-Host ("MFTECmd records matched to our set: " + $ref.Count)
 
     $compared = 0; $nameMatch = 0; $nameMismatch = 0; $tsMatch = 0; $tsMismatch = 0
     $nameMismatches = @(); $tsMismatches = @()
