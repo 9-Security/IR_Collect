@@ -137,6 +137,27 @@ namespace IR_Collect
                     FreeConsole();
                     Environment.Exit(rc);
                 }
+                else if (mode == "-dump-mft")
+                {
+                    // -dump-mft <driveLetter> <outDir>. Raw-extract $MFT (needs admin). Used by the
+                    // local-sample extractor so MFTECmd and our MftParser can diff the same $MFT file.
+                    string drive = args.Length > 1 ? args[1] : "C";
+                    string outDir = args.Length > 2 ? args[2] : ".";
+                    try
+                    {
+                        System.IO.Directory.CreateDirectory(outDir);
+                        string path = IR_Collect.MFT.MftDumper.DumpMft(drive, outDir);
+                        Console.WriteLine("[+] $MFT dumped to: " + path);
+                        FreeConsole();
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[!] $MFT dump failed (run elevated?): " + ex.Message);
+                        FreeConsole();
+                        Environment.Exit(1);
+                    }
+                }
                 else if (mode == "-make-fixtures")
                 {
                     string outDir = args.Length > 1 ? args[1] : System.IO.Path.Combine("tests", "fixtures");

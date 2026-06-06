@@ -42,7 +42,7 @@
 param(
     [string]$ToolsDir = "tools\EZ\net9",
     [string]$ReviewExe = ".\IR_Collect_review.exe",
-    [ValidateSet("lnk", "jumplist", "all")]
+    [ValidateSet("lnk", "jumplist", "mft", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
     [string]$InputDir = ""
@@ -248,6 +248,111 @@ function Validate-JumpList {
     Remove-Item (Split-Path $csv -Parent) -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Normalize-MftTime($s) {
+    if ([string]::IsNullOrWhiteSpace($s)) { return "" }
+    $dt = [datetime]::MinValue
+    if ([datetime]::TryParse($s, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$dt)) {
+        if ($dt.Year -le 1601) { return "" }
+        return $dt.ToString("yyyy-MM-ddTHH:mm:ss")
+    }
+    return ""
+}
+
+function Validate-Mft {
+    Write-Section "MFT  (IR_Collect MftParser  vs  MFTECmd)"
+    $exe = Resolve-Tool "MFTECmd"
+    if (-not $exe) {
+        Write-Host ("SKIP: MFTECmd.exe not found under " + $ToolsDir + " - MFT validation skipped.") -ForegroundColor Yellow
+        $script:skipped = $true; return
+    }
+    $mftDir = if ($InputDir) { $InputDir } else { "samples\mft" }
+    $mft = Get-ChildItem $mftDir -File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
+    if (-not $mft) {
+        Write-Host ("SKIP: no `$MFT sample under " + $mftDir + ". Run (elevated) scripts\CollectLocalSamples.ps1 first.") -ForegroundColor Yellow
+        $script:skipped = $true; return
+    }
+    Write-Host ("Input `$MFT: " + $mft.FullName + "  (" + [math]::Round($mft.Length/1MB,1) + " MB)")
+
+    # Reference: MFTECmd -> CSV
+    $csv = $null
+    $outdir = Join-Path $env:TEMP ("ezdiff_mft_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
+    New-Item -ItemType Directory -Force $outdir | Out-Null
+    & $exe -f "$($mft.FullName)" --csv "$outdir" 2>&1 | Out-Null
+    $csv = Get-ChildItem $outdir -Filter *.csv -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
+    if (-not $csv) { Write-Host "SKIP: MFTECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    # Reference map: EntryNumber -> filename + timestamps (in-use file records only, to match our emit).
+    $ref = @{}
+    Import-Csv $csv.FullName | ForEach-Object {
+        $en = $_.EntryNumber
+        if ($null -eq $en -or $en -eq "") { return }
+        if (-not $ref.ContainsKey($en)) {
+            $ref[$en] = [PSCustomObject]@{
+                FileName = $_.FileName
+                Created  = (Normalize-MftTime $_.Created0x10)
+                Modified = (Normalize-MftTime $_.LastModified0x10)
+            }
+        }
+    }
+    Write-Host ("MFTECmd records: " + $ref.Count)
+
+    # Our side: -parse mft -> JSON entries
+    $tmp = [System.IO.Path]::GetTempFileName()
+    & $ReviewExe -parse mft "$($mft.FullName)" "$tmp" | Out-Null
+    $json = Get-Content $tmp -Raw -ErrorAction SilentlyContinue
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($json)) { Write-Host "SKIP: our -parse mft produced no output." -ForegroundColor Yellow; $script:skipped = $true; return }
+    $obj = $json | ConvertFrom-Json
+    if ($obj.ok -ne $true) { Write-Host ("FAIL: -parse mft error: " + $obj.error) -ForegroundColor Red; $script:failures++; return }
+    $ours = @($obj.entries)
+    Write-Host ("IR_Collect records emitted (limit " + $obj.limit + "): " + $ours.Count)
+
+    $compared = 0; $nameMatch = 0; $nameMismatch = 0; $tsMatch = 0; $tsMismatch = 0
+    $nameMismatches = @(); $tsMismatches = @()
+    foreach ($e in $ours) {
+        $key = [string]$e.rec
+        if (-not $ref.ContainsKey($key)) { continue }
+        $r = $ref[$key]
+        $compared++
+        if (($e.path.Split('\') | Select-Object -Last 1).ToLowerInvariant() -eq ([string]$r.FileName).ToLowerInvariant()) {
+            $nameMatch++
+        }
+        else {
+            $nameMismatch++
+            if ($nameMismatches.Count -lt 10) {
+                $nameMismatches += [PSCustomObject]@{ Rec = $key; Ours = ($e.path.Split('\') | Select-Object -Last 1); MFTECmd = $r.FileName }
+            }
+        }
+        # Timestamps: compare only when both sides have a value (our limit may emit fewer attrs).
+        if ($e.cr -and $r.Created) {
+            if ($e.cr -eq $r.Created -and $e.mo -eq $r.Modified) { $tsMatch++ }
+            else {
+                $tsMismatch++
+                if ($tsMismatches.Count -lt 8) {
+                    $tsMismatches += [PSCustomObject]@{ Rec = $key; Field = "cr/mo"; Ours = ($e.cr + " / " + $e.mo); MFTECmd = ($r.Created + " / " + $r.Modified) }
+                }
+            }
+        }
+    }
+
+    Write-Host ("Records compared (same EntryNumber):  " + $compared)
+    Write-Host ("FILENAME match:    " + $nameMatch) -ForegroundColor Green
+    Write-Host ("FILENAME mismatch: " + $nameMismatch) -ForegroundColor (&{ if ($nameMismatch -gt 0) { "Red" } else { "Green" } })
+    Write-Host ("TIMESTAMP match (cr+mo):    " + $tsMatch) -ForegroundColor DarkGray
+    Write-Host ("TIMESTAMP mismatch (cr+mo): " + $tsMismatch) -ForegroundColor (&{ if ($tsMismatch -gt 0) { "Yellow" } else { "DarkGray" } })
+    if ($nameMismatch -gt 0) {
+        Write-Host "--- filename mismatches (gate) ---" -ForegroundColor Red
+        $nameMismatches | Format-Table -AutoSize | Out-String | Write-Host
+        $script:failures += $nameMismatch
+    }
+    if ($tsMismatch -gt 0) {
+        Write-Host "--- timestamp mismatches (informational; investigate tz/attribute source) ---" -ForegroundColor Yellow
+        $tsMismatches | Format-Table -AutoSize | Out-String | Write-Host
+    }
+
+    Remove-Item $outdir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # --- main ---
 Write-Host "IR_Collect - Phase 2.2 differential validation" -ForegroundColor White
 if (-not (Test-Path $ReviewExe)) {
@@ -262,6 +367,7 @@ if (-not (Test-Path $ToolsDir)) {
 
 if ($Kind -eq "all" -or $Kind -eq "lnk") { Validate-Lnk }
 if ($Kind -eq "all" -or $Kind -eq "jumplist") { Validate-JumpList }
+if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
 
 Write-Section "RESULT"
 if ($script:failures -gt 0) {

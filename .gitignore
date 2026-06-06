@@ -20,6 +20,10 @@ config.ini
 #      validation) — downloaded locally, never redistributed via this repo ----
 /tools/
 
+# ---- Real artifact samples extracted from the local host for diff validation
+#      ($MFT, registry hives, SRUDB.dat) — REAL EVIDENCE, never committed ----
+/samples/
+
 # ---- Assistant working notes (kept under ~/.claude, never in the repo) ----
 /memory/
 

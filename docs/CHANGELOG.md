@@ -12,6 +12,7 @@
 - **Phase 2.2 預備**：`manifest.json` 的 `requiresRealSample` 區段登錄無法忠實合成的容器格式（Amcache.hve、AppCompatCache、SRUDB.dat ESE、ShellBags、完整 $MFT）及各自對應的參考工具（AmcacheParser / AppCompatCacheParser / SrumECmd / SBECmd / MFTECmd），供差異化驗證 harness 使用。
 - **解析器差異化驗證 harness（Phase 2.2）**：新增 `scripts/DiffValidate.ps1` 與 `run_diff_validate.bat`，把 IR_Collect 的**真實生產解析器**與 Eric Zimmerman 工具（LECmd / JLECmd）跑在同一批真實 artifact 上做差異比對。新增 review-build CLI `IR_Collect_review.exe -parse <lnk|jumplist> <file> [out]`（emit 穩定 JSON；因 winexe stdout 不可靠故支援寫出檔）。LNK 為硬性 gate：若 LECmd 取得 LinkInfo LocalBasePath 而我們未重現即 FAIL；僅靠 target IDList 解析者（我方目前不涵蓋）另計為 coverage note。實測本機 34 個真實 LNK：**22/22 一致、0 mismatch**、11 個 IDList-only。JumpList 為 informational：我方 byte-scan heuristic 對 JLECmd（完整 OLE-CFB 解析）的 path recall 約 53.7%，明確標示為 Phase 2.3 待補（非 gate 失敗）。Harness 在缺工具時 skip-with-reason（exit 3→wrapper 視為 pass），不靜默放行。
 - **共用 jump-list 抽路徑**：自 `ParseJumpListFile` 抽出 `JumpListsCollector.ExtractJumpListPaths(byte[])`（生產與 `-parse` CLI 共用同一段邏輯，保證兩者不漂移）；行為與原 inline 合併邏輯等價，既有 jump-list 測試全綠。
+- **MFT 差異化驗證（Phase 2.2 延伸）**：`-parse` 新增 `mft`（`MftParser.Parse` → 每筆 record 的 path 與 Std MACB 時間，上限 60000 筆，UTC 秒精度）；review-build 新增 `-dump-mft <drive> <outDir>`（以 `MftDumper` raw-extract `$MFT`，需提權）。新增 `scripts/CollectLocalSamples.ps1`（提權執行：raw dump `$MFT` + 以暫時 Volume Shadow Copy 複製鎖定的 Amcache.hve / SYSTEM / SRUDB.dat 到 `samples/`，事後刪除 shadow；`samples/` 已 gitignore，屬本機真實證物、永不入庫）。`DiffValidate.ps1` 新增 `-Kind mft`：以 EntryNumber join MFTECmd CSV，FILENAME 不一致為硬性 gate、時間戳為 informational。
 
 ## [0.22.2] — 2026-06-06
 

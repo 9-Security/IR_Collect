@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using IR_Collect.Collectors;
+using IR_Collect.MFT;
 
 namespace IR_Collect.Tests
 {
@@ -39,6 +40,10 @@ namespace IR_Collect.Tests
                 return 2;
             }
 
+            // MFT has its own richer JSON shape (record + path + timestamps), handled separately.
+            if (string.Equals(kind, "mft", StringComparison.OrdinalIgnoreCase))
+                return RunMft(file, o);
+
             List<string> paths;
             try
             {
@@ -53,7 +58,7 @@ namespace IR_Collect.Tests
                         paths = JumpListsCollector.ExtractJumpListPaths(data);
                         break;
                     default:
-                        o.WriteLine("{\"ok\":false,\"kind\":" + J(kind) + ",\"error\":\"unknown kind (lnk|jumplist)\"}");
+                        o.WriteLine("{\"ok\":false,\"kind\":" + J(kind) + ",\"error\":\"unknown kind (lnk|jumplist|mft)\"}");
                         return 2;
                 }
             }
@@ -74,6 +79,50 @@ namespace IR_Collect.Tests
             sb.Append("]}");
             o.WriteLine(sb.ToString());
             return 0;
+        }
+
+        // Bounded so a multi-hundred-MB $MFT cannot produce an unbounded JSON blob; the harness
+        // diffs the records we emit against MFTECmd's same EntryNumbers (a representative sample).
+        private const int MftParseLimit = 60000;
+
+        private static int RunMft(string file, TextWriter o)
+        {
+            List<MftParser.MftEntry> entries;
+            try { entries = MftParser.Parse(file, MftParseLimit); }
+            catch (Exception ex)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"mft\",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
+                return 1;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"kind\":\"mft\",\"file\":").Append(J(file));
+            sb.Append(",\"limit\":").Append(MftParseLimit).Append(",\"entries\":[");
+            bool first = true;
+            foreach (var e in entries)
+            {
+                if (e == null || string.IsNullOrEmpty(e.FullPath)) continue;
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"rec\":").Append(e.RecordNumber)
+                  .Append(",\"dir\":").Append(e.IsDirectory ? "true" : "false")
+                  .Append(",\"inUse\":").Append(e.InUse ? "true" : "false")
+                  .Append(",\"path\":").Append(J(e.FullPath))
+                  .Append(",\"cr\":").Append(J(Iso(e.StdCreated)))
+                  .Append(",\"mo\":").Append(J(Iso(e.StdModified)))
+                  .Append("}");
+            }
+            sb.Append("]}");
+            o.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        // Stable, comparable timestamp form (UTC, second precision). Sentinels -> empty.
+        private static string Iso(DateTime dt)
+        {
+            if (dt == DateTime.MinValue || dt == DateTime.MaxValue || dt.Year <= 1601) return "";
+            DateTime u = dt.Kind == DateTimeKind.Utc ? dt : dt.ToUniversalTime();
+            return u.ToString("yyyy-MM-ddTHH:mm:ss");
         }
 
         private static string J(string s)
