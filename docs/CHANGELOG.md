@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+- **解析器 fixture 語料庫（Phase 2.1）**：新增 `tests/fixtures/`，以位元組層級保存 IR_Collect 自有解析器的決定性測試樣本——LNK（Unicode/ANSI LocalBasePath + 截斷/無 LinkInfo）、MFT run-list（合法/over-claim 截斷/零長度 run）、SRUM 身分 blob（合法 SID / UTF-16 AppId / subAuth 溢位畸形），共 11 個樣本，含 `manifest.json` 與 `README.md`。每個已修復的解析器 bug 都有一個獨立於 inline 測試碼的常駐回歸守門。
+- **語料庫產生器與漂移守門**：新增 `IR_Collect_review.exe -make-fixtures [dir]`（由 `FixtureCorpus.Build()` 決定性重建語料庫，預設 `tests\fixtures`）。`-test` 新增 `FixtureCorpus_*`：對每個已提交檔案以真實解析器驗證**並**在記憶體重建後做位元組相等比對，使已提交語料庫無法與產生器靜默漂移（已負向驗證：竄改一個 byte 即 FAIL）。Self-tests 共 115 項。
+- **Phase 2.2 預備**：`manifest.json` 的 `requiresRealSample` 區段登錄無法忠實合成的容器格式（Amcache.hve、AppCompatCache、SRUDB.dat ESE、ShellBags、完整 $MFT）及各自對應的參考工具（AmcacheParser / AppCompatCacheParser / SrumECmd / SBECmd / MFTECmd），供差異化驗證 harness 使用。
+
 ## [0.22.2] — 2026-06-06
 
 ### Fixed

@@ -1,1 +1,5 @@
 *.exe binary
+
+# Parser fixture corpus — byte-exact; never apply EOL/encoding normalization.
+tests/fixtures/**/*.bin binary
+tests/fixtures/**/*.lnk binary

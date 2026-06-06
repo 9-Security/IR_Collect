@@ -11,7 +11,7 @@ if not exist "%CSC%" (
 )
 
 echo [+] Compiling %TARGET_EXE% with INCLUDE_TESTS (does not overwrite IR_Collect.exe^)...
-"%CSC%" /nologo /define:INCLUDE_TESTS /out:%TARGET_EXE% @build_common.rsp src\Tests\IRCollectSelfTests.cs
+"%CSC%" /nologo /define:INCLUDE_TESTS /out:%TARGET_EXE% @build_common.rsp src\Tests\IRCollectSelfTests.cs src\Tests\FixtureCorpus.cs
 if errorlevel 1 (
     echo [!] Build failed.
     exit /b 1

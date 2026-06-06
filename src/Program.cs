@@ -36,6 +36,7 @@ namespace IR_Collect
                     Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
 #if INCLUDE_TESTS
                     Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
+                    Console.WriteLine("  IR_Collect.exe -make-fixtures [dir]  Regenerate the parser fixture corpus (default: tests\\fixtures)");
 #endif
                     Console.WriteLine("");
                     Console.WriteLine("Examples:");
@@ -113,6 +114,23 @@ namespace IR_Collect
                     int testExit = IRCollectSelfTests.RunAndWriteResultFile();
                     FreeConsole();
                     Environment.Exit(testExit);
+                }
+                else if (mode == "-make-fixtures")
+                {
+                    string outDir = args.Length > 1 ? args[1] : System.IO.Path.Combine("tests", "fixtures");
+                    try
+                    {
+                        int n = IR_Collect.Tests.FixtureCorpus.WriteCorpus(outDir);
+                        Console.WriteLine("[+] Wrote " + n + " fixture(s) + manifest.json + README.md to " + outDir);
+                        FreeConsole();
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[!] Fixture generation failed: " + ex.Message);
+                        FreeConsole();
+                        Environment.Exit(1);
+                    }
                 }
 #endif
                 else

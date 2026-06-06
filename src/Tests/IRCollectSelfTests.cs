@@ -136,6 +136,7 @@ namespace IR_Collect.Tests
             failed += RunOne("AiRedaction_strict_clears_fact_samples", AiRedaction_strict_clears_fact_samples, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_basic_masks_ipv4_in_highlights", AiRedaction_basic_masks_ipv4_in_highlights, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_none_unchanged_highlight", AiRedaction_none_unchanged_highlight, sb) ? 0 : 1;
+            failed += RunOne("FixtureCorpus_committed_files_match_builder_and_parse_as_expected", FixtureCorpus_committed_files_match_builder_and_parse_as_expected, sb) ? 0 : 1;
 
             sb.AppendLine();
             sb.AppendLine(failed == 0 ? "SUMMARY: 0 failed (all passed)." : "SUMMARY: " + failed + " failed.");
@@ -424,8 +425,17 @@ namespace IR_Collect.Tests
             return runs3 != null && runs3.Count == 2;
         }
 
+        private static bool FixtureCorpus_committed_files_match_builder_and_parse_as_expected()
+        {
+            var sb = new StringBuilder();
+            int failed = FixtureCorpus.Validate(sb);
+            // Surface the per-fixture detail under this test only when something fails.
+            if (failed != 0) Console.Write(sb.ToString());
+            return failed == 0;
+        }
+
         // Build a minimal MS-SHLLINK LNK (header + LinkInfo, no IDList) carrying a LocalBasePath.
-        private static byte[] BuildLnkFixture(string path, bool unicode)
+        internal static byte[] BuildLnkFixture(string path, bool unicode)
         {
             var header = new byte[76];
             BitConverter.GetBytes(0x4C).CopyTo(header, 0x00);                                  // HeaderSize
