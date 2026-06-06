@@ -406,7 +406,9 @@ function Validate-Srum {
     if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse srum produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
     if ($our.fallback -eq $true) {
         Write-Host ("SKIP: IR_Collect SRUM parser fell back (no rows). Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
-        Write-Host "      (Install the 64-bit ACE/Access Database Engine OLE DB provider, then re-run.)" -ForegroundColor DarkGray
+        Write-Host "      ROOT CAUSE: SRUDB.dat is an ESE (esent/JET Blue) database; OLE DB ACE/Jet" -ForegroundColor DarkGray
+        Write-Host "      providers only read Access (JET Red) and cannot open ESE. Installing ACE does" -ForegroundColor DarkGray
+        Write-Host "      not help. Fix = read SRUDB.dat via a native ESE reader (esent.dll). Phase 2.3." -ForegroundColor DarkGray
         $script:skipped = $true; return
     }
 

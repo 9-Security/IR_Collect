@@ -91,7 +91,11 @@ namespace IR_Collect.Utils
                 if (conn == null)
                 {
                     result.FallbackUsed = true;
-                    result.ParserNotes.Add("No available OLE DB provider could open SRUDB.dat on this host.");
+                    // SRUDB.dat is an ESE (esent / "JET Blue") database. OLE DB ACE/Jet providers only
+                    // read Access ("JET Red"); they return "Could not find installable ISAM" / "Unrecognized
+                    // database format" on ESE even with Extended Properties=Esent, so this path cannot read
+                    // SRUDB.dat on any host. A native ESE reader (esent.dll) is required. Tracked for Phase 2.3.
+                    result.ParserNotes.Add("SRUDB.dat is an ESE database; the OLE DB providers cannot open ESE (need a native esent.dll reader). Wrote header-only CSV.");
                     return result;
                 }
 
