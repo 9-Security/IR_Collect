@@ -42,7 +42,7 @@
 param(
     [string]$ToolsDir = "tools\EZ\net9",
     [string]$ReviewExe = ".\IR_Collect_review.exe",
-    [ValidateSet("lnk", "jumplist", "mft", "all")]
+    [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
     [string]$InputDir = "",
@@ -383,6 +383,88 @@ function Validate-Mft {
     if ($outdir) { Remove-Item $outdir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+function Get-OurObj($kindArg, $file) {
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {
+        & $ReviewExe -parse $kindArg "$file" "$tmp" | Out-Null
+        $json = if (Test-Path $tmp) { [IO.File]::ReadAllText($tmp, [Text.Encoding]::UTF8) } else { "" }
+        if ([string]::IsNullOrWhiteSpace($json)) { return $null }
+        return ($json | ConvertFrom-Json)
+    }
+    catch { return $null }
+    finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+}
+
+function Validate-Srum {
+    Write-Section "SRUM  (IR_Collect SrumExporter  vs  SrumECmd)  [informational]"
+    $exe = Resolve-Tool "SrumECmd"
+    if (-not $exe) { Write-Host ("SKIP: SrumECmd.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
+    $db = if ($InputDir) { Join-Path $InputDir "SRUDB.dat" } else { "samples\hives\SRUDB.dat" }
+    if (-not (Test-Path $db)) { Write-Host ("SKIP: no SRUDB.dat at " + $db + " (run CollectLocalSamples.ps1 elevated).") -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $our = Get-OurObj "srum" $db
+    if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse srum produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
+    if ($our.fallback -eq $true) {
+        Write-Host ("SKIP: IR_Collect SRUM parser fell back (no rows). Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host "      (Install the 64-bit ACE/Access Database Engine OLE DB provider, then re-run.)" -ForegroundColor DarkGray
+        $script:skipped = $true; return
+    }
+
+    $out = Join-Path $env:TEMP ("ezdiff_srum_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
+    New-Item -ItemType Directory -Force $out | Out-Null
+    & $exe -f "$db" --csv "$out" 2>&1 | Out-Null
+    $csv = Get-ChildItem $out -Filter *AppResourceUseInfo*.csv -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $csv) { Write-Host "SKIP: SrumECmd produced no AppResourceUseInfo CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $ezApps = New-Object 'System.Collections.Generic.HashSet[string]'
+    Import-Csv $csv.FullName -Encoding UTF8 | ForEach-Object { if ($_.ExeInfo) { [void]$ezApps.Add(([string]$_.ExeInfo).ToLowerInvariant()) } }
+    $ourApps = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($a in $our.apps) { if ($a.path) { [void]$ourApps.Add(([string]$a.path).ToLowerInvariant()) } }
+    $hit = 0; foreach ($e in $ezApps) { if ($ourApps.Contains($e)) { $hit++ } }
+    $pct = if ($ezApps.Count -gt 0) { [math]::Round(100.0 * $hit / $ezApps.Count, 1) } else { 0 }
+    Write-Host ("Distinct apps: ours=" + $ourApps.Count + ", SrumECmd=" + $ezApps.Count)
+    Write-Host ("App recall vs SrumECmd: " + $hit + "/" + $ezApps.Count + " (" + $pct + "%)") -ForegroundColor DarkGray
+    Write-Host "NOTE: informational set-overlap; row models differ. Investigate large gaps in Phase 2.3." -ForegroundColor DarkGray
+    Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Validate-Amcache {
+    Write-Section "AMCACHE  (IR_Collect AmcacheParser  vs  AmcacheParser.exe)  [informational]"
+    $exe = Resolve-Tool "AmcacheParser"
+    if (-not $exe) { Write-Host ("SKIP: AmcacheParser.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
+    $hive = if ($InputDir) { Join-Path $InputDir "Amcache.hve" } else { "samples\hives\Amcache.hve" }
+    if (-not (Test-Path $hive)) { Write-Host ("SKIP: no Amcache.hve at " + $hive + " (run CollectLocalSamples.ps1 elevated).") -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $our = Get-OurObj "amcache" $hive
+    if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse amcache produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
+    if ($our.fallback -eq $true) {
+        Write-Host ("SKIP: IR_Collect Amcache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host "      (Our ParseHive uses 'reg load' which needs admin - run this diff elevated.)" -ForegroundColor DarkGray
+        $script:skipped = $true; return
+    }
+
+    $out = Join-Path $env:TEMP ("ezdiff_amc_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
+    New-Item -ItemType Directory -Force $out | Out-Null
+    & $exe -f "$hive" -i --csv "$out" 2>&1 | Out-Null
+    $csvs = Get-ChildItem $out -Filter *FileEntries*.csv -ErrorAction SilentlyContinue
+    if (-not $csvs) { Write-Host "SKIP: AmcacheParser produced no FileEntries CSV (hive dirty / missing .LOG?)." -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $ezSha = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($c in $csvs) {
+        Import-Csv $c.FullName -Encoding UTF8 | ForEach-Object {
+            $s = $_.SHA1; if ($s) { [void]$ezSha.Add(([string]$s).ToLowerInvariant().TrimStart('0').PadLeft(40,'0')) }
+        }
+    }
+    $ourSha = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($f in $our.files) { if ($f.sha1) { [void]$ourSha.Add(([string]$f.sha1).ToLowerInvariant().TrimStart('0').PadLeft(40,'0')) } }
+    $hit = 0; foreach ($e in $ezSha) { if ($ourSha.Contains($e)) { $hit++ } }
+    $pct = if ($ezSha.Count -gt 0) { [math]::Round(100.0 * $hit / $ezSha.Count, 1) } else { 0 }
+    Write-Host ("Distinct SHA1 file entries: ours=" + $ourSha.Count + ", AmcacheParser=" + $ezSha.Count)
+    Write-Host ("SHA1 recall vs AmcacheParser: " + $hit + "/" + $ezSha.Count + " (" + $pct + "%)") -ForegroundColor DarkGray
+    Write-Host "NOTE: informational set-overlap by SHA1; dedup/schema differ. Investigate large gaps in Phase 2.3." -ForegroundColor DarkGray
+    Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # --- main ---
 Write-Host "IR_Collect - Phase 2.2 differential validation" -ForegroundColor White
 if (-not (Test-Path $ReviewExe)) {
@@ -398,6 +480,8 @@ if (-not (Test-Path $ToolsDir)) {
 if ($Kind -eq "all" -or $Kind -eq "lnk") { Validate-Lnk }
 if ($Kind -eq "all" -or $Kind -eq "jumplist") { Validate-JumpList }
 if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
+if ($Kind -eq "all" -or $Kind -eq "srum") { Validate-Srum }
+if ($Kind -eq "all" -or $Kind -eq "amcache") { Validate-Amcache }
 
 Write-Section "RESULT"
 if ($script:failures -gt 0) {
