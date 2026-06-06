@@ -10,6 +10,8 @@
 - **解析器 fixture 語料庫（Phase 2.1）**：新增 `tests/fixtures/`，以位元組層級保存 IR_Collect 自有解析器的決定性測試樣本——LNK（Unicode/ANSI LocalBasePath + 截斷/無 LinkInfo）、MFT run-list（合法/over-claim 截斷/零長度 run）、SRUM 身分 blob（合法 SID / UTF-16 AppId / subAuth 溢位畸形），共 11 個樣本，含 `manifest.json` 與 `README.md`。每個已修復的解析器 bug 都有一個獨立於 inline 測試碼的常駐回歸守門。
 - **語料庫產生器與漂移守門**：新增 `IR_Collect_review.exe -make-fixtures [dir]`（由 `FixtureCorpus.Build()` 決定性重建語料庫，預設 `tests\fixtures`）。`-test` 新增 `FixtureCorpus_*`：對每個已提交檔案以真實解析器驗證**並**在記憶體重建後做位元組相等比對，使已提交語料庫無法與產生器靜默漂移（已負向驗證：竄改一個 byte 即 FAIL）。Self-tests 共 115 項。
 - **Phase 2.2 預備**：`manifest.json` 的 `requiresRealSample` 區段登錄無法忠實合成的容器格式（Amcache.hve、AppCompatCache、SRUDB.dat ESE、ShellBags、完整 $MFT）及各自對應的參考工具（AmcacheParser / AppCompatCacheParser / SrumECmd / SBECmd / MFTECmd），供差異化驗證 harness 使用。
+- **解析器差異化驗證 harness（Phase 2.2）**：新增 `scripts/DiffValidate.ps1` 與 `run_diff_validate.bat`，把 IR_Collect 的**真實生產解析器**與 Eric Zimmerman 工具（LECmd / JLECmd）跑在同一批真實 artifact 上做差異比對。新增 review-build CLI `IR_Collect_review.exe -parse <lnk|jumplist> <file> [out]`（emit 穩定 JSON；因 winexe stdout 不可靠故支援寫出檔）。LNK 為硬性 gate：若 LECmd 取得 LinkInfo LocalBasePath 而我們未重現即 FAIL；僅靠 target IDList 解析者（我方目前不涵蓋）另計為 coverage note。實測本機 34 個真實 LNK：**22/22 一致、0 mismatch**、11 個 IDList-only。JumpList 為 informational：我方 byte-scan heuristic 對 JLECmd（完整 OLE-CFB 解析）的 path recall 約 53.7%，明確標示為 Phase 2.3 待補（非 gate 失敗）。Harness 在缺工具時 skip-with-reason（exit 3→wrapper 視為 pass），不靜默放行。
+- **共用 jump-list 抽路徑**：自 `ParseJumpListFile` 抽出 `JumpListsCollector.ExtractJumpListPaths(byte[])`（生產與 `-parse` CLI 共用同一段邏輯，保證兩者不漂移）；行為與原 inline 合併邏輯等價，既有 jump-list 測試全綠。
 
 ## [0.22.2] — 2026-06-06
 

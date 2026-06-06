@@ -131,19 +131,7 @@ namespace IR_Collect.Collectors
                     if (total < data.Length)
                         Array.Resize(ref data, total);
                 }
-                string content = Encoding.Unicode.GetString(data);
-                string ascii = Encoding.ASCII.GetString(data);
-
-                var paths = ExtractPathsFromLnkStructures(data);
-                if (paths.Count == 0)
-                    paths = ExtractPathsFromContent(content, ascii);
-                else
-                {
-                    var contentPaths = ExtractPathsFromContent(content, ascii);
-                    var seen = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
-                    foreach (var p in contentPaths)
-                        if (!seen.Contains(p)) { seen.Add(p); paths.Add(p); }
-                }
+                var paths = ExtractJumpListPaths(data);
 
                 if (paths.Count > 0)
                     {
@@ -179,8 +167,29 @@ namespace IR_Collect.Collectors
             catch (Exception ex) { errorCount++; Logger.Warning("ParseJumpListFile: " + ex.Message); }
         }
 
+        /// <summary>
+        /// Extract target paths from a jump-list file's bytes exactly as collection does: structured
+        /// LNK LocalBasePath read first, then merge any additional UTF-16/ASCII path-like content.
+        /// Shared by ParseJumpListFile and the -parse differential-validation CLI so the two never drift.
+        /// </summary>
+        internal static List<string> ExtractJumpListPaths(byte[] data)
+        {
+            string content = Encoding.Unicode.GetString(data);
+            string ascii = Encoding.ASCII.GetString(data);
+
+            var paths = ExtractPathsFromLnkStructures(data);
+            if (paths.Count == 0)
+                return ExtractPathsFromContent(content, ascii);
+
+            var contentPaths = ExtractPathsFromContent(content, ascii);
+            var seen = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+            foreach (var p in contentPaths)
+                if (!seen.Contains(p)) { seen.Add(p); paths.Add(p); }
+            return paths;
+        }
+
         /// <summary>Scan for LNK structures (header 0x4C) and extract LocalBasePath from LinkInfo, or fallback to UTF-16 path scan.</summary>
-        private static List<string> ExtractPathsFromLnkStructures(byte[] data)
+        internal static List<string> ExtractPathsFromLnkStructures(byte[] data)
         {
             var paths = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
