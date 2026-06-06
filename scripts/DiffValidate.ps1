@@ -421,7 +421,10 @@ function Validate-Srum {
     $ezApps = New-Object 'System.Collections.Generic.HashSet[string]'
     Import-Csv $csv.FullName -Encoding UTF8 | ForEach-Object { if ($_.ExeInfo) { [void]$ezApps.Add(([string]$_.ExeInfo).ToLowerInvariant()) } }
     $ourApps = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($a in $our.apps) { if ($a.path) { [void]$ourApps.Add(([string]$a.path).ToLowerInvariant()) } }
+    foreach ($a in $our.apps) {
+        $id = if ($a.app) { $a.app } else { $a.path }   # AppId identity == SrumECmd ExeInfo
+        if ($id) { [void]$ourApps.Add(([string]$id).ToLowerInvariant()) }
+    }
     $hit = 0; foreach ($e in $ezApps) { if ($ourApps.Contains($e)) { $hit++ } }
     $pct = if ($ezApps.Count -gt 0) { [math]::Round(100.0 * $hit / $ezApps.Count, 1) } else { 0 }
     Write-Host ("Distinct apps: ours=" + $ourApps.Count + ", SrumECmd=" + $ezApps.Count)

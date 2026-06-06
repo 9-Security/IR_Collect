@@ -144,7 +144,7 @@ namespace IR_Collect.Tests
             foreach (var a in r.AppRows)
             {
                 if (n++ > 0) sb.Append(",");
-                sb.Append("{\"ts\":").Append(J(a.Timestamp)).Append(",\"path\":").Append(J(a.Path)).Append(",\"user\":").Append(J(a.User)).Append("}");
+                sb.Append("{\"ts\":").Append(J(a.Timestamp)).Append(",\"app\":").Append(J(a.AppId)).Append(",\"path\":").Append(J(a.Path)).Append(",\"user\":").Append(J(a.User)).Append("}");
             }
             sb.Append("]}");
             o.WriteLine(sb.ToString());

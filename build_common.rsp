@@ -86,6 +86,7 @@ src\Utils\CsvUtils.cs
 src\Utils\AmcacheParser.cs
 src\Utils\ShimCacheParser.cs
 src\Utils\SrumExporter.cs
+src\Utils\EseReader.cs
 src\Utils\EventLogDataHelper.cs
 src\Utils\EventLogFilteredCsvExporter.cs
 src\Utils\ShellBagsParser.cs
