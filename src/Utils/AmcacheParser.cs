@@ -74,13 +74,24 @@ namespace IR_Collect.Utils
                 }
                 mounted = true;
 
-                ParseProgramBranch(result, mountKey + "\\Root\\Programs");
-                ParseFileBranch(result, mountKey + "\\Root\\File");
+                // Modern Amcache (Win10 1607+/Win11) stores programs under Root\InventoryApplication and
+                // files under Root\InventoryApplicationFile. Legacy hives (Win8/early Win10) used
+                // Root\Programs and Root\File. Query the modern branch first and fall back to legacy, so we
+                // are not silently empty on every current host (the legacy-only query was).
+                bool progOk = ParseProgramBranch(result, mountKey + "\\Root\\InventoryApplication");
+                if (!progOk) progOk = ParseProgramBranch(result, mountKey + "\\Root\\Programs");
+                bool fileOk = ParseFileBranch(result, mountKey + "\\Root\\InventoryApplicationFile");
+                if (!fileOk) fileOk = ParseFileBranch(result, mountKey + "\\Root\\File");
 
-                if (result.Programs.Count == 0 && result.Files.Count == 0)
+                if (!progOk && !fileOk)
                 {
                     result.FallbackUsed = true;
-                    result.ParserNotes.Add("Amcache schema variant or empty hive; no structured rows extracted.");
+                    result.ParserNotes.Add("No Amcache program/file branch found (looked for modern Root\\InventoryApplication[File] and legacy Root\\Programs / Root\\File).");
+                }
+                else if (result.Programs.Count == 0 && result.Files.Count == 0)
+                {
+                    result.FallbackUsed = true;
+                    result.ParserNotes.Add("Amcache branch present but empty after parsing; schema variant?");
                 }
             }
             catch (Exception ex)
@@ -101,16 +112,15 @@ namespace IR_Collect.Utils
             return result;
         }
 
-        private static void ParseProgramBranch(AmcacheParseResult result, string branchKey)
+        // Returns true if the branch key existed and was queried (whether or not rows were extracted),
+        // false if the key is absent — so the caller can fall back to the other schema without flagging
+        // a hard failure.
+        private static bool ParseProgramBranch(AmcacheParseResult result, string branchKey)
         {
             string output;
             string error;
             if (!RunRegQuery(branchKey, out output, out error))
-            {
-                result.FallbackUsed = true;
-                result.ParserNotes.Add("Amcache program branch query failed: " + Shorten(error, 200));
-                return;
-            }
+                return false;
 
             var map = ParseRegQueryMap(output);
             foreach (var kv in map)
@@ -139,18 +149,15 @@ namespace IR_Collect.Utils
                     ParserNote = "Program row reconstructed from Amcache program branch; fields vary by Windows build."
                 });
             }
+            return true;
         }
 
-        private static void ParseFileBranch(AmcacheParseResult result, string branchKey)
+        private static bool ParseFileBranch(AmcacheParseResult result, string branchKey)
         {
             string output;
             string error;
             if (!RunRegQuery(branchKey, out output, out error))
-            {
-                result.FallbackUsed = true;
-                result.ParserNotes.Add("Amcache file branch query failed: " + Shorten(error, 200));
-                return;
-            }
+                return false;
 
             var map = ParseRegQueryMap(output);
             foreach (var kv in map)
@@ -161,6 +168,13 @@ namespace IR_Collect.Utils
                 if (string.IsNullOrWhiteSpace(fileName) && !string.IsNullOrWhiteSpace(path))
                     fileName = SafeFileName(path);
                 string hash = NormalizeSha1(Pick(values, "Sha1", "SHA1"));
+                if (string.IsNullOrWhiteSpace(hash))
+                {
+                    // Modern InventoryApplicationFile stores the hash as FileId = "0000" + 40-hex SHA1.
+                    string fileId = NormalizeSha1(Pick(values, "FileId"));
+                    if (!string.IsNullOrWhiteSpace(fileId) && fileId.Length >= 40)
+                        hash = fileId.Substring(fileId.Length - 40);
+                }
                 string product = Pick(values, "ProductName");
                 string publisher = Pick(values, "Publisher", "CompanyName");
                 string programId = Pick(values, "ProgramId");
@@ -191,6 +205,7 @@ namespace IR_Collect.Utils
                     ParserNote = string.Join("; ", noteParts.ToArray())
                 });
             }
+            return true;
         }
 
         private static Dictionary<string, Dictionary<string, string>> ParseRegQueryMap(string output)
