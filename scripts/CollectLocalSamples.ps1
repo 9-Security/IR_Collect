@@ -73,18 +73,17 @@ try {
     $deviceObject = $shadow.DeviceObject   # \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyN
     Write-Host ("    [+] Shadow device: " + $deviceObject) -ForegroundColor Green
 
-    # Copy each hive WITH its transaction logs (.LOG1/.LOG2): a hive captured live is "dirty" and the
-    # Eric Zimmerman tools need the logs to replay it (our own parser uses reg load, which replays
-    # automatically, but the reference tools parse the file directly). Logs are best-effort.
+    # A hive captured from a live system is "dirty" (pending transaction-log replay). The Eric Zimmerman
+    # tools parse the file directly and abort on a dirty hive, while our own parser uses reg load (which
+    # self-heals in memory). So for the two REGISTRY hives we copy then replay them into a clean, log-free
+    # hive via reg load + reg save, which both tools can then parse. SRUDB.dat is an ESE database, not a
+    # registry hive, and SrumECmd reads it directly - it is just copied.
     $targets = @(
-        @{ Src = "Windows\appcompat\Programs\Amcache.hve";      Dst = "hives\Amcache.hve" },
-        @{ Src = "Windows\appcompat\Programs\Amcache.hve.LOG1"; Dst = "hives\Amcache.hve.LOG1" },
-        @{ Src = "Windows\appcompat\Programs\Amcache.hve.LOG2"; Dst = "hives\Amcache.hve.LOG2" },
-        @{ Src = "Windows\System32\config\SYSTEM";              Dst = "hives\SYSTEM" },
-        @{ Src = "Windows\System32\config\SYSTEM.LOG1";         Dst = "hives\SYSTEM.LOG1" },
-        @{ Src = "Windows\System32\config\SYSTEM.LOG2";         Dst = "hives\SYSTEM.LOG2" },
-        @{ Src = "Windows\System32\sru\SRUDB.dat";              Dst = "hives\SRUDB.dat" }
+        @{ Src = "Windows\appcompat\Programs\Amcache.hve"; Dst = "hives\Amcache.hve"; Replay = $true },
+        @{ Src = "Windows\System32\config\SYSTEM";         Dst = "hives\SYSTEM";      Replay = $true },
+        @{ Src = "Windows\System32\sru\SRUDB.dat";         Dst = "hives\SRUDB.dat";   Replay = $false }
     )
+    $replayIdx = 0
     foreach ($t in $targets) {
         $srcPath = $deviceObject + "\" + $t.Src
         $dstPath = Join-Path $OutDir $t.Dst
@@ -95,6 +94,26 @@ try {
         }
         catch {
             Write-Host ("    [!] could not copy " + $t.Src + ": " + $_.Exception.Message) -ForegroundColor Yellow
+            continue
+        }
+        if ($t.Replay) {
+            $mount = "HKLM\IRCOL_REPLAY_" + $replayIdx; $replayIdx++
+            $clean = $dstPath + ".clean"
+            try {
+                & reg.exe load $mount $dstPath *> $null
+                if ($LASTEXITCODE -ne 0) { throw "reg load exit $LASTEXITCODE" }
+                & reg.exe save $mount $clean /y *> $null
+                $saveRc = $LASTEXITCODE
+                & reg.exe unload $mount *> $null
+                if ($saveRc -ne 0) { throw "reg save exit $saveRc" }
+                Move-Item $clean $dstPath -Force
+                Write-Host ("        replayed to a clean hive (reg load/save)") -ForegroundColor DarkGreen
+            }
+            catch {
+                Write-Host ("    [!] hive replay failed for " + $t.Dst + " (" + $_.Exception.Message + "); EZ tools may abort on the dirty hive.") -ForegroundColor Yellow
+                if (Test-Path $clean) { Remove-Item $clean -Force -ErrorAction SilentlyContinue }
+                & reg.exe unload $mount *> $null 2>&1
+            }
         }
     }
 }
@@ -113,5 +132,7 @@ finally {
 }
 
 Write-Host ""
-Write-Host "[+] Done. Samples under .\$OutDir (gitignored). Next, run unelevated:" -ForegroundColor Green
-Write-Host "    powershell -ExecutionPolicy Bypass -File scripts\DiffValidate.ps1 -Kind mft" -ForegroundColor White
+Write-Host "[+] Done. Samples under .\$OutDir (gitignored). Next:" -ForegroundColor Green
+Write-Host "    DiffValidate.ps1 -Kind mft        (unelevated)" -ForegroundColor White
+Write-Host "    DiffValidate.ps1 -Kind srum       (unelevated; needs the 64-bit ACE OLE DB provider)" -ForegroundColor White
+Write-Host "    DiffValidate.ps1 -Kind amcache    (ELEVATED; our ParseHive uses reg load)" -ForegroundColor White
