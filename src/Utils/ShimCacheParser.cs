@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -48,61 +49,7 @@ namespace IR_Collect.Utils
                     result.ParserNotes.Add("ShimCache registry key not found.");
                     return result;
                 }
-
-                foreach (string valueName in key.GetValueNames())
-                {
-                    try
-                    {
-                        object raw = key.GetValue(valueName);
-                        byte[] data = raw as byte[];
-                        if (data == null || data.Length == 0)
-                        {
-                            result.FallbackUsed = true;
-                            result.ParserNotes.Add("ShimCache value '" + valueName + "' was not binary or empty.");
-                            continue;
-                        }
-
-                        var paths = ExtractLikelyPaths(data);
-                        string hashPrefix = ComputeSha256Prefix(data);
-                        if (paths.Count == 0)
-                        {
-                            result.FallbackUsed = true;
-                            result.Entries.Add(new ShimCacheEntryRecord
-                            {
-                                RegistryPath = @"HKLM\" + RegistryPath,
-                                ValueName = valueName,
-                                EntryIndex = 0,
-                                Path = "",
-                                FileName = "",
-                                LastModifiedTime = "",
-                                DataHashPrefix = hashPrefix,
-                                ParserNote = "Entry-level reconstruction did not find reliable executable paths in this value; keep raw ShimCache metadata for offline parsing."
-                            });
-                            continue;
-                        }
-
-                        for (int i = 0; i < paths.Count; i++)
-                        {
-                            string p = paths[i];
-                            result.Entries.Add(new ShimCacheEntryRecord
-                            {
-                                RegistryPath = @"HKLM\" + RegistryPath,
-                                ValueName = valueName,
-                                EntryIndex = i + 1,
-                                Path = p,
-                                FileName = SafeFileName(p),
-                                LastModifiedTime = "",
-                                DataHashPrefix = hashPrefix,
-                                ParserNote = "Path reconstructed from ShimCache binary entry stream; timestamp availability depends on Windows version."
-                            });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        result.FallbackUsed = true;
-                        result.ParserNotes.Add("ShimCache parse failed for value '" + valueName + "': " + ex.Message);
-                    }
-                }
+                ParseKeyValues(key, result, @"HKLM\" + RegistryPath);
             }
 
             if (result.Entries.Count == 0)
@@ -111,6 +58,165 @@ namespace IR_Collect.Utils
                 result.ParserNotes.Add("ShimCache parser produced no entry-level rows.");
             }
             return result;
+        }
+
+        /// <summary>
+        /// Parse ShimCache from an offline SYSTEM hive file (e.g. a triage copy) by reg-loading it and
+        /// reading the AppCompatCache value of ControlSet001. Needs admin (reg load = SeRestorePrivilege).
+        /// Used by the differential-validation CLI to diff against AppCompatCacheParser on the same hive.
+        /// </summary>
+        public static ShimCacheParseResult ParseFromHiveFile(string systemHivePath)
+        {
+            var result = new ShimCacheParseResult();
+            if (string.IsNullOrWhiteSpace(systemHivePath) || !File.Exists(systemHivePath))
+            {
+                result.FallbackUsed = true;
+                result.ParserNotes.Add("SYSTEM hive not found.");
+                return result;
+            }
+
+            string mount = "IRCOL_SHIM_" + Guid.NewGuid().ToString("N");
+            string mountFull = "HKU\\" + mount;
+            bool loaded = false;
+            try
+            {
+                string loadErr;
+                if (!RunReg("load \"" + mountFull + "\" \"" + systemHivePath + "\"", out loadErr))
+                {
+                    result.FallbackUsed = true;
+                    result.ParserNotes.Add("reg load failed for SYSTEM hive (admin?): " + Shorten(loadErr, 200));
+                    return result;
+                }
+                loaded = true;
+
+                // A loaded SYSTEM hive has no CurrentControlSet link; use Select\Current to pick the set,
+                // falling back to ControlSet001.
+                string cs = "ControlSet001";
+                using (var sel = Registry.Users.OpenSubKey(mount + "\\Select"))
+                {
+                    if (sel != null)
+                    {
+                        object cur = sel.GetValue("Current");
+                        if (cur is int) cs = "ControlSet" + ((int)cur).ToString("D3");
+                    }
+                }
+
+                string subPath = mount + "\\" + cs + "\\Control\\Session Manager\\AppCompatCache";
+                using (var key = Registry.Users.OpenSubKey(subPath))
+                {
+                    if (key == null)
+                    {
+                        result.FallbackUsed = true;
+                        result.ParserNotes.Add("AppCompatCache key not found in SYSTEM hive (" + cs + ").");
+                        return result;
+                    }
+                    ParseKeyValues(key, result, @"HKLM\SYSTEM\" + cs + @"\Control\Session Manager\AppCompatCache");
+                }
+            }
+            catch (Exception ex)
+            {
+                result.FallbackUsed = true;
+                result.ParserNotes.Add("ShimCache hive parse exception: " + Shorten(ex.Message, 200));
+            }
+            finally
+            {
+                if (loaded)
+                {
+                    string unloadErr;
+                    RunReg("unload \"" + mountFull + "\"", out unloadErr);
+                }
+            }
+
+            if (result.Entries.Count == 0 && !result.FallbackUsed)
+            {
+                result.FallbackUsed = true;
+                result.ParserNotes.Add("ShimCache hive parse produced no entry-level rows.");
+            }
+            return result;
+        }
+
+        private static void ParseKeyValues(RegistryKey key, ShimCacheParseResult result, string regPathLabel)
+        {
+            foreach (string valueName in key.GetValueNames())
+            {
+                try
+                {
+                    object raw = key.GetValue(valueName);
+                    byte[] data = raw as byte[];
+                    if (data == null || data.Length == 0)
+                    {
+                        result.FallbackUsed = true;
+                        result.ParserNotes.Add("ShimCache value '" + valueName + "' was not binary or empty.");
+                        continue;
+                    }
+
+                    var paths = ExtractLikelyPaths(data);
+                    string hashPrefix = ComputeSha256Prefix(data);
+                    if (paths.Count == 0)
+                    {
+                        result.FallbackUsed = true;
+                        result.Entries.Add(new ShimCacheEntryRecord
+                        {
+                            RegistryPath = regPathLabel,
+                            ValueName = valueName,
+                            EntryIndex = 0,
+                            Path = "",
+                            FileName = "",
+                            LastModifiedTime = "",
+                            DataHashPrefix = hashPrefix,
+                            ParserNote = "Entry-level reconstruction did not find reliable executable paths in this value; keep raw ShimCache metadata for offline parsing."
+                        });
+                        continue;
+                    }
+
+                    for (int i = 0; i < paths.Count; i++)
+                    {
+                        string p = paths[i];
+                        result.Entries.Add(new ShimCacheEntryRecord
+                        {
+                            RegistryPath = regPathLabel,
+                            ValueName = valueName,
+                            EntryIndex = i + 1,
+                            Path = p,
+                            FileName = SafeFileName(p),
+                            LastModifiedTime = "",
+                            DataHashPrefix = hashPrefix,
+                            ParserNote = "Path reconstructed from ShimCache binary entry stream; timestamp availability depends on Windows version."
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    result.FallbackUsed = true;
+                    result.ParserNotes.Add("ShimCache parse failed for value '" + valueName + "': " + ex.Message);
+                }
+            }
+        }
+
+        private static bool RunReg(string command, out string stdErr)
+        {
+            var psi = new ProcessStartInfo("reg.exe", command)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+            using (var p = Process.Start(psi))
+            {
+                p.StandardOutput.ReadToEnd();
+                stdErr = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+                return p.ExitCode == 0;
+            }
+        }
+
+        private static string Shorten(string text, int maxLen)
+        {
+            if (string.IsNullOrWhiteSpace(text) || maxLen <= 0) return "";
+            return text.Length <= maxLen ? text : text.Substring(0, maxLen - 3) + "...";
         }
 
         private static List<string> ExtractLikelyPaths(byte[] data)

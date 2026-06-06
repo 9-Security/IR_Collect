@@ -42,7 +42,7 @@
 param(
     [string]$ToolsDir = "tools\EZ\net9",
     [string]$ReviewExe = ".\IR_Collect_review.exe",
-    [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "all")]
+    [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "shimcache", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
     [string]$InputDir = "",
@@ -470,6 +470,40 @@ function Validate-Amcache {
     Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Validate-ShimCache {
+    Write-Section "SHIMCACHE  (IR_Collect ShimCacheParser  vs  AppCompatCacheParser)  [informational]"
+    $exe = Resolve-Tool "AppCompatCacheParser"
+    if (-not $exe) { Write-Host ("SKIP: AppCompatCacheParser.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
+    $hive = if ($InputDir) { Join-Path $InputDir "SYSTEM" } else { "samples\hives\SYSTEM" }
+    if (-not (Test-Path $hive)) { Write-Host ("SKIP: no SYSTEM hive at " + $hive + " (run CollectLocalSamples.ps1 elevated).") -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $our = Get-OurObj "shimcache" $hive
+    if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse shimcache produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
+    if ($our.fallback -eq $true) {
+        Write-Host ("SKIP: IR_Collect ShimCache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host "      (Our hive mode uses 'reg load' which needs admin - run this diff elevated.)" -ForegroundColor DarkGray
+        $script:skipped = $true; return
+    }
+
+    $out = Join-Path $env:TEMP ("ezdiff_shim_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
+    New-Item -ItemType Directory -Force $out | Out-Null
+    & $exe -f "$hive" --csv "$out" 2>&1 | Out-Null
+    $csv = Get-ChildItem $out -Filter *.csv -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
+    if (-not $csv) { Write-Host "SKIP: AppCompatCacheParser produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $ezPaths = New-Object 'System.Collections.Generic.HashSet[string]'
+    Import-Csv $csv.FullName -Encoding UTF8 | ForEach-Object { if ($_.Path) { [void]$ezPaths.Add(([string]$_.Path).ToLowerInvariant()) } }
+    $ourPaths = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($p in $our.paths) { if ($p) { [void]$ourPaths.Add(([string]$p).ToLowerInvariant()) } }
+    $hit = 0; foreach ($e in $ezPaths) { if ($ourPaths.Contains($e)) { $hit++ } }
+    $pct = if ($ezPaths.Count -gt 0) { [math]::Round(100.0 * $hit / $ezPaths.Count, 1) } else { 0 }
+    Write-Host ("Distinct paths: ours=" + $ourPaths.Count + ", AppCompatCacheParser=" + $ezPaths.Count)
+    Write-Host ("Path recall vs AppCompatCacheParser: " + $hit + "/" + $ezPaths.Count + " (" + $pct + "%)") -ForegroundColor DarkGray
+    Write-Host "NOTE: our parser is a path byte-scan heuristic (no structured entries/timestamps);" -ForegroundColor DarkGray
+    Write-Host "      recall < 100% and missing LastModified times are a known Phase 2.3 gap." -ForegroundColor DarkGray
+    Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # --- main ---
 Write-Host "IR_Collect - Phase 2.2 differential validation" -ForegroundColor White
 if (-not (Test-Path $ReviewExe)) {
@@ -487,6 +521,7 @@ if ($Kind -eq "all" -or $Kind -eq "jumplist") { Validate-JumpList }
 if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
 if ($Kind -eq "all" -or $Kind -eq "srum") { Validate-Srum }
 if ($Kind -eq "all" -or $Kind -eq "amcache") { Validate-Amcache }
+if ($Kind -eq "all" -or $Kind -eq "shimcache") { Validate-ShimCache }
 
 Write-Section "RESULT"
 if ($script:failures -gt 0) {

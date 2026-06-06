@@ -41,6 +41,8 @@ namespace IR_Collect.Tests
                 return RunSrum(file, o);
             if (string.Equals(kind, "amcache", StringComparison.OrdinalIgnoreCase))
                 return RunAmcache(file, o);
+            if (string.Equals(kind, "shimcache", StringComparison.OrdinalIgnoreCase))
+                return RunShimCache(file, o);
 
             byte[] data;
             try { data = File.ReadAllBytes(file); }
@@ -172,6 +174,34 @@ namespace IR_Collect.Tests
             {
                 if (n++ > 0) sb.Append(",");
                 sb.Append("{\"path\":").Append(J(f.Path)).Append(",\"name\":").Append(J(f.FileName)).Append(",\"sha1\":").Append(J(f.Hash)).Append("}");
+            }
+            sb.Append("]}");
+            o.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        private static int RunShimCache(string file, TextWriter o)
+        {
+            ShimCacheParseResult r;
+            try { r = ShimCacheParser.ParseFromHiveFile(file); }
+            catch (Exception ex)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"shimcache\",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
+                return 1;
+            }
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"kind\":\"shimcache\",\"file\":").Append(J(file));
+            sb.Append(",\"fallback\":").Append(r.FallbackUsed ? "true" : "false");
+            sb.Append(",\"entries\":").Append(r.Entries.Count);
+            sb.Append(",\"notes\":[");
+            for (int i = 0; i < r.ParserNotes.Count; i++) { if (i > 0) sb.Append(","); sb.Append(J(r.ParserNotes[i])); }
+            sb.Append("],\"paths\":[");
+            int n = 0;
+            foreach (var e in r.Entries)
+            {
+                if (string.IsNullOrEmpty(e.Path)) continue;
+                if (n++ > 0) sb.Append(",");
+                sb.Append(J(e.Path));
             }
             sb.Append("]}");
             o.WriteLine(sb.ToString());
