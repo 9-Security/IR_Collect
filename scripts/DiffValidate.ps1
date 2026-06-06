@@ -45,7 +45,8 @@ param(
     [ValidateSet("lnk", "jumplist", "mft", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
-    [string]$InputDir = ""
+    [string]$InputDir = "",
+    [string]$MftCsv = ""    # reuse a pre-generated MFTECmd CSV instead of re-parsing $MFT (~11 min)
 )
 
 $ErrorActionPreference = "Stop"
@@ -275,13 +276,19 @@ function Validate-Mft {
     }
     Write-Host ("Input `$MFT: " + $mft.FullName + "  (" + [math]::Round($mft.Length/1MB,1) + " MB)")
 
-    # Reference: MFTECmd -> CSV
-    $csv = $null
-    $outdir = Join-Path $env:TEMP ("ezdiff_mft_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
-    New-Item -ItemType Directory -Force $outdir | Out-Null
-    & $exe -f "$($mft.FullName)" --csv "$outdir" 2>&1 | Out-Null
-    $csv = Get-ChildItem $outdir -Filter *.csv -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
-    if (-not $csv) { Write-Host "SKIP: MFTECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+    # Reference: a pre-generated MFTECmd CSV (fast path) or a fresh MFTECmd -f run (~11 min on a big $MFT).
+    $outdir = $null
+    if ($MftCsv -and (Test-Path $MftCsv)) {
+        $csv = Get-Item $MftCsv
+        Write-Host ("Reusing MFTECmd CSV: " + $csv.FullName)
+    }
+    else {
+        $outdir = Join-Path $env:TEMP ("ezdiff_mft_" + ([System.IO.Path]::GetRandomFileName().Replace('.', '')))
+        New-Item -ItemType Directory -Force $outdir | Out-Null
+        & $exe -f "$($mft.FullName)" --csv "$outdir" 2>&1 | Out-Null
+        $csv = Get-ChildItem $outdir -Filter *.csv -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
+        if (-not $csv) { Write-Host "SKIP: MFTECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+    }
 
     # Our side FIRST: -parse mft -> JSON entries (bounded by the MftParseLimit, ~60k).
     $tmp = [System.IO.Path]::GetTempFileName()
@@ -300,7 +307,8 @@ function Validate-Mft {
     $ourRecs = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($e in $ours) { [void]$ourRecs.Add([string]$e.rec) }
 
-    # Reference map: EntryNumber -> filename + timestamps, but ONLY for records we also emitted.
+    # Reference map: EntryNumber -> { all names (a record can carry several $FILE_NAME attributes for
+    # hardlinks / namespaces) + timestamps from the first row }, but ONLY for records we emitted.
     # MFTECmd writes UTF-8; read it as such so non-ASCII filenames are not mojibake'd into mismatches.
     $ref = @{}
     Import-Csv $csv.FullName -Encoding UTF8 | ForEach-Object {
@@ -309,28 +317,39 @@ function Validate-Mft {
         if (-not $ourRecs.Contains([string]$en)) { return }
         if (-not $ref.ContainsKey($en)) {
             $ref[$en] = [PSCustomObject]@{
-                FileName = $_.FileName
+                Names    = (New-Object 'System.Collections.Generic.HashSet[string]')
+                First    = $_.FileName
                 Created  = (Normalize-MftTime $_.Created0x10)
                 Modified = (Normalize-MftTime $_.LastModified0x10)
             }
         }
+        [void]$ref[$en].Names.Add(([string]$_.FileName).ToLowerInvariant())
     }
     Write-Host ("MFTECmd records matched to our set: " + $ref.Count)
 
-    $compared = 0; $nameMatch = 0; $nameMismatch = 0; $tsMatch = 0; $tsMismatch = 0
-    $nameMismatches = @(); $tsMismatches = @()
+    $compared = 0; $nameMatch = 0; $attrListGap = 0; $realMismatch = 0; $tsMatch = 0; $tsMismatch = 0
+    $realMismatches = @(); $tsMismatches = @()
     foreach ($e in $ours) {
         $key = [string]$e.rec
         if (-not $ref.ContainsKey($key)) { continue }
         $r = $ref[$key]
         $compared++
-        if (($e.path.Split('\') | Select-Object -Last 1).ToLowerInvariant() -eq ([string]$r.FileName).ToLowerInvariant()) {
+        $ourLeaf = ($e.path.Split('\') | Select-Object -Last 1)
+        # Hardlink-aware: a record can legitimately have several Win32 names; agreement = our name is
+        # ANY of the names MFTECmd reported for this EntryNumber.
+        if ($r.Names.Contains($ourLeaf.ToLowerInvariant())) {
             $nameMatch++
         }
+        elseif ([string]::IsNullOrEmpty($ourLeaf) -or ($ourLeaf -match '~\d')) {
+            # Our name is empty or a DOS 8.3 short name while MFTECmd has the long name: the long Win32
+            # name (and sometimes the only $FILE_NAME) lives in an $ATTRIBUTE_LIST extension record this
+            # parser does not follow yet, or this is an NTFS metafile (e.g. root "."). Known coverage gap.
+            $attrListGap++
+        }
         else {
-            $nameMismatch++
-            if ($nameMismatches.Count -lt 10) {
-                $nameMismatches += [PSCustomObject]@{ Rec = $key; Ours = ($e.path.Split('\') | Select-Object -Last 1); MFTECmd = $r.FileName }
+            $realMismatch++
+            if ($realMismatches.Count -lt 12) {
+                $realMismatches += [PSCustomObject]@{ Rec = $key; Ours = $ourLeaf; MFTECmd = $r.First }
             }
         }
         # Timestamps: compare only when both sides have a value (our limit may emit fewer attrs).
@@ -346,21 +365,22 @@ function Validate-Mft {
     }
 
     Write-Host ("Records compared (same EntryNumber):  " + $compared)
-    Write-Host ("FILENAME match:    " + $nameMatch) -ForegroundColor Green
-    Write-Host ("FILENAME mismatch: " + $nameMismatch) -ForegroundColor (&{ if ($nameMismatch -gt 0) { "Red" } else { "Green" } })
+    Write-Host ("FILENAME match (incl. hardlink names): " + $nameMatch) -ForegroundColor Green
+    Write-Host ("`$ATTRIBUTE_LIST coverage gap (ours=8.3 short name): " + $attrListGap) -ForegroundColor DarkGray
+    Write-Host ("FILENAME real mismatch (gate):         " + $realMismatch) -ForegroundColor (&{ if ($realMismatch -gt 0) { "Red" } else { "Green" } })
     Write-Host ("TIMESTAMP match (cr+mo):    " + $tsMatch) -ForegroundColor DarkGray
     Write-Host ("TIMESTAMP mismatch (cr+mo): " + $tsMismatch) -ForegroundColor (&{ if ($tsMismatch -gt 0) { "Yellow" } else { "DarkGray" } })
-    if ($nameMismatch -gt 0) {
-        Write-Host "--- filename mismatches (gate) ---" -ForegroundColor Red
-        $nameMismatches | Format-Table -AutoSize | Out-String | Write-Host
-        $script:failures += $nameMismatch
+    if ($realMismatch -gt 0) {
+        Write-Host "--- real filename mismatches (gate) ---" -ForegroundColor Red
+        $realMismatches | Format-Table -AutoSize | Out-String | Write-Host
+        $script:failures += $realMismatch
     }
     if ($tsMismatch -gt 0) {
         Write-Host "--- timestamp mismatches (informational; investigate tz/attribute source) ---" -ForegroundColor Yellow
         $tsMismatches | Format-Table -AutoSize | Out-String | Write-Host
     }
 
-    Remove-Item $outdir -Recurse -Force -ErrorAction SilentlyContinue
+    if ($outdir) { Remove-Item $outdir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # --- main ---

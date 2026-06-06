@@ -206,6 +206,10 @@ namespace IR_Collect.MFT
                         fnAccessed = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x20));
                         // But keep the name from the highest-ranked namespace (Win32 long name beats the
                         // DOS 8.3 short name) rather than letting the last attribute win.
+                        // KNOWN LIMITATION: this only ranks among $FILE_NAME attributes present in the BASE
+                        // record. Files with several long hardlink names (e.g. WinSxS .cat/.manifest) keep
+                        // the long Win32 names in $ATTRIBUTE_LIST extension records that this parser does
+                        // not follow, so only the short DOS name remains here. Tracked for Phase 2.3.
                         int rank = NamespaceRank(ns);
                         if (rank > bestNameRank)
                         {

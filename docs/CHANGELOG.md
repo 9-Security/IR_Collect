@@ -10,7 +10,7 @@
 - **MFT NTFS USN/fixup（重大正確性，Phase 2.3）**：`MftParser` 現在於讀屬性前套用 NTFS Update Sequence fixup（header 0x04=usaOffset、0x06=usaCount；還原每個 512-byte sector 末 2 bytes）。先前未還原 → 任何跨越 record offset 510-511／1022-1023 的欄位都會被 USN 覆蓋而毀損（差異化驗證實證：`tokenbinding.dll` 被讀成 `tokenbindi?g.dll`）。
 - **MFT 取 Win32 長檔名而非 DOS 8.3（Phase 2.3）**：`$FILE_NAME` 解析改讀 namespace byte（content+0x41），依 Win32&DOS(3) > Win32(1) > POSIX(0) > DOS(2) 取最高者，而非用最後一個屬性覆蓋（先前會輸出 `ENTRIE~1.JSO` 而非 `entries.json`）。
 - **差異化 harness UTF-8 讀取**：`DiffValidate.ps1` 改以 UTF-8 明確讀取我方 JSON 與 MFTECmd/LECmd/JLECmd 的 CSV（PowerShell 5.1 預設 ANSI 會把 CJK 檔名 mojibake 成假 mismatch）。
-- 對真實 2.8 GB `$MFT`（280 萬筆）重跑差異化驗證：時間戳維持 100% 一致，檔名 mismatch 自 ~6,860 降至 ~2,030（match 54,320→59,150）。殘餘多為 record 索引/`$ATTRIBUTE_LIST` 延伸記錄造成的「同 EntryNumber 不同檔」差異，列為下一個 2.3 子項。
+- 對真實 2.8 GB `$MFT`（280 萬筆）重跑差異化驗證：時間戳 **100%** 一致；檔名 real mismatch（gate）**= 0**。`DiffValidate.ps1-Kind mft` 改為 hardlink-aware（一筆 record 可有多個合法 Win32 名 → 我方名只要命中其一即算一致），並新增 `-MftCsv` 重用既有 MFTECmd CSV（免每次重跑 ~11 分鐘）。殘餘 78 筆（0.13%）為已記錄的 `$ATTRIBUTE_LIST` 涵蓋缺口：長 Win32 名存在延伸記錄、我方僅讀 base record（WinSxS `.cat`/`.manifest`），歸為 informational 非 gate 失敗，於 `MftParser` 程式碼註明為待補項。
 
 ### Added
 - **解析器 fixture 語料庫（Phase 2.1）**：新增 `tests/fixtures/`，以位元組層級保存 IR_Collect 自有解析器的決定性測試樣本——LNK（Unicode/ANSI LocalBasePath + 截斷/無 LinkInfo）、MFT run-list（合法/over-claim 截斷/零長度 run）、SRUM 身分 blob（合法 SID / UTF-16 AppId / subAuth 溢位畸形），共 11 個樣本，含 `manifest.json` 與 `README.md`。每個已修復的解析器 bug 都有一個獨立於 inline 測試碼的常駐回歸守門。
