@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using IR_Collect.Collectors;
 using IR_Collect.MFT;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Tests
 {
@@ -32,11 +33,14 @@ namespace IR_Collect.Tests
                 return 2;
             }
 
-            // MFT has its own richer JSON shape and streams the file record-by-record via MftParser,
-            // so it must be dispatched BEFORE the whole-file read below: a real $MFT routinely exceeds
-            // 2 GB and File.ReadAllBytes would throw on it.
+            // MFT/SRUM/Amcache parse a container file via their own readers (not a flat byte[]) and can
+            // be huge, so they are dispatched BEFORE the whole-file read below.
             if (string.Equals(kind, "mft", StringComparison.OrdinalIgnoreCase))
                 return RunMft(file, o);
+            if (string.Equals(kind, "srum", StringComparison.OrdinalIgnoreCase))
+                return RunSrum(file, o);
+            if (string.Equals(kind, "amcache", StringComparison.OrdinalIgnoreCase))
+                return RunAmcache(file, o);
 
             byte[] data;
             try { data = File.ReadAllBytes(file); }
@@ -113,6 +117,61 @@ namespace IR_Collect.Tests
                   .Append(",\"cr\":").Append(J(Iso(e.StdCreated)))
                   .Append(",\"mo\":").Append(J(Iso(e.StdModified)))
                   .Append("}");
+            }
+            sb.Append("]}");
+            o.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        private static int RunSrum(string file, TextWriter o)
+        {
+            SrumExportResult r;
+            try { r = SrumExporter.Export(file); }
+            catch (Exception ex)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"srum\",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
+                return 1;
+            }
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"kind\":\"srum\",\"file\":").Append(J(file));
+            sb.Append(",\"fallback\":").Append(r.FallbackUsed ? "true" : "false");
+            sb.Append(",\"appRows\":").Append(r.AppRows.Count);
+            sb.Append(",\"networkRows\":").Append(r.NetworkRows.Count);
+            sb.Append(",\"notes\":[");
+            for (int i = 0; i < r.ParserNotes.Count; i++) { if (i > 0) sb.Append(","); sb.Append(J(r.ParserNotes[i])); }
+            sb.Append("],\"apps\":[");
+            int n = 0;
+            foreach (var a in r.AppRows)
+            {
+                if (n++ > 0) sb.Append(",");
+                sb.Append("{\"ts\":").Append(J(a.Timestamp)).Append(",\"path\":").Append(J(a.Path)).Append(",\"user\":").Append(J(a.User)).Append("}");
+            }
+            sb.Append("]}");
+            o.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        private static int RunAmcache(string file, TextWriter o)
+        {
+            AmcacheParseResult r;
+            try { r = AmcacheParser.ParseHive(file); }
+            catch (Exception ex)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"amcache\",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
+                return 1;
+            }
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"kind\":\"amcache\",\"file\":").Append(J(file));
+            sb.Append(",\"fallback\":").Append(r.FallbackUsed ? "true" : "false");
+            sb.Append(",\"fileRows\":").Append(r.Files.Count).Append(",\"programRows\":").Append(r.Programs.Count);
+            sb.Append(",\"notes\":[");
+            for (int i = 0; i < r.ParserNotes.Count; i++) { if (i > 0) sb.Append(","); sb.Append(J(r.ParserNotes[i])); }
+            sb.Append("],\"files\":[");
+            int n = 0;
+            foreach (var f in r.Files)
+            {
+                if (n++ > 0) sb.Append(",");
+                sb.Append("{\"path\":").Append(J(f.Path)).Append(",\"name\":").Append(J(f.FileName)).Append(",\"sha1\":").Append(J(f.Hash)).Append("}");
             }
             sb.Append("]}");
             o.WriteLine(sb.ToString());
