@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **事件日誌過濾大幅加速（不丟事件）**：`EventLogFilteredCsvExporter` 每筆事件呼叫 `record.FormatDescription()` + `LevelDisplayName` + `TaskDisplayName`（皆需載入發行者資源範本），在大型 log（尤其 Security）成為瓶頸——對真實 20 MB Security.evtx 實測 **113.7 ms/筆**（≈ 1 萬筆要 ~19 分鐘）。新增**每個 log 的格式化時間預算**（`config.ini` 的 `EventLogMessageFormatBudgetSeconds`，預設 90 秒；`0`=不限）：超過預算後仍**保留每一筆事件與完整結構化 EventData**（normalizer 實際使用的欄位、不受影響），僅把 message／level／task 的「人類可讀顯示字串」降級為便宜的結構化／數值等價值。實測降級模式 **0.1 ms/筆（約 1022× 加速）**，Security log 由 ~19 分鐘降到 ~90 秒。超出預算時於 console 提示。既有 EventLog normalizer 自測全綠（契約不變）。
+
 ## [0.23.0] — 2026-06-15
 
 ### Fixed

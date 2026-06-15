@@ -45,6 +45,29 @@ namespace IR_Collect.Utils
             return DefaultFilteredEventLogMaxEvents;
         }
 
+        public const int DefaultFilteredEventLogFormatBudgetSeconds = 90;
+
+        // Per-log budget (seconds) for the EXPENSIVE human-readable formatting. FormatDescription /
+        // LevelDisplayName / TaskDisplayName each load the publisher's resource templates and dominate
+        // runtime on big logs (e.g. Security, observed 8-13 min). Past the budget we keep EVERY event and
+        // the full structured EventData (what the normalizers consume); only the display strings degrade
+        // to cheap numeric/structured equivalents. 0 = always format (no budget). No events are dropped.
+        public static int GetConfiguredFormatBudgetSeconds()
+        {
+            try
+            {
+                var cfg = new IR_Collect.ConfigManager();
+                int sec;
+                if (int.TryParse(cfg.Get("EventLogMessageFormatBudgetSeconds"), out sec) && sec >= 0)
+                    return sec;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning("EventLogFilteredCsvExporter.GetConfiguredFormatBudgetSeconds: " + ex.Message);
+            }
+            return DefaultFilteredEventLogFormatBudgetSeconds;
+        }
+
         public static int NormalizeConfiguredDaysBack(int configuredDaysBack)
         {
             return configuredDaysBack > 0 ? configuredDaysBack : DefaultFilteredEventLogDays;
@@ -178,6 +201,10 @@ namespace IR_Collect.Utils
                 {
                     sw.WriteLine("TimeCreated,EventId,LevelDisplayName,ProviderName,Computer,UserId,TaskDisplayName,Message," + EventLogDataHelper.EventDataColumn);
 
+                    int budgetSec = GetConfiguredFormatBudgetSeconds();
+                    DateTime formatDeadline = budgetSec > 0 ? DateTime.UtcNow.AddSeconds(budgetSec) : DateTime.MaxValue;
+                    int degraded = 0;
+
                     EventRecord record;
                     while (count < maxPerLog && (record = reader.ReadEvent()) != null)
                     {
@@ -185,7 +212,11 @@ namespace IR_Collect.Utils
                         {
                             if (!ShouldIncludeRecord(record, startUtc, endUtc))
                                 continue;
-                            WriteRecord(sw, record);
+                            // Past the budget, skip the expensive publisher-template formatting but KEEP
+                            // the event and its full structured EventData (no forensic loss).
+                            bool degrade = DateTime.UtcNow >= formatDeadline;
+                            WriteRecord(sw, record, degrade);
+                            if (degrade) degraded++;
                             count++;
                         }
                         catch (Exception ex)
@@ -197,6 +228,9 @@ namespace IR_Collect.Utils
                             record.Dispose();
                         }
                     }
+
+                    if (degraded > 0)
+                        Console.WriteLine(string.Format("      ({0}s format budget exceeded: {1}/{2} events kept with fast formatting; all events + structured EventData retained, message/level/task display degraded)", budgetSec, degraded, count));
                 }
 
                 return true;
@@ -222,6 +256,14 @@ namespace IR_Collect.Utils
 
         private static void WriteRecord(StreamWriter sw, EventRecord record)
         {
+            WriteRecord(sw, record, false);
+        }
+
+        /// <param name="degrade">When true, skip the expensive publisher-template lookups
+        /// (FormatDescription / LevelDisplayName / TaskDisplayName) and use cheap numeric/structured
+        /// equivalents. The structured EventData column is unaffected, so normalizers are unchanged.</param>
+        private static void WriteRecord(StreamWriter sw, EventRecord record, bool degrade)
+        {
             string xml = "";
             try { xml = record.ToXml(); }
             catch { xml = ""; }
@@ -230,12 +272,18 @@ namespace IR_Collect.Utils
             string flattenedEventData = EventLogDataHelper.FlattenEventData(eventData, 48, 220, 2400);
             string time = SafeGetString(delegate { return record.TimeCreated.HasValue ? record.TimeCreated.Value.ToString("yyyy-MM-dd HH:mm:ss") : ""; });
             string eventId = SafeGetString(delegate { return record.Id.ToString(); });
-            string level = SafeGetString(delegate { return record.LevelDisplayName ?? ""; });
+            string level = degrade
+                ? SafeGetString(delegate { return record.Level.HasValue ? record.Level.Value.ToString() : ""; })
+                : SafeGetString(delegate { return record.LevelDisplayName ?? ""; });
             string provider = SafeGetString(delegate { return record.ProviderName ?? ""; });
             string computer = SafeGetString(delegate { return record.MachineName ?? ""; });
             string userId = SafeGetString(delegate { return record.UserId != null ? record.UserId.Value : ""; });
-            string taskDisplay = SafeGetString(delegate { return record.TaskDisplayName ?? (record.Task.HasValue ? record.Task.Value.ToString() : ""); });
-            string message = BuildFilteredEventMessage(record, flattenedEventData, xml);
+            string taskDisplay = degrade
+                ? SafeGetString(delegate { return record.Task.HasValue ? record.Task.Value.ToString() : ""; })
+                : SafeGetString(delegate { return record.TaskDisplayName ?? (record.Task.HasValue ? record.Task.Value.ToString() : ""); });
+            string message = degrade
+                ? (flattenedEventData.Length > 500 ? flattenedEventData.Substring(0, 497) + "..." : flattenedEventData)
+                : BuildFilteredEventMessage(record, flattenedEventData, xml);
 
             sw.WriteLine(string.Join(",",
                 Csv(time),
