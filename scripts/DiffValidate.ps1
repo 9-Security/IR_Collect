@@ -511,7 +511,7 @@ function Validate-ShimCache {
 }
 
 function Validate-Prefetch {
-    Write-Section "PREFETCH  (IR_Collect PrefetchParser  vs  PECmd)  [gate: exe + runCount + lastRun]"
+    Write-Section "PREFETCH  (IR_Collect PrefetchParser  vs  PECmd)  [gate: exe + runCount + lastRun + refCount]"
     $exe = Resolve-Tool "PECmd"
     if (-not $exe) { Write-Host ("SKIP: PECmd.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
     $pfDir = if ($InputDir) { Join-Path $InputDir "Prefetch" } else { "samples\Prefetch" }
@@ -535,13 +535,15 @@ function Validate-Prefetch {
         $lr = if ($our.lastRun.Count -gt 0) { $our.lastRun[0] } else { "" }
         # PECmd CSV LastRun is already UTC; reformat without timezone conversion to compare to our UTC ISO.
         $refLr = ([datetime]::Parse($r.LastRun)).ToString("yyyy-MM-ddTHH:mm:ss")
-        if (($our.exe -eq $r.ExecutableName) -and ([int]$our.runCount -eq [int]$r.RunCount) -and ($lr -eq $refLr)) { $match++ }
+        # PECmd CSV FilesLoaded is the comma-separated list; its size is the referenced-file count.
+        $refFiles = if ([string]::IsNullOrWhiteSpace($r.FilesLoaded)) { 0 } else { ($r.FilesLoaded -split ',\s*').Count }
+        if (($our.exe -eq $r.ExecutableName) -and ([int]$our.runCount -eq [int]$r.RunCount) -and ($lr -eq $refLr) -and ([int]$our.refCount -eq $refFiles)) { $match++ }
         else {
             $script:failures++
-            if ($shown -lt 5) { $shown++; Write-Host ("  MISMATCH " + $r.ExecutableName + ": ours rc=" + $our.runCount + " lr=" + $lr + " vs PECmd rc=" + $r.RunCount + " lr=" + $refLr) -ForegroundColor Red }
+            if ($shown -lt 5) { $shown++; Write-Host ("  MISMATCH " + $r.ExecutableName + ": ours rc=" + $our.runCount + " lr=" + $lr + " refs=" + $our.refCount + " vs PECmd rc=" + $r.RunCount + " lr=" + $refLr + " refs=" + $refFiles) -ForegroundColor Red }
         }
     }
-    Write-Host ("Full match (exe + runCount + lastRun) vs PECmd: " + $match + "/" + $total) -ForegroundColor DarkGray
+    Write-Host ("Full match (exe + runCount + lastRun + refCount) vs PECmd: " + $match + "/" + $total) -ForegroundColor DarkGray
     Remove-Item $csvOut -Recurse -Force -ErrorAction SilentlyContinue
 }
 
