@@ -42,7 +42,7 @@
 param(
     [string]$ToolsDir = "tools\EZ\net9",
     [string]$ReviewExe = ".\IR_Collect_review.exe",
-    [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "shimcache", "all")]
+    [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "shimcache", "prefetch", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
     [string]$InputDir = "",
@@ -510,6 +510,41 @@ function Validate-ShimCache {
     Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Validate-Prefetch {
+    Write-Section "PREFETCH  (IR_Collect PrefetchParser  vs  PECmd)  [gate: exe + runCount + lastRun]"
+    $exe = Resolve-Tool "PECmd"
+    if (-not $exe) { Write-Host ("SKIP: PECmd.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
+    $pfDir = if ($InputDir) { Join-Path $InputDir "Prefetch" } else { "samples\Prefetch" }
+    if (-not (Test-Path $pfDir)) { Write-Host ("SKIP: no Prefetch dir at " + $pfDir + " (copy some .pf there).") -ForegroundColor Yellow; $script:skipped = $true; return }
+    $pfFiles = @(Get-ChildItem $pfDir -Filter *.pf -ErrorAction SilentlyContinue)
+    if ($pfFiles.Count -eq 0) { Write-Host "SKIP: no .pf files in Prefetch dir." -ForegroundColor Yellow; $script:skipped = $true; return }
+
+    $csvOut = Join-Path $env:TEMP ("ezdiff_pf_" + [System.IO.Path]::GetRandomFileName().Replace('.', ''))
+    & $exe -d "$pfDir" --csv "$csvOut" 2>&1 | Out-Null
+    $csv = Get-ChildItem $csvOut -Filter *.csv -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '*Timeline*' } | Select-Object -First 1
+    if (-not $csv) { Write-Host "SKIP: PECmd produced no CSV." -ForegroundColor Yellow; $script:skipped = $true; return }
+    $ref = Import-Csv $csv.FullName -Encoding UTF8
+
+    $match = 0; $total = 0; $shown = 0
+    foreach ($r in $ref) {
+        $pf = Join-Path $pfDir ([System.IO.Path]::GetFileName($r.SourceFilename))
+        if (-not (Test-Path $pf)) { continue }
+        $our = Get-OurObj "prefetch" $pf
+        if ($null -eq $our -or $our.ok -ne $true) { continue }
+        $total++
+        $lr = if ($our.lastRun.Count -gt 0) { $our.lastRun[0] } else { "" }
+        # PECmd CSV LastRun is already UTC; reformat without timezone conversion to compare to our UTC ISO.
+        $refLr = ([datetime]::Parse($r.LastRun)).ToString("yyyy-MM-ddTHH:mm:ss")
+        if (($our.exe -eq $r.ExecutableName) -and ([int]$our.runCount -eq [int]$r.RunCount) -and ($lr -eq $refLr)) { $match++ }
+        else {
+            $script:failures++
+            if ($shown -lt 5) { $shown++; Write-Host ("  MISMATCH " + $r.ExecutableName + ": ours rc=" + $our.runCount + " lr=" + $lr + " vs PECmd rc=" + $r.RunCount + " lr=" + $refLr) -ForegroundColor Red }
+        }
+    }
+    Write-Host ("Full match (exe + runCount + lastRun) vs PECmd: " + $match + "/" + $total) -ForegroundColor DarkGray
+    Remove-Item $csvOut -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # --- main ---
 Write-Host "IR_Collect - Phase 2.2 differential validation" -ForegroundColor White
 if (-not (Test-Path $ReviewExe)) {
@@ -528,6 +563,7 @@ if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
 if ($Kind -eq "all" -or $Kind -eq "srum") { Validate-Srum }
 if ($Kind -eq "all" -or $Kind -eq "amcache") { Validate-Amcache }
 if ($Kind -eq "all" -or $Kind -eq "shimcache") { Validate-ShimCache }
+if ($Kind -eq "all" -or $Kind -eq "prefetch") { Validate-Prefetch }
 
 Write-Section "RESULT"
 if ($script:failures -gt 0) {
