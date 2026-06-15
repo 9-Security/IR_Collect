@@ -135,7 +135,13 @@ namespace IR_Collect.Collectors
             {
                 int successCount = 0;
 
-                foreach (string logName in logNames)
+                // Each log is independent (its own EventLogReader + its own output CSV) and already
+                // self-bounded by the per-log format budget, so filtering them concurrently turns the
+                // wall-clock from sum-of-logs into ~the slowest single log. Bounded degree to avoid
+                // thrashing the publisher-metadata/FormatDescription path. Read-only on the live logs.
+                int degree = Math.Min(4, Math.Max(1, Environment.ProcessorCount));
+                var options = new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = degree };
+                System.Threading.Tasks.Parallel.ForEach(logNames, options, delegate(string logName)
                 {
                     try
                     {
@@ -150,14 +156,14 @@ namespace IR_Collect.Collectors
                             throw new InvalidOperationException(error ?? "unknown error");
                         }
                         Logger.Info("EventLog filtered " + logName + ": " + count + " events (" + (windowDescription ?? "") + ")");
-                        successCount++;
+                        System.Threading.Interlocked.Increment(ref successCount);
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine("    ! Filtered " + logName + ": " + ex.Message);
                         Logger.Error("EventLog filtered " + logName, ex);
                     }
-                }
+                });
                 return successCount;
             }
             catch (Exception ex)
