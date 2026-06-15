@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-06-16
+
+> 本版主題:**新增 Prefetch (.pf) 執行證據解析器（80/80 對 PECmd 差異化驗證）**。
+
 ### Added
 - **Prefetch (.pf) 解析器 + normalizer（新增執行證據 facts）**：Prefetch 原本只被原始複製、從未變成 facts（分析層缺口）。新增 `PrefetchParser`（Win8+ 的 MAM/Xpress-Huffman 壓縮容器經 ntdll `RtlDecompressBufferEx` 解壓 → 解析 SCCA 結構:執行檔名 @0x10、prefetch hash @0x4C、最多 8 個 last-run FILETIME @0x80、run count @0xC8(v30/v31)）與 `PrefetchNormalizer`（每個 last-run 時間一筆 `Source=Prefetch`／`Action=Executed` fact,帶 `FileName` 實體 + run count）；接入 `FactStore.BuildFromCase`（讀 `Prefetch/` 目錄）。`-parse prefetch <file>` CLI。**對真實樣本差異化驗證:60/60 完全一致 vs Eric Zimmerman 的 PECmd（執行檔名 + run count + last-run 時間全中）**;新增 `DiffValidate.ps1 -Kind prefetch`(對 PECmd 做 gate;實測 80/80 PASS)與自測 `Prefetch_parses_v30_and_normalizer_emits_executed_facts`。`FileName` 實體可與 MFT/Amcache 跨來源關聯（`-correlate`／`-graph`）。
   另抽出 **referenced-files**(執行檔啟動時載入的 DLL/檔案,filename-strings @0x64/size@0x68、檔案數 @0x58):**檔案數對 PECmd `FilesLoaded` 清單長度 80/80 一致**(harness gate 已含),fact details 帶 `RefFiles=N`;normalizer 並把載入自**使用者可寫/非系統路徑**(Users／Temp／AppData／ProgramData／Downloads,跳過 Windows／Program Files 噪音)的 referenced file 以 `ReferencedFile` 實體呈現(每筆上限 15)——對 DLL side-loading／惡意載入有訊號,且可跨來源關聯。
