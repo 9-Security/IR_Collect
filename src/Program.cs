@@ -34,6 +34,7 @@ namespace IR_Collect
                     Console.WriteLine("  IR_Collect.exe                 Launch GUI");
                     Console.WriteLine("  IR_Collect.exe -c [EvidenceID]  Run collection (CLI). Output: <EvidenceID>.zip in current directory.");
                     Console.WriteLine("  IR_Collect.exe -analyze <folder|-> [out.json]  Analyze an already-collected artifact folder -> summary JSON (no live host).");
+                    Console.WriteLine("  IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]  Cross-host correlation over >=2 folders -> correlation JSON.");
                     Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
 #if INCLUDE_TESTS
                     Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
@@ -126,6 +127,26 @@ namespace IR_Collect
                     else
                     {
                         rc = IR_Collect.Analysis.AnalysisCli.Run(folder, outFile, Console.Out);
+                    }
+                    FreeConsole();
+                    Environment.Exit(rc);
+                }
+                else if (mode == "-correlate")
+                {
+                    // -correlate <out.json> <folderA> <folderB> [...]. Phase 3.2: cross-host correlation
+                    // over two or more already-collected folders. No live host is touched.
+                    int rc;
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("\n[!] Usage: IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]");
+                        rc = 2;
+                    }
+                    else
+                    {
+                        string outFile = args[1];
+                        var folders = new System.Collections.Generic.List<string>();
+                        for (int i = 2; i < args.Length; i++) folders.Add(args[i]);
+                        rc = IR_Collect.Analysis.CorrelationCli.Run(folders, outFile, null, Console.Out);
                     }
                     FreeConsole();
                     Environment.Exit(rc);
