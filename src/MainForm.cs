@@ -2314,6 +2314,8 @@ namespace IR_Collect
             var payload = new IR_Collect.Analysis.SummaryPayload();
             payload.GeneratedAt = DateTime.UtcNow.ToString("o");
             payload.ExportSchema = "summary_v3";
+            payload.ToolName = IR_Collect.BuildInfo.ToolName;
+            payload.ToolVersion = IR_Collect.BuildInfo.Version;
             payload.AnalysisMode = "facts_only";
             payload.Host = c.Hostname;
             payload.CaseId = c.CaseID;

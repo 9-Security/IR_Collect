@@ -10,6 +10,7 @@
 /r:System.IO.Compression.dll
 /r:System.IO.Compression.FileSystem.dll
 src\Program.cs
+src\BuildInfo.cs
 src\CollectionCoverage.cs
 src\MemoryAcquisitionRecord.cs
 src\MemoryAnalysisRecord.cs

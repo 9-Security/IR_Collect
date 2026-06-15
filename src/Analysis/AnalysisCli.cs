@@ -86,6 +86,8 @@ namespace IR_Collect.Analysis
             var p = new SummaryPayload();
             p.GeneratedAt = DateTime.UtcNow.ToString("o");
             p.ExportSchema = "summary_v3";
+            p.ToolName = BuildInfo.ToolName;
+            p.ToolVersion = BuildInfo.Version;
             p.AnalysisMode = "facts_only";
             p.Host = c.Hostname;
             p.CaseId = c.CaseID;

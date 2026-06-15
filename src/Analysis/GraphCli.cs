@@ -43,6 +43,8 @@ namespace IR_Collect.Analysis
     {
         [DataMember(Name = "generated_at")] public string GeneratedAt { get; set; }
         [DataMember(Name = "export_schema")] public string ExportSchema { get; set; }
+        [DataMember(Name = "tool_name")] public string ToolName { get; set; }
+        [DataMember(Name = "tool_version")] public string ToolVersion { get; set; }
         [DataMember(Name = "seed_type")] public string SeedType { get; set; }
         [DataMember(Name = "seed_value")] public string SeedValue { get; set; }
         [DataMember(Name = "max_depth")] public int MaxDepth { get; set; }
@@ -147,6 +149,8 @@ namespace IR_Collect.Analysis
             var report = new GraphReport();
             report.GeneratedAt = DateTime.UtcNow.ToString("o");
             report.ExportSchema = "graph_v1";
+            report.ToolName = BuildInfo.ToolName;
+            report.ToolVersion = BuildInfo.Version;
             report.SeedType = seedType;
             report.SeedValue = seedValue;
             report.MaxDepth = maxDepth;

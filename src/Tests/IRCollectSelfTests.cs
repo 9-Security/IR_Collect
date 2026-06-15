@@ -53,6 +53,7 @@ namespace IR_Collect.Tests
             failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
             failed += RunOne("RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer", RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer, sb) ? 0 : 1;
             failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
+            failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -584,6 +585,27 @@ namespace IR_Collect.Tests
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
             }
+        }
+
+        // Phase 5.1: a single tool-version source of truth (read from the assembly) must be stamped into
+        // the machine-readable outputs for court-admissibility (each report declares the tool that made it).
+        private static bool BuildInfo_version_matches_assembly_and_is_stamped_in_outputs()
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            string expected = asm.Major + "." + asm.Minor + "." + asm.Build;
+            if (!string.Equals(IR_Collect.BuildInfo.Version, expected, StringComparison.Ordinal)) return false;
+            if (string.IsNullOrEmpty(IR_Collect.BuildInfo.Version) || IR_Collect.BuildInfo.Version == "0.0.0") return false;
+            if (!string.Equals(IR_Collect.BuildInfo.ToolName, "IR_Collect", StringComparison.Ordinal)) return false;
+
+            string stamp = "\"tool_version\":\"" + expected + "\"";
+
+            var corr = IR_Collect.Analysis.CorrelationCli.BuildReport(new IR_Collect.Analysis.CaseData[0], new[] { "Path" }, null);
+            if (IR_Collect.Analysis.CorrelationExport.Serialize(corr).IndexOf(stamp, StringComparison.Ordinal) < 0) return false;
+
+            var g = IR_Collect.Analysis.GraphCli.BuildGraph(new IR_Collect.Analysis.CaseData[0], "Path", "x", 1, null);
+            string gj = IR_Collect.Analysis.GraphCli.Serialize(g);
+            return gj.IndexOf(stamp, StringComparison.Ordinal) >= 0
+                && gj.IndexOf("\"tool_name\":\"IR_Collect\"", StringComparison.Ordinal) >= 0;
         }
 
         // Phase 3.2b: two Amcache file rows share a Publisher but have different paths. Seeding the graph
