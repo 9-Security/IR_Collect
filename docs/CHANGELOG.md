@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-06-15
+
 ### Fixed
 - **ShimCache 新增離線 SYSTEM hive 檔案模式（Phase 2.3）**：`ShimCacheParser` 原本僅能讀 live registry，無法對 triage 取得的 SYSTEM hive 做解析或差異驗證。新增 `ParseFromHiveFile`（reg load SYSTEM hive、依 `Select\Current` 取 ControlSet、讀 `AppCompatCache` 值，與 live 模式共用解析邏輯；需提權）。`-parse shimcache <SYSTEM>` 與 `DiffValidate.ps1 -Kind shimcache`（對 AppCompatCacheParser 做 path recall）。
 - **ShimCache 結構化 Win8/Win10 解析 + 每筆 LastModified（Phase 2.3）**：`ShimCacheParser` 原本只有 path byte-scan heuristic（無時間戳）。新增結構化 `00ts`／`10ts` entry 解析：自 header DWORD（或掃描簽章）定位首筆，依各 entry 自述長度逐筆走訪，還原 UTF-16 路徑與每筆 `LastModified` FILETIME（UTC）。優先走結構化路徑，無法辨識的舊版/未知格式才退回原 heuristic。新增單元測試 `ShimCache_structured_win10_entry_recovers_path_and_filetime`（合成 `10ts` value，斷言路徑 + FILETIME 還原）。

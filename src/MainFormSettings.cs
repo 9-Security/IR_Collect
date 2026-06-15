@@ -11,7 +11,7 @@ namespace IR_Collect
     {
         private void ShowAboutDialog()
         {
-            string version = "0.22.2";
+            string version = IR_Collect.BuildInfo.Version;
             try
             {
                 var asm = Assembly.GetExecutingAssembly();
