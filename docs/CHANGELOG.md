@@ -7,7 +7,7 @@
 ## [Unreleased]
 
 ### Added
-- **Prefetch (.pf) 解析器 + normalizer（新增執行證據 facts）**：Prefetch 原本只被原始複製、從未變成 facts（分析層缺口）。新增 `PrefetchParser`（Win8+ 的 MAM/Xpress-Huffman 壓縮容器經 ntdll `RtlDecompressBufferEx` 解壓 → 解析 SCCA 結構:執行檔名 @0x10、prefetch hash @0x4C、最多 8 個 last-run FILETIME @0x80、run count @0xC8(v30/v31)）與 `PrefetchNormalizer`（每個 last-run 時間一筆 `Source=Prefetch`／`Action=Executed` fact,帶 `FileName` 實體 + run count）；接入 `FactStore.BuildFromCase`（讀 `Prefetch/` 目錄）。`-parse prefetch <file>` CLI。**對真實樣本差異化驗證:60/60 完全一致 vs Eric Zimmerman 的 PECmd（執行檔名 + run count + last-run 時間全中）**;新增自測 `Prefetch_parses_v30_and_normalizer_emits_executed_facts`。`FileName` 實體可與 MFT/Amcache 跨來源關聯（`-correlate`／`-graph`）。
+- **Prefetch (.pf) 解析器 + normalizer（新增執行證據 facts）**：Prefetch 原本只被原始複製、從未變成 facts（分析層缺口）。新增 `PrefetchParser`（Win8+ 的 MAM/Xpress-Huffman 壓縮容器經 ntdll `RtlDecompressBufferEx` 解壓 → 解析 SCCA 結構:執行檔名 @0x10、prefetch hash @0x4C、最多 8 個 last-run FILETIME @0x80、run count @0xC8(v30/v31)）與 `PrefetchNormalizer`（每個 last-run 時間一筆 `Source=Prefetch`／`Action=Executed` fact,帶 `FileName` 實體 + run count）；接入 `FactStore.BuildFromCase`（讀 `Prefetch/` 目錄）。`-parse prefetch <file>` CLI。**對真實樣本差異化驗證:60/60 完全一致 vs Eric Zimmerman 的 PECmd（執行檔名 + run count + last-run 時間全中）**;新增 `DiffValidate.ps1 -Kind prefetch`(對 PECmd 做 gate;實測 80/80 PASS)與自測 `Prefetch_parses_v30_and_normalizer_emits_executed_facts`。`FileName` 實體可與 MFT/Amcache 跨來源關聯（`-correlate`／`-graph`）。
 
 ## [0.23.1] — 2026-06-15
 
