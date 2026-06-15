@@ -64,6 +64,7 @@ src\Analysis\Correlation\Normalizers\MftNormalizer.cs
 src\Analysis\Correlation\Normalizers\ScheduledTaskNormalizer.cs
 src\Analysis\Correlation\Normalizers\EventLogNormalizer.cs
 src\Analysis\Correlation\Normalizers\ShimCacheEntryNormalizer.cs
+src\Analysis\Correlation\Normalizers\PrefetchNormalizer.cs
 src\Analysis\Correlation\Normalizers\ShellBagsNormalizer.cs
 src\Analysis\Correlation\Normalizers\SrumNetworkNormalizer.cs
 src\Analysis\Correlation\Normalizers\SrumAppNormalizer.cs
@@ -93,6 +94,7 @@ src\Utils\EndpointGovernance.cs
 src\Utils\CsvUtils.cs
 src\Utils\AmcacheParser.cs
 src\Utils\ShimCacheParser.cs
+src\Utils\PrefetchParser.cs
 src\Utils\SrumExporter.cs
 src\Utils\EseReader.cs
 src\Utils\EventLogDataHelper.cs

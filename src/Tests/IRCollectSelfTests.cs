@@ -56,6 +56,7 @@ namespace IR_Collect.Tests
             failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
             failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
             failed += RunOne("RecentFileScan_respects_time_budget", RecentFileScan_respects_time_budget, sb) ? 0 : 1;
+            failed += RunOne("Prefetch_parses_v30_and_normalizer_emits_executed_facts", Prefetch_parses_v30_and_normalizer_emits_executed_facts, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -586,6 +587,49 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Prefetch: a synthetic uncompressed v30 .pf with known fields locks the SCCA offsets (exe @0x10,
+        // hash @0x4C, last-run @0x80, run count @0xC8) that were validated 60/60 vs PECmd; plus the
+        // normalizer turns it into an Executed fact carrying the exe FileName entity.
+        private static bool Prefetch_parses_v30_and_normalizer_emits_executed_facts()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_pf_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                byte[] buf = new byte[0xD0];
+                BitConverter.GetBytes(30).CopyTo(buf, 0x00);                     // format version 30
+                buf[4] = 0x53; buf[5] = 0x43; buf[6] = 0x43; buf[7] = 0x41;      // "SCCA"
+                Encoding.Unicode.GetBytes("TEST.EXE").CopyTo(buf, 0x10);         // exe name (UTF-16, null-term by zero-fill)
+                BitConverter.GetBytes((uint)0xDEADBEEF).CopyTo(buf, 0x4C);       // prefetch hash
+                var when = new DateTime(2025, 3, 14, 9, 30, 0, DateTimeKind.Utc);
+                BitConverter.GetBytes(when.ToFileTimeUtc()).CopyTo(buf, 0x80);   // most recent run time
+                BitConverter.GetBytes(42).CopyTo(buf, 0xC8);                     // run count
+                string pf = Path.Combine(dir, "TEST.EXE-12345678.pf");
+                File.WriteAllBytes(pf, buf);
+
+                var e = IR_Collect.Utils.PrefetchParser.ParseFile(pf);
+                if (e == null) return false;
+                if (!string.Equals(e.ExecutableName, "TEST.EXE", StringComparison.Ordinal)) return false;
+                if (e.FormatVersion != 30 || e.RunCount != 42) return false;
+                if (!string.Equals(e.Hash, "DEADBEEF", StringComparison.OrdinalIgnoreCase)) return false;
+                if (e.LastRunTimesUtc.Count < 1) return false;
+                if (e.LastRunTimesUtc[0].ToString("yyyy-MM-ddTHH:mm:ss") != "2025-03-14T09:30:00") return false;
+
+                var facts = IR_Collect.Analysis.Correlation.Normalizers.PrefetchNormalizer.ToFacts(dir);
+                return facts.Any(f => string.Equals(f.Source, "Prefetch", StringComparison.Ordinal)
+                    && string.Equals(f.Action, "Executed", StringComparison.Ordinal)
+                    && f.EntityRefs != null && f.EntityRefs.Any(en => string.Equals(en.Value, "TEST.EXE", StringComparison.OrdinalIgnoreCase)));
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
             }
         }
 
