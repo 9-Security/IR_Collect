@@ -1,8 +1,8 @@
 # IR Collector 開發規格手冊 (Development Specification)
 
 **專案名稱**: IR_Collect
-**版本**: v0.22.2
-**最後更新時間**: 2026-06-06
+**版本**: v0.23.0
+**最後更新時間**: 2026-06-15
 **開發者**: Antigravity (collaborating with User)
 
 ---
@@ -23,6 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
+| **v0.23.0** | 2026-06-15 | **Analysis layer / Court-admissibility** | **Phase 2–5 強化路線**：解析器對齊 EZ 工具（MFT USN/fixup + Win32 名、SRUM 原生 ESE reader、Amcache 現代 schema、ShimCache 結構化 + canonical-value）；**分析層前門** `-analyze <folder>`（吃任意已採集資料夾、原始 hive 自動解析）；**跨機關聯** `-correlate` + **多跳調查圖** `-graph`（`correlation_v1`／`graph_v1` JSON）；**可呈堂性**：`BuildInfo` 單一版本來源、所有輸出帶 `tool_name`/`tool_version`、`-version`、證據 SHA-256 manifest（`evidence_digest`）、`docs/SBOM.md` 相依宣告；GUI 新增「Open Folder (triage)」。詳見 CHANGELOG。 |
 | **v0.22.0** | 2026-04-08 | **Security / Governance** | **WP-A Redaction / Endpoint Governance（出站治理）**：AI 與 ZIP Upload 使用**分離**的 endpoint allowlist（`AiEndpointAllowlist`、`UploadEndpointAllowlist`；空清單預設阻擋對應管道之 HTTP POST）。Summary → **AI Analyze** 僅對「即將 POST 的 JSON」套用 `AiExportRedactionProfile`（`None` / `Basic` / `Strict`，預設 `Basic`）；**Export Summary JSON** 與 raw ZIP upload **不改寫**內文。AI 送出前 UI 確認對話框顯示目前 endpoint 與 redaction profile。見 **SECURITY.md**、**USER_MANUAL**。 |
 | **v0.22.0** | 2026-04-08 | **Governance / UX** | **WP-E Collection mode profile**：**Advanced → Settings** 可選並保存 `CollectionModeProfile`（`Standard` | `TriageFast` | `ForensicStrict`，預設 Standard）。CLI/GUI 收集前提示 live-response 與輸出路徑風險（**非** zero-footprint／完整低擾動鑑識承諾）。`collection_coverage.json` 寫入 `collection_mode_profile`；Summary / HTML / `summary.json` 與 `full_log_v3` 的 host 摘要帶同一欄位。`ForensicStrict` **額外**阻擋 Local Collect 後之 ZIP 出站上傳與 **AI Analyze**（與 WP-A allowlist 正交；變更 profile 方可恢復 allowlist 治理流程）。 |
 | **v0.22.0** | 2026-04-08 | **Feature（facts-only）** | **WP-D 非 Event Log 之 lateral movement／identity 補強（第一階段）**：新增 `JumpListNormalizer`，將 `jump_lists.csv` 納入 `FactStore.BuildFromCase`（`Source=JumpList`、`Action=JumpListDestinationObserved`；實體 `Path`／`User`／`AppId`；UNC／http(s) 目標另衍生 `Workstation`／`ShareName`／`RemoteIP`）。`BITS` 之 `RemoteName` 可以 `;` 分段（多檔／多 URL）後逐项衍生上述實體，**不**另拆多筆 fact；完整字串仍保留於 `RemoteName` 實體。**Unified Timeline** 中 Jump List 列僅經 `activity_timeline.csv`（`ActivityTimelineBuilder` 已併入 jump list），**不再**額外餵入 `jump_lists.csv`，避免重複列。Dashboard Correlation **Source** 篩選含 **JumpList**；`fact_store.db` freshness 源清單含 `jump_lists.csv`。 |
