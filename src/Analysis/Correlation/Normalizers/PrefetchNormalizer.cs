@@ -27,6 +27,7 @@ namespace IR_Collect.Analysis.Correlation.Normalizers
                 if (e == null || string.IsNullOrWhiteSpace(e.ExecutableName)) { idx++; continue; }
                 string exe = e.ExecutableName.Trim();
                 string detail = "RunCount=" + e.RunCount + "; PrefetchHash=" + (e.Hash ?? "") + "; v" + e.FormatVersion
+                    + "; RefFiles=" + e.ReferencedFileCount
                     + (string.IsNullOrEmpty(e.SourceFile) ? "" : "; " + e.SourceFile);
 
                 if (e.LastRunTimesUtc != null && e.LastRunTimesUtc.Count > 0)
@@ -41,6 +42,10 @@ namespace IR_Collect.Analysis.Correlation.Normalizers
                         fact.ParseLevel = FactProvenanceMetadata.StructuredParseLevel;
                         fact.Details = (i == 0 ? "Last run. " : "Prior run. ") + detail;
                         fact.AddEntity("FileName", exe);
+                        // On the most-recent run, surface referenced files loaded from user-writable /
+                        // non-system locations (high-signal for side-loading / malware); skip the noisy
+                        // system DLLs. Bounded to keep the fact small.
+                        if (i == 0) AddSuspiciousReferencedFiles(fact, e.ReferencedFiles);
                         if (!string.IsNullOrWhiteSpace(e.ParserNote)) fact.ParserNote = e.ParserNote;
                         list.Add(fact);
                     }
@@ -61,6 +66,31 @@ namespace IR_Collect.Analysis.Correlation.Normalizers
                 idx++;
             }
             return list;
+        }
+
+        // Add up to 15 referenced files from user-writable / non-system paths as ReferencedFile entities.
+        // System DLLs (\Windows\, \Program Files\) are noise; user-writable load locations are signal.
+        private static void AddSuspiciousReferencedFiles(Fact fact, List<string> refs)
+        {
+            if (refs == null) return;
+            int added = 0;
+            foreach (string rf in refs)
+            {
+                if (added >= 15) break;
+                if (string.IsNullOrWhiteSpace(rf)) continue;
+                string up = rf.ToUpperInvariant();
+                if (up.IndexOf("\\WINDOWS\\", StringComparison.Ordinal) >= 0 ||
+                    up.IndexOf("\\PROGRAM FILES", StringComparison.Ordinal) >= 0) continue;
+                if (up.IndexOf("\\USERS\\", StringComparison.Ordinal) >= 0 ||
+                    up.IndexOf("\\TEMP\\", StringComparison.Ordinal) >= 0 ||
+                    up.IndexOf("\\APPDATA\\", StringComparison.Ordinal) >= 0 ||
+                    up.IndexOf("\\PROGRAMDATA\\", StringComparison.Ordinal) >= 0 ||
+                    up.IndexOf("\\DOWNLOADS\\", StringComparison.Ordinal) >= 0)
+                {
+                    fact.AddEntity("ReferencedFile", rf);
+                    added++;
+                }
+            }
         }
     }
 }

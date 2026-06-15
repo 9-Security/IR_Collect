@@ -240,6 +240,8 @@ namespace IR_Collect.Tests
             sb.Append(",\"version\":").Append(e.FormatVersion);
             sb.Append(",\"runCount\":").Append(e.RunCount);
             sb.Append(",\"hash\":").Append(J(e.Hash));
+            sb.Append(",\"refCount\":").Append(e.ReferencedFileCount);
+            sb.Append(",\"refsParsed\":").Append(e.ReferencedFiles.Count);
             sb.Append(",\"lastRun\":[");
             for (int i = 0; i < e.LastRunTimesUtc.Count; i++)
             {

@@ -15,8 +15,14 @@ namespace IR_Collect.Utils
         public List<DateTime> LastRunTimesUtc { get; private set; }
         public string SourceFile { get; set; }
         public string ParserNote { get; set; }
+        public int ReferencedFileCount { get; set; }
+        public List<string> ReferencedFiles { get; private set; }
 
-        public PrefetchEntry() { LastRunTimesUtc = new List<DateTime>(); }
+        public PrefetchEntry()
+        {
+            LastRunTimesUtc = new List<DateTime>();
+            ReferencedFiles = new List<string>();
+        }
     }
 
     public sealed class PrefetchParseResult
@@ -126,6 +132,31 @@ namespace IR_Collect.Utils
                 int rc = BitConverter.ToInt32(data, runCountOffset);
                 if (rc >= 0 && rc < 100000000) entry.RunCount = rc;
             }
+
+            // Referenced files: number-of-file-metrics @0x58, filename-strings region (offset @0x64,
+            // size @0x68). These File-Information offsets are version-independent. The strings are
+            // UTF-16, null-separated full paths of everything the executable touched at startup.
+            if (0x58 + 4 <= data.Length)
+            {
+                long cnt = BitConverter.ToUInt32(data, 0x58);
+                if (cnt >= 0 && cnt < 1000000) entry.ReferencedFileCount = (int)cnt;
+            }
+            if (0x68 + 4 <= data.Length)
+            {
+                long fnOff = BitConverter.ToUInt32(data, 0x64);
+                long fnSize = BitConverter.ToUInt32(data, 0x68);
+                if (fnOff > 0 && fnSize > 0 && fnOff + fnSize <= data.Length)
+                {
+                    string block = Encoding.Unicode.GetString(data, (int)fnOff, (int)fnSize);
+                    foreach (string s in block.Split('\0'))
+                    {
+                        string t = s.Trim();
+                        if (t.Length > 0) entry.ReferencedFiles.Add(t);
+                    }
+                }
+            }
+            if (entry.ReferencedFileCount == 0 && entry.ReferencedFiles.Count > 0)
+                entry.ReferencedFileCount = entry.ReferencedFiles.Count;
 
             entry.ParserNote = "Prefetch v" + version + " (" + (data == raw ? "uncompressed" : "MAM/Xpress-Huffman") + ").";
             return entry;
