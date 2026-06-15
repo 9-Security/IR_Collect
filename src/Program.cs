@@ -33,6 +33,7 @@ namespace IR_Collect
                     Console.WriteLine("Usage:");
                     Console.WriteLine("  IR_Collect.exe                 Launch GUI");
                     Console.WriteLine("  IR_Collect.exe -c [EvidenceID]  Run collection (CLI). Output: <EvidenceID>.zip in current directory.");
+                    Console.WriteLine("  IR_Collect.exe -analyze <folder|-> [out.json]  Analyze an already-collected artifact folder -> summary JSON (no live host).");
                     Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
 #if INCLUDE_TESTS
                     Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
@@ -108,6 +109,26 @@ namespace IR_Collect
                         FreeConsole();
                         Environment.Exit(1);
                     }
+                }
+                else if (mode == "-analyze")
+                {
+                    // -analyze <folder|-> [out.json]. Analysis-layer front door (Phase 3.1): ingest a folder
+                    // of already-collected artifacts and emit a summary_v3 JSON. '-' reads the folder path
+                    // from stdin. No live host is touched.
+                    string folder = args.Length > 1 ? args[1] : null;
+                    string outFile = args.Length > 2 ? args[2] : null;
+                    int rc;
+                    if (string.IsNullOrEmpty(folder))
+                    {
+                        Console.WriteLine("\n[!] Usage: IR_Collect.exe -analyze <folder|-> [out.json]");
+                        rc = 2;
+                    }
+                    else
+                    {
+                        rc = IR_Collect.Analysis.AnalysisCli.Run(folder, outFile, Console.Out);
+                    }
+                    FreeConsole();
+                    Environment.Exit(rc);
                 }
 #if INCLUDE_TESTS
                 else if (mode == "-test" || mode == "--test")

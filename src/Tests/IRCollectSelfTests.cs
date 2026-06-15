@@ -50,6 +50,7 @@ namespace IR_Collect.Tests
             failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
             failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
             failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
             failed += RunOne("EventLog_1149_message_fallback_adds_target_user", EventLog_1149_message_fallback_adds_target_user, sb) ? 0 : 1;
@@ -524,6 +525,53 @@ namespace IR_Collect.Tests
             return string.Equals(e.Path, @"C:\Windows\System32\evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.FileName, "evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.LastModifiedTime, "2025-03-14T09:30:00", StringComparison.Ordinal);
+        }
+
+        // Phase 3.1: ingest an arbitrary folder of already-collected artifacts (no ZIP, no live host),
+        // run the real facts pipeline, and emit a headless summary. Uses an mft_preview.csv so the MFT
+        // normalizer produces facts deterministically without needing a real hive/ESE sample.
+        private static bool AnalyzeFolder_ingests_artifacts_and_builds_summary()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_analyze_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.SystemInfoTxt),
+                    "Hostname: TESTHOST\r\nOS: Windows\r\n", Encoding.UTF8);
+                // mft_preview.csv: header + one row with >=14 columns (FullPath at [4], StdCreated at [6]).
+                var csv = new StringBuilder();
+                csv.AppendLine("RecordNumber,InUse,IsDir,FileName,FullPath,Size,StdCreated,StdModified,StdMftModified,StdAccessed,FnCreated,FnModified,FnMftModified,FnAccessed");
+                csv.AppendLine("42,True,False,evil.exe,C:\\Temp\\evil.exe,1024,2025-01-02 10:00:00,2025-01-02 10:00:00,2025-01-02 10:00:00,2025-01-02 10:00:00,,,,");
+                File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.MftPreviewCsv), csv.ToString(), Encoding.UTF8);
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+                if (!string.Equals(c.Hostname, "TESTHOST", StringComparison.Ordinal)) return false;
+                if (c.MftEntries == null || c.MftEntries.Count < 1) return false;
+                // Note: mft_preview.csv and system_info.txt are consumed/skipped by the scan (the MFT
+                // preview becomes MftEntries), so they are intentionally NOT in the Artifacts dict.
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                c.FactStore = store;
+                if (store == null || store.Facts == null || store.Facts.Count < 1) return false; // MFT facts
+
+                var payload = IR_Collect.Analysis.AnalysisCli.BuildHeadlessSummary(c);
+                if (payload == null || payload.FactCount < 1) return false;
+                if (!string.Equals(payload.ExportSchema, "summary_v3", StringComparison.Ordinal)) return false;
+
+                string json = IR_Collect.Analysis.SummaryExport.Serialize(payload);
+                return !string.IsNullOrEmpty(json)
+                    && json.IndexOf("summary_v3", StringComparison.Ordinal) >= 0
+                    && json.IndexOf("TESTHOST", StringComparison.Ordinal) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+            }
         }
 
         private static bool FixtureCorpus_committed_files_match_builder_and_parse_as_expected()

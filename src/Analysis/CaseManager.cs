@@ -326,59 +326,7 @@ namespace IR_Collect.Analysis
               }
               else if (!string.IsNullOrEmpty(mftPreviewPath))
               {
-                  using (StreamReader sr = new StreamReader(mftPreviewPath, System.Text.Encoding.UTF8))
-                  {
-                      string line;
-                      bool header = true;
-                      int csvCount = 0;
-                      while ((line = sr.ReadLine()) != null && csvCount < mftMax)
-                      {
-                          if (header) { header = false; continue; }
-                          try
-                          {
-                              var parts = CorrelationCsvHelper.SplitCsvLine(line);
-                              if (parts.Length >= 14)
-                              {
-                                  var entry = new IR_Collect.MFT.MftParser.MftEntry();
-                                  entry.FileName = parts[3];
-                                  entry.FullPath = parts[4];
-                                  long size;
-                                  if (long.TryParse(parts[5], out size)) entry.Size = size;
-                                  DateTime dt;
-                                  if (DateTime.TryParse(parts[6], out dt)) entry.StdCreated = dt;
-                                  if (DateTime.TryParse(parts[7], out dt)) entry.StdModified = dt;
-                                  if (DateTime.TryParse(parts[8], out dt)) entry.StdMftModified = dt;
-                                  if (DateTime.TryParse(parts[9], out dt)) entry.StdAccessed = dt;
-                                  if (DateTime.TryParse(parts[10], out dt)) entry.FnCreated = dt;
-                                  if (DateTime.TryParse(parts[11], out dt)) entry.FnModified = dt;
-                                  if (DateTime.TryParse(parts[12], out dt)) entry.FnMftModified = dt;
-                                  if (DateTime.TryParse(parts[13], out dt)) entry.FnAccessed = dt;
-                                  entry.Created = entry.StdCreated.Year > 1980 ? entry.StdCreated : entry.FnCreated;
-                                  entry.Modified = entry.StdModified.Year > 1980 ? entry.StdModified : entry.FnModified;
-                                  newCase.MftEntries.Add(entry);
-                                  csvCount++;
-                              }
-                              else if (parts.Length >= 5)
-                              {
-                                  var entry = new IR_Collect.MFT.MftParser.MftEntry();
-                                  entry.FileName = parts[3];
-                                  DateTime dt;
-                                  if (DateTime.TryParse(parts[4], out dt)) entry.Created = dt;
-                                  newCase.MftEntries.Add(entry);
-                                  csvCount++;
-                              }
-                          }
-                          catch (Exception ex)
-                          {
-                              Logger.Warning("MFT preview CSV parse: " + (ex.Message ?? ""));
-                          }
-                      }
-                      if (csvCount >= mftMax)
-                      {
-                          newCase.LoadWarnings.Add("MFT preview load was capped at " + mftMax + " entries. Increase config.ini MftMaxEntries to load more.");
-                          Logger.Info("MFT CSV loaded (capped at " + mftMax + "). Set config.ini MftMaxEntries to load more.");
-                      }
-                  }
+                  LoadMftFromPreviewCsv(newCase, mftPreviewPath, mftMax);
               }
 
                if (!string.IsNullOrEmpty(factStoreDbPath) && File.Exists(factStoreDbPath))
@@ -412,6 +360,197 @@ namespace IR_Collect.Analysis
               lock (_lock) { _cases.Add(newCase); }
               return newCase;
          }
+
+        // Parse mft_preview.csv (the bounded CSV written during collection) into MftEntries. Shared by
+        // LoadCase (ZIP intake) and LoadCaseFromFolder (folder intake).
+        private static void LoadMftFromPreviewCsv(CaseData newCase, string mftPreviewPath, int mftMax)
+        {
+            using (StreamReader sr = new StreamReader(mftPreviewPath, System.Text.Encoding.UTF8))
+            {
+                string line;
+                bool header = true;
+                int csvCount = 0;
+                while ((line = sr.ReadLine()) != null && csvCount < mftMax)
+                {
+                    if (header) { header = false; continue; }
+                    try
+                    {
+                        var parts = CorrelationCsvHelper.SplitCsvLine(line);
+                        if (parts.Length >= 14)
+                        {
+                            var entry = new IR_Collect.MFT.MftParser.MftEntry();
+                            entry.FileName = parts[3];
+                            entry.FullPath = parts[4];
+                            long size;
+                            if (long.TryParse(parts[5], out size)) entry.Size = size;
+                            DateTime dt;
+                            if (DateTime.TryParse(parts[6], out dt)) entry.StdCreated = dt;
+                            if (DateTime.TryParse(parts[7], out dt)) entry.StdModified = dt;
+                            if (DateTime.TryParse(parts[8], out dt)) entry.StdMftModified = dt;
+                            if (DateTime.TryParse(parts[9], out dt)) entry.StdAccessed = dt;
+                            if (DateTime.TryParse(parts[10], out dt)) entry.FnCreated = dt;
+                            if (DateTime.TryParse(parts[11], out dt)) entry.FnModified = dt;
+                            if (DateTime.TryParse(parts[12], out dt)) entry.FnMftModified = dt;
+                            if (DateTime.TryParse(parts[13], out dt)) entry.FnAccessed = dt;
+                            entry.Created = entry.StdCreated.Year > 1980 ? entry.StdCreated : entry.FnCreated;
+                            entry.Modified = entry.StdModified.Year > 1980 ? entry.StdModified : entry.FnModified;
+                            newCase.MftEntries.Add(entry);
+                            csvCount++;
+                        }
+                        else if (parts.Length >= 5)
+                        {
+                            var entry = new IR_Collect.MFT.MftParser.MftEntry();
+                            entry.FileName = parts[3];
+                            DateTime dt;
+                            if (DateTime.TryParse(parts[4], out dt)) entry.Created = dt;
+                            newCase.MftEntries.Add(entry);
+                            csvCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning("MFT preview CSV parse: " + (ex.Message ?? ""));
+                    }
+                }
+                if (csvCount >= mftMax)
+                {
+                    newCase.LoadWarnings.Add("MFT preview load was capped at " + mftMax + " entries. Increase config.ini MftMaxEntries to load more.");
+                    Logger.Info("MFT CSV loaded (capped at " + mftMax + "). Set config.ini MftMaxEntries to load more.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Phase 3.1 (analysis layer): build a CaseData from an arbitrary folder of already-collected
+        /// artifacts - another tool's triage output, or an unzipped IR_Collect case - WITHOUT extracting a
+        /// ZIP and WITHOUT touching the live host. Mirrors the post-extraction steps of LoadCase (the two
+        /// should be unified in a later pass). The folder is treated read-only: it is never deleted, only
+        /// derived CSVs (filtered EVTX / ShellBags) may be written alongside, exactly as LoadCase does.
+        /// </summary>
+        public static CaseData LoadCaseFromFolder(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder))
+                throw new ArgumentException("folder is null or empty.", "folder");
+            if (!Directory.Exists(folder))
+                throw new DirectoryNotFoundException("Artifact folder not found: " + folder);
+            string root;
+            try { root = Path.GetFullPath(folder); } catch { root = folder; }
+
+            string leaf = new DirectoryInfo(root).Name;
+            CaseData newCase = new CaseData();
+            newCase.CaseID = "Folder_" + leaf + "_" + DateTime.Now.Ticks;
+            newCase.SourceZip = null;
+            newCase.CachePath = root;
+
+            // Detect a single nested directory (e.g. folder\IR_Output_X\...).
+            string[] subDirs = Directory.GetDirectories(root);
+            string[] rootFiles = Directory.GetFiles(root);
+            newCase.ExtractPath = (rootFiles.Length == 0 && subDirs.Length == 1) ? subDirs[0] : root;
+
+            string sysInfoPath = Path.Combine(newCase.ExtractPath, ArtifactNames.SystemInfoTxt);
+            if (File.Exists(sysInfoPath) && new FileInfo(sysInfoPath).Length <= 5L * 1024 * 1024)
+            {
+                foreach (var line in File.ReadAllLines(sysInfoPath, System.Text.Encoding.UTF8))
+                    if (line.StartsWith("Hostname:")) newCase.Hostname = line.Substring(9).Trim();
+            }
+            if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = leaf;
+
+            int mftMax = GetMftMaxEntries();
+            string mftBinPath = null, mftPreviewPath = null, factStoreDbPath = null;
+            foreach (string f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                string fullPath;
+                try { fullPath = Path.GetFullPath(f); } catch { continue; }
+                if (!IsPathUnderRoot(fullPath, root)) continue;
+                string name = Path.GetFileName(f);
+                if (mftBinPath == null && string.Equals(name, ArtifactNames.MftDumpBin, StringComparison.OrdinalIgnoreCase)) { mftBinPath = fullPath; continue; }
+                if (mftPreviewPath == null && string.Equals(name, ArtifactNames.MftPreviewCsv, StringComparison.OrdinalIgnoreCase)) { mftPreviewPath = fullPath; continue; }
+                if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase)) factStoreDbPath = fullPath;
+                if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext == ".csv" || ext == ".txt" || ext == ".evtx" || ext == ".xml" || ext == ".sqlite" || ext == ".hve" || ext == ".log" || ext == ".jrs" || name.Contains("History") ||
+                    ext == ".automaticdestinations-ms" || ext == ".customdestinations-ms" ||
+                    ext == ".hiv" || ext == ".dat" || ext == ".reg" || name.StartsWith("NTUSER") || name.StartsWith("UsrClass") ||
+                    ext == ".raw" || ext == ".dmp" ||
+                    string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, ArtifactNames.CollectionCoverageJson, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, ArtifactNames.MemoryAcquisitionJson, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, ArtifactNames.MemoryAnalysisJson, StringComparison.OrdinalIgnoreCase))
+                {
+                    string rel = GetRelativePath(root, fullPath);
+                    if (rel != null && rel.IndexOf("..", StringComparison.Ordinal) < 0)
+                        newCase.Artifacts[rel] = fullPath;
+                }
+            }
+
+            // Optional sidecars (best-effort, same as LoadCase).
+            string coveragePath = ResolveArtifactPath(newCase, ArtifactNames.CollectionCoverageJson);
+            if (!string.IsNullOrEmpty(coveragePath) && File.Exists(coveragePath))
+            {
+                try { newCase.CollectionCoverage = CollectionCoverageSerializer.LoadFromFile(coveragePath); }
+                catch (Exception ex) { AddLoadWarning(newCase, "collection_coverage.json could not be loaded: " + (ex.Message ?? "")); }
+            }
+            string memAcq = ResolveArtifactPath(newCase, ArtifactNames.MemoryAcquisitionJson);
+            if (!string.IsNullOrEmpty(memAcq) && File.Exists(memAcq))
+            {
+                try { newCase.MemoryAcquisitionMeta = MemoryAcquisitionRecord.TryLoad(memAcq); } catch { }
+            }
+            string memAna = ResolveArtifactPath(newCase, ArtifactNames.MemoryAnalysisJson);
+            if (!string.IsNullOrEmpty(memAna) && File.Exists(memAna))
+            {
+                try { newCase.MemoryAnalysisMeta = MemoryAnalysisRecord.TryLoad(memAna); } catch { }
+            }
+
+            try
+            {
+                newCase.AnalystWorkflowPath = AnalystWorkflowStore.ResolvePath(newCase.SourceZip, newCase.ExtractPath);
+                newCase.AnalystWorkflow = AnalystWorkflowStore.LoadFromFile(newCase.AnalystWorkflowPath);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning("LoadCaseFromFolder analyst workflow: " + (ex.Message ?? ""));
+                newCase.AnalystWorkflow = new AnalystWorkflowState();
+            }
+
+            TryRebuildFilteredEventLogsFromEvtx(newCase);
+
+            try
+            {
+                string shellMsg;
+                ShellBagsParser.TryEnsureShellBagsCsv(newCase.ExtractPath, false, out shellMsg);
+                string shellCsv = Path.Combine(newCase.ExtractPath, "Registry", ArtifactNames.ShellBagsCsv);
+                if (File.Exists(shellCsv)) RegisterArtifact(newCase, Path.GetFullPath(shellCsv));
+            }
+            catch (Exception ex) { Logger.Warning("LoadCaseFromFolder shellbags.csv: " + (ex.Message ?? "")); }
+
+            if (!string.IsNullOrEmpty(mftBinPath))
+            {
+                var pr = IR_Collect.MFT.MftParser.ParseWithDiagnostics(mftBinPath, mftMax);
+                newCase.MftEntries = pr.Entries;
+                if (pr.SkippedRecords > 0) newCase.LoadWarnings.Add("MFT parse skipped " + pr.SkippedRecords + " malformed record(s).");
+            }
+            else if (!string.IsNullOrEmpty(mftPreviewPath))
+            {
+                LoadMftFromPreviewCsv(newCase, mftPreviewPath, mftMax);
+            }
+
+            if (!string.IsNullOrEmpty(factStoreDbPath) && File.Exists(factStoreDbPath))
+            {
+                try
+                {
+                    int skipped;
+                    newCase.FactStore = FactStorePersistence.LoadFromSqlite(factStoreDbPath, newCase.CaseID, newCase.Hostname, out skipped);
+                    AugmentFactStoreWithRebuiltEventLogs(newCase);
+                    FactProvenanceHelper.ApplyCaseMetadata(newCase, newCase.FactStore != null ? newCase.FactStore.Facts : null);
+                    if (newCase.FactStore != null) newCase.FactStore.BuildEntityIndex();
+                }
+                catch (Exception ex) { AddLoadWarning(newCase, "fact_store.db could not be loaded: " + (ex.Message ?? "")); }
+            }
+
+            lock (_lock) { _cases.Add(newCase); }
+            return newCase;
+        }
 
         private static void TryRebuildFilteredEventLogsFromEvtx(CaseData c)
         {
