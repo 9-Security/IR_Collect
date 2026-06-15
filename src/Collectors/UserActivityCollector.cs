@@ -139,6 +139,14 @@ namespace IR_Collect.Collectors
             DateTime limit = DateTime.Now.AddDays(-7);
             int count = 0;
 
+            // Wall-clock budget so the recursive scan can't run away on a large profile (the recursive
+            // walk + per-file SHA-256 of C:\Users + ProgramData can take tens of minutes on a dev box).
+            // Configurable; 0 or negative = unlimited (full forensic scan). Truncation is logged honestly.
+            int maxSeconds = 120;
+            try { int p; if (int.TryParse(new ConfigManager().Get("RecentFileScanMaxSeconds"), out p)) maxSeconds = p; } catch { }
+            DateTime deadline = maxSeconds > 0 ? DateTime.UtcNow.AddSeconds(maxSeconds) : DateTime.MaxValue;
+            bool truncated = false;
+
             try
             {
                 using (StreamWriter sw = new StreamWriter(csvPath, false, new System.Text.UTF8Encoding(false)))
@@ -166,7 +174,13 @@ namespace IR_Collect.Collectors
                     foreach (var root in roots)
                     {
                         Console.WriteLine("    > Scanning: " + root);
-                        ScanRecursive(root, limit, sw, ref count, ref skipAccessDenied, ref skipPathTooLong);
+                        ScanRecursive(root, limit, sw, ref count, ref skipAccessDenied, ref skipPathTooLong, deadline, ref truncated);
+                        if (truncated) break;
+                    }
+                    if (truncated)
+                    {
+                        sw.WriteLine(string.Format("\"[TRUNCATED: recent-file scan stopped to bound live-response time after ~{0}s / {1} files scanned; set config.ini RecentFileScanMaxSeconds higher (0 = unlimited) for a fuller scan]\",0,\"\",\"\",\"\",\"\"", maxSeconds, scannedFilesCount));
+                        Console.WriteLine(string.Format("    (Scan truncated at {0}s budget: {1} files scanned, {2} recent files captured.)", maxSeconds, scannedFilesCount, count));
                     }
                     if (skipAccessDenied > 0 || skipPathTooLong > 0)
                         Console.WriteLine("    (Skipped: {0} access denied, {1} path too long)", skipAccessDenied, skipPathTooLong);
@@ -186,13 +200,14 @@ namespace IR_Collect.Collectors
         private static int scannedFilesCount = 0;
 
         /// <summary>Iterative scan to avoid stack overflow on deep trees (e.g. C:\Users\...\node_modules).</summary>
-        private static void ScanRecursive(string rootDir, DateTime limit, StreamWriter sw, ref int count, ref int skipAccessDenied, ref int skipPathTooLong)
+        private static void ScanRecursive(string rootDir, DateTime limit, StreamWriter sw, ref int count, ref int skipAccessDenied, ref int skipPathTooLong, DateTime deadline, ref bool truncated)
         {
             var toProcess = new Queue<string>();
             toProcess.Enqueue(rootDir);
 
             while (toProcess.Count > 0 && scannedFilesCount <= 500000)
             {
+                if (DateTime.UtcNow >= deadline) { truncated = true; return; }
                 string dir = toProcess.Dequeue();
                 try
                 {
@@ -242,6 +257,14 @@ namespace IR_Collect.Collectors
                                 name.Equals("Temporary Internet Files", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("Cache", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("Code Cache", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("Cache_Data", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("CacheStorage", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("GPUCache", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("ShaderCache", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("GrShaderCache", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("DawnCache", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("Service Worker", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("Crashpad", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("node_modules", StringComparison.OrdinalIgnoreCase) ||
                                 name.StartsWith("npm-", StringComparison.OrdinalIgnoreCase))
                                 continue;
@@ -264,6 +287,29 @@ namespace IR_Collect.Collectors
                     else if (ex.Message != null && (ex.Message.IndexOf("太長", StringComparison.OrdinalIgnoreCase) >= 0 || ex.Message.IndexOf("260", StringComparison.OrdinalIgnoreCase) >= 0)) skipPathTooLong++;
                 }
             }
+            // Hit the global file-count backstop (not just the time budget) -> also a truncation.
+            if (scannedFilesCount > 500000) truncated = true;
+        }
+
+        // Test seam: run the bounded scan over an arbitrary root. maxSeconds: >0 = budget seconds,
+        // 0 = unlimited, <0 = already-expired (forces immediate truncation).
+        internal static void ScanRootForTest(string root, int maxSeconds, out int count, out bool truncated)
+        {
+            scannedFilesCount = 0;
+            count = 0; truncated = false;
+            int a = 0, p = 0;
+            DateTime deadline = maxSeconds > 0 ? DateTime.UtcNow.AddSeconds(maxSeconds)
+                : (maxSeconds == 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(-1));
+            string tmpCsv = Path.Combine(Path.GetTempPath(), "ircol_scan_" + Guid.NewGuid().ToString("N") + ".csv");
+            try
+            {
+                using (var sw = new StreamWriter(tmpCsv, false, new System.Text.UTF8Encoding(false)))
+                {
+                    sw.WriteLine("Path,Size,Created,Modified,Extension,SHA256");
+                    ScanRecursive(root, DateTime.Now.AddDays(-7), sw, ref count, ref a, ref p, deadline, ref truncated);
+                }
+            }
+            finally { try { File.Delete(tmpCsv); } catch { } }
         }
 
 

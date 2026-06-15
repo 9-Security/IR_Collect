@@ -55,6 +55,7 @@ namespace IR_Collect.Tests
             failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
             failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
             failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
+            failed += RunOne("RecentFileScan_respects_time_budget", RecentFileScan_respects_time_budget, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -585,6 +586,35 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Phase 4.2 hotfix: the 7-day recent-file scan must honor a wall-clock budget so live collection
+        // can't run away on a large profile. An expired budget truncates immediately; an unlimited budget
+        // still finds a freshly-modified file.
+        private static bool RecentFileScan_respects_time_budget()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_rfs_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, "fresh.txt"), "x"); // modified now = within 7 days
+
+                int c1; bool t1;
+                IR_Collect.Collectors.UserActivityCollector.ScanRootForTest(dir, -1, out c1, out t1);
+                if (!t1) return false; // expired budget -> truncated
+
+                int c2; bool t2;
+                IR_Collect.Collectors.UserActivityCollector.ScanRootForTest(dir, 0, out c2, out t2);
+                return !t2 && c2 >= 1; // unlimited -> not truncated, finds the recent file
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
             }
         }
 
