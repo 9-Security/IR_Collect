@@ -925,7 +925,12 @@ namespace IR_Collect
             try
             {
                 if (File.Exists(zipFile)) File.Delete(zipFile);
-                ZipFile.CreateFromDirectory(sourceDir, zipFile, CompressionLevel.Optimal, false);
+                CompressionLevel level = GetConfiguredCompressionLevel();
+                var sw = Stopwatch.StartNew();
+                Console.WriteLine("[i] Packaging (compression: " + level + "; set config.ini CollectionZipCompression=Optimal for smallest output)...");
+                ZipFile.CreateFromDirectory(sourceDir, zipFile, level, false);
+                sw.Stop();
+                Console.WriteLine(string.Format("    [t] Packaging done in {0:N1}s", sw.Elapsed.TotalSeconds));
             }
             catch (Exception ex)
             {
@@ -933,6 +938,26 @@ namespace IR_Collect
                 Logger.Error("PackDir", ex);
                 throw new IOException("Packaging failed: " + ex.Message, ex);
             }
+        }
+
+        // Live-response packaging favors speed: the ZIP is a transient transport artifact and the large
+        // MFT/raw files compress slowly. Configurable via config.ini CollectionZipCompression
+        // (Fastest | Optimal | NoCompression); default Fastest (packs notably faster, somewhat larger).
+        private static CompressionLevel GetConfiguredCompressionLevel()
+        {
+            try
+            {
+                string v = new ConfigManager().Get("CollectionZipCompression");
+                if (!string.IsNullOrWhiteSpace(v))
+                {
+                    v = v.Trim();
+                    if (v.Equals("Optimal", StringComparison.OrdinalIgnoreCase)) return CompressionLevel.Optimal;
+                    if (v.Equals("NoCompression", StringComparison.OrdinalIgnoreCase) || v.Equals("None", StringComparison.OrdinalIgnoreCase)) return CompressionLevel.NoCompression;
+                    if (v.Equals("Fastest", StringComparison.OrdinalIgnoreCase)) return CompressionLevel.Fastest;
+                }
+            }
+            catch (Exception ex) { Logger.Warning("GetConfiguredCompressionLevel: " + (ex.Message ?? "")); }
+            return CompressionLevel.Fastest;
         }
 
         private const int MaxEvidenceIdLength = 64;
@@ -1004,6 +1029,7 @@ namespace IR_Collect
 
         private static void RunCollectorStep(string stepName, Action action, System.Collections.Generic.List<string> failedSteps)
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 if (action != null) action();
@@ -1013,6 +1039,12 @@ namespace IR_Collect
                 Console.WriteLine(stepName + " Error: " + ex.Message);
                 Logger.Error(stepName, ex);
                 if (failedSteps != null) failedSteps.Add(stepName);
+            }
+            finally
+            {
+                sw.Stop();
+                // Per-step timing so the slowest collectors are visible in the console/log.
+                Console.WriteLine(string.Format("    [t] {0} done in {1:N1}s", stepName, sw.Elapsed.TotalSeconds));
             }
         }
 
