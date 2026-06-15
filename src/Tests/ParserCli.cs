@@ -203,6 +203,16 @@ namespace IR_Collect.Tests
                 if (n++ > 0) sb.Append(",");
                 sb.Append(J(e.Path));
             }
+            // rows[] additionally carries each entry's LastModified so the harness can spot-check
+            // timestamps against AppCompatCacheParser; paths[] above stays string-only for recall.
+            sb.Append("],\"rows\":[");
+            n = 0;
+            foreach (var e in r.Entries)
+            {
+                if (string.IsNullOrEmpty(e.Path)) continue;
+                if (n++ > 0) sb.Append(",");
+                sb.Append("{\"p\":").Append(J(e.Path)).Append(",\"t\":").Append(J(e.LastModifiedTime)).Append("}");
+            }
             sb.Append("]}");
             o.WriteLine(sb.ToString());
             return 0;

@@ -137,8 +137,18 @@ namespace IR_Collect.Utils
 
         private static void ParseKeyValues(RegistryKey key, ShimCacheParseResult result, string regPathLabel)
         {
-            foreach (string valueName in key.GetValueNames())
-                ParseSingleValue(valueName, key.GetValue(valueName) as byte[], regPathLabel, result);
+            // The cache lives solely in the "AppCompatCache" value. Sibling values in this key
+            // (CacheMainSdb, SdbTime) are unrelated shim-DB state - parsing them only injects noise
+            // (bare apphelp names) and a spurious fallback (SdbTime has no paths), so we read just the
+            // canonical value, matching AppCompatCacheParser.
+            byte[] data = key.GetValue("AppCompatCache") as byte[];
+            if (data == null || data.Length == 0)
+            {
+                result.FallbackUsed = true;
+                result.ParserNotes.Add("AppCompatCache value missing or empty under " + regPathLabel + ".");
+                return;
+            }
+            ParseSingleValue("AppCompatCache", data, regPathLabel, result);
         }
 
         /// <summary>
