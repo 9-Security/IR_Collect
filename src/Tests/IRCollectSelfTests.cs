@@ -49,6 +49,7 @@ namespace IR_Collect.Tests
             failed += RunOne("MftNormalizer_action_reflects_timestamp_source", MftNormalizer_action_reflects_timestamp_source, sb) ? 0 : 1;
             failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
             failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
+            failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
             failed += RunOne("EventLog_1149_message_fallback_adds_target_user", EventLog_1149_message_fallback_adds_target_user, sb) ? 0 : 1;
@@ -489,6 +490,40 @@ namespace IR_Collect.Tests
             // Win32 first then DOS: still the Win32 long name.
             var e2 = IR_Collect.MFT.MftParser.ParseRecord(BuildMftRecordWithAttrs(new[] { win, dos }), 7);
             return e2 != null && string.Equals(e2.FileName, "testfile.txt", StringComparison.Ordinal);
+        }
+
+        // Build one Win10 ("10ts") AppCompatCache value: a header whose first DWORD points at the
+        // single entry, then a structured entry carrying a UTF-16 path and a FILETIME.
+        private static byte[] BuildWin10ShimValue(string path, DateTime lastModifiedUtc)
+        {
+            byte[] pathBytes = Encoding.Unicode.GetBytes(path);
+            int entryDataSize = 2 + pathBytes.Length + 8 + 4;   // pathSize + path + FILETIME + dataSize(0)
+            const int headerSize = 0x30;
+            byte[] v = new byte[headerSize + 12 + entryDataSize];
+            BitConverter.GetBytes(headerSize).CopyTo(v, 0);     // header DWORD == offset to first entry
+
+            int o = headerSize;
+            v[o] = 0x31; v[o + 1] = 0x30; v[o + 2] = 0x74; v[o + 3] = 0x73; // "10ts"
+            // o+4..o+7 unknown/seq = 0
+            BitConverter.GetBytes(entryDataSize).CopyTo(v, o + 8);
+            BitConverter.GetBytes((ushort)pathBytes.Length).CopyTo(v, o + 12);
+            pathBytes.CopyTo(v, o + 14);
+            int p = o + 14 + pathBytes.Length;
+            BitConverter.GetBytes(lastModifiedUtc.ToFileTimeUtc()).CopyTo(v, p);
+            // trailing dataSize DWORD stays 0
+            return v;
+        }
+
+        private static bool ShimCache_structured_win10_entry_recovers_path_and_filetime()
+        {
+            var when = new DateTime(2025, 3, 14, 9, 30, 0, DateTimeKind.Utc);
+            byte[] value = BuildWin10ShimValue(@"C:\Windows\System32\evil.exe", when);
+            var r = ShimCacheParser.ParseValueBytesForTest("AppCompatCache", value);
+            if (r.Entries.Count != 1) return false;
+            var e = r.Entries[0];
+            return string.Equals(e.Path, @"C:\Windows\System32\evil.exe", StringComparison.Ordinal)
+                && string.Equals(e.FileName, "evil.exe", StringComparison.Ordinal)
+                && string.Equals(e.LastModifiedTime, "2025-03-14T09:30:00", StringComparison.Ordinal);
         }
 
         private static bool FixtureCorpus_committed_files_match_builder_and_parse_as_expected()
