@@ -26,7 +26,16 @@ namespace IR_Collect
                 AttachConsole(ATTACH_PARENT_PROCESS);
                 
                 string mode = args[0].ToLower();
-                if (mode == "-h" || mode == "--help")
+                if (mode == "-version" || mode == "--version")
+                {
+                    // Court-admissibility / reproducibility: report tool identity headlessly. The same
+                    // tool_name/tool_version is stamped into every analysis JSON output.
+                    Console.WriteLine(BuildInfo.ToolIdentity);
+                    Console.WriteLine("output_schemas: summary_v3, correlation_v1, graph_v1, full_log_v3");
+                    FreeConsole();
+                    Environment.Exit(0);
+                }
+                else if (mode == "-h" || mode == "--help")
                 {
                     Console.WriteLine("\nIR_Collect — Windows DFIR Artifact Collector & Analyzer");
                     Console.WriteLine("");
@@ -36,6 +45,7 @@ namespace IR_Collect
                     Console.WriteLine("  IR_Collect.exe -analyze <folder|-> [out.json]  Analyze an already-collected artifact folder -> summary JSON (no live host).");
                     Console.WriteLine("  IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]  Cross-host correlation over >=2 folders -> correlation JSON.");
                     Console.WriteLine("  IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <folderA> [...]  Multi-hop investigation graph -> graph JSON.");
+                    Console.WriteLine("  IR_Collect.exe -version         Print tool name + version + output schema versions");
                     Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
 #if INCLUDE_TESTS
                     Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");

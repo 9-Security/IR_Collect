@@ -87,6 +87,8 @@ namespace IR_Collect.Analysis
             var report = new CorrelationReport();
             report.GeneratedAt = DateTime.UtcNow.ToString("o");
             report.ExportSchema = "correlation_v1";
+            report.ToolName = BuildInfo.ToolName;
+            report.ToolVersion = BuildInfo.Version;
             report.HostCount = caseList.Count;
             report.BucketMinutes = options.BucketMinutes;
             report.EntityTypes = types;

@@ -50,6 +50,10 @@ namespace IR_Collect.Analysis.Correlation
         public string GeneratedAt { get; set; }
         [DataMember(Name = "export_schema")]
         public string ExportSchema { get; set; }
+        [DataMember(Name = "tool_name")]
+        public string ToolName { get; set; }
+        [DataMember(Name = "tool_version")]
+        public string ToolVersion { get; set; }
         [DataMember(Name = "analysis_mode")]
         public string AnalysisMode { get; set; }
         [DataMember(Name = "host_count")]
@@ -298,6 +302,8 @@ namespace IR_Collect.Analysis.Correlation
             var payload = new FullLogExportPayload();
             payload.GeneratedAt = DateTime.UtcNow.ToString("o");
             payload.ExportSchema = "full_log_v3";
+            payload.ToolName = IR_Collect.BuildInfo.ToolName;
+            payload.ToolVersion = IR_Collect.BuildInfo.Version;
             payload.AnalysisMode = "facts_only";
             payload.Hosts = hosts ?? new List<FullLogHostSummary>();
             payload.HostCount = payload.Hosts.Count;

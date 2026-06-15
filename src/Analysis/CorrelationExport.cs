@@ -49,6 +49,8 @@ namespace IR_Collect.Analysis
     {
         [DataMember(Name = "generated_at")] public string GeneratedAt { get; set; }
         [DataMember(Name = "export_schema")] public string ExportSchema { get; set; }
+        [DataMember(Name = "tool_name")] public string ToolName { get; set; }
+        [DataMember(Name = "tool_version")] public string ToolVersion { get; set; }
         [DataMember(Name = "host_count")] public int HostCount { get; set; }
         [DataMember(Name = "ready_hosts")] public int ReadyHosts { get; set; }
         [DataMember(Name = "skipped_hosts")] public int SkippedHosts { get; set; }

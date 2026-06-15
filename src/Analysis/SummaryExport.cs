@@ -16,6 +16,10 @@ namespace IR_Collect.Analysis
         public string GeneratedAt { get; set; }
         [DataMember(Name = "export_schema")]
         public string ExportSchema { get; set; }
+        [DataMember(Name = "tool_name")]
+        public string ToolName { get; set; }
+        [DataMember(Name = "tool_version")]
+        public string ToolVersion { get; set; }
         [DataMember(Name = "analysis_mode")]
         public string AnalysisMode { get; set; }
         /// <summary>Case collection mode profile when recorded in collection_coverage.json (Standard, TriageFast, ForensicStrict).</summary>
@@ -98,6 +102,8 @@ namespace IR_Collect.Analysis
             var copy = new SummaryPayload();
             copy.GeneratedAt = payload.GeneratedAt;
             copy.ExportSchema = payload.ExportSchema;
+            copy.ToolName = payload.ToolName;
+            copy.ToolVersion = payload.ToolVersion;
             copy.AnalysisMode = payload.AnalysisMode;
             copy.CollectionModeProfile = payload.CollectionModeProfile;
             copy.Host = payload.Host;
