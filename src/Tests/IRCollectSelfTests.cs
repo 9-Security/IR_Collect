@@ -50,6 +50,8 @@ namespace IR_Collect.Tests
             failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
             failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
             failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
+            failed += RunOne("RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer", RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
             failed += RunOne("EventLog_1149_message_fallback_adds_target_user", EventLog_1149_message_fallback_adds_target_user, sb) ? 0 : 1;
@@ -524,6 +526,99 @@ namespace IR_Collect.Tests
             return string.Equals(e.Path, @"C:\Windows\System32\evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.FileName, "evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.LastModifiedTime, "2025-03-14T09:30:00", StringComparison.Ordinal);
+        }
+
+        // Phase 3.1b: the deriver writes raw-hive results to CSV via ExecutionArtifactCsvWriter; this
+        // proves that CSV is byte-format-compatible with the normalizer that reads it back (the exact
+        // divergence risk for Amcache/ShimCache, which can't be run here without elevation). A real hive
+        // can't be synthesized, so we feed the shared writer a synthetic parse result and round-trip it.
+        private static bool RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_amcsv_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                var parsed = new IR_Collect.Utils.AmcacheParseResult();
+                parsed.Files.Add(new IR_Collect.Utils.AmcacheFileRecord
+                {
+                    RegistryKey = "Root\\InventoryApplicationFile\\evil",
+                    Path = "C:\\Temp\\evil.exe",
+                    FileName = "evil.exe",
+                    Hash = "1111111111111111111111111111111111111111",
+                    ProductName = "Evil",
+                    Publisher = "ACME",
+                    ProgramId = "0000abcd",
+                    FirstObservedTime = "2025-01-03 08:00:00",
+                    ExecutedTime = "2025-01-03 09:00:00"
+                });
+                string progCsv = Path.Combine(dir, IR_Collect.ArtifactNames.AmcacheProgramsCsv);
+                string fileCsv = Path.Combine(dir, IR_Collect.ArtifactNames.AmcacheFilesCsv);
+                IR_Collect.Collectors.ExecutionArtifactCsvWriter.WriteAmcacheCsvs(parsed, progCsv, fileCsv);
+
+                var facts = IR_Collect.Analysis.Correlation.Normalizers.AmcacheNormalizer.ToFacts(progCsv, fileCsv);
+                if (facts == null || facts.Count < 1) return false;
+                // The round-tripped file row must surface its path + sha1 hash as entities.
+                bool hasPath = facts.Any(f => f.EntityRefs != null && f.EntityRefs.Any(e =>
+                    string.Equals(e.Value, "C:\\Temp\\evil.exe", StringComparison.OrdinalIgnoreCase)));
+                bool hasHash = facts.Any(f => f.EntityRefs != null && f.EntityRefs.Any(e =>
+                    e.Value != null && e.Value.IndexOf("1111111111111111111111111111111111111111", StringComparison.OrdinalIgnoreCase) >= 0));
+                return hasPath && hasHash;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        // Phase 3.1: ingest an arbitrary folder of already-collected artifacts (no ZIP, no live host),
+        // run the real facts pipeline, and emit a headless summary. Uses an mft_preview.csv so the MFT
+        // normalizer produces facts deterministically without needing a real hive/ESE sample.
+        private static bool AnalyzeFolder_ingests_artifacts_and_builds_summary()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_analyze_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.SystemInfoTxt),
+                    "Hostname: TESTHOST\r\nOS: Windows\r\n", Encoding.UTF8);
+                // mft_preview.csv: header + one row with >=14 columns (FullPath at [4], StdCreated at [6]).
+                var csv = new StringBuilder();
+                csv.AppendLine("RecordNumber,InUse,IsDir,FileName,FullPath,Size,StdCreated,StdModified,StdMftModified,StdAccessed,FnCreated,FnModified,FnMftModified,FnAccessed");
+                csv.AppendLine("42,True,False,evil.exe,C:\\Temp\\evil.exe,1024,2025-01-02 10:00:00,2025-01-02 10:00:00,2025-01-02 10:00:00,2025-01-02 10:00:00,,,,");
+                File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.MftPreviewCsv), csv.ToString(), Encoding.UTF8);
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+                if (!string.Equals(c.Hostname, "TESTHOST", StringComparison.Ordinal)) return false;
+                if (c.MftEntries == null || c.MftEntries.Count < 1) return false;
+                // Note: mft_preview.csv and system_info.txt are consumed/skipped by the scan (the MFT
+                // preview becomes MftEntries), so they are intentionally NOT in the Artifacts dict.
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                c.FactStore = store;
+                if (store == null || store.Facts == null || store.Facts.Count < 1) return false; // MFT facts
+
+                var payload = IR_Collect.Analysis.AnalysisCli.BuildHeadlessSummary(c);
+                if (payload == null || payload.FactCount < 1) return false;
+                if (!string.Equals(payload.ExportSchema, "summary_v3", StringComparison.Ordinal)) return false;
+
+                string json = IR_Collect.Analysis.SummaryExport.Serialize(payload);
+                return !string.IsNullOrEmpty(json)
+                    && json.IndexOf("summary_v3", StringComparison.Ordinal) >= 0
+                    && json.IndexOf("TESTHOST", StringComparison.Ordinal) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+            }
         }
 
         private static bool FixtureCorpus_committed_files_match_builder_and_parse_as_expected()
