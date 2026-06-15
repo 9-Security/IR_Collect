@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-06-15
+
+> 本版主題:**Local Collect 收集速度大幅提升（實機驗證 ~16 分 → ~5.5 分）**，鑑識零妥協。
+
 ### Changed
 - **事件日誌過濾跨 log 平行化（實測:Event Logs 為收集最大宗）**：實機計時顯示 `Event Logs` 達 **200.8 秒**（收集器總計 378 秒中最大宗）——因每個 log 各自吃滿 90 秒格式化預算、又**逐一序列跑**。`LogCollector.TryCollectFiltered` 改用 `Parallel.ForEach`（degree = min(4, CPU 數)）平行過濾各 log：每個 log 各自獨立的 reader + 輸出 CSV、各自的格式化預算,彼此不相干;`successCount` 改用 `Interlocked`、`Logger` 本就 thread-safe（`lock`）。對 live log 唯讀。預期 Event Logs 由 ~200 秒降到 ~單一最慢 log（~90 秒）。
 - **打包壓縮改用 Fastest（預設；6.7× 快、體積僅 +2%）**：`PackDir` 原本對整個輸出（含 2.8 GB MFT）用 `CompressionLevel.Optimal`。實測 400 MB MFT-like 資料：**Optimal 43.6s→198MB vs Fastest 6.5s→202MB**（6.7× 快、僅大 2%）；對 ~3 GB 收集約由 ~5 分鐘降到 ~50 秒、體積幾乎不變。改為可由 `config.ini` 的 `CollectionZipCompression`（`Fastest`｜`Optimal`｜`NoCompression`）設定，**預設 `Fastest`**（live response 重速度；ZIP 為傳輸用暫存物）。打包時 console 提示目前壓縮等級。
