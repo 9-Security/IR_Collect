@@ -117,6 +117,8 @@ namespace IR_Collect.Analysis
             }
             p.ParserNotes = notes.ToList();
             p.FactSamples = facts.Take(100).ToList();
+            p.EvidenceDigest = c.EvidenceDigest;
+            p.Evidence = c.EvidenceFiles;
             p.LoadWarnings = c.LoadWarnings != null ? new List<string>(c.LoadWarnings) : new List<string>();
             p.CollectionCoverage = c.CollectionCoverage;
             p.MemoryAcquisition = c.MemoryAcquisitionMeta;

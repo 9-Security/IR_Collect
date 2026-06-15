@@ -30,6 +30,7 @@ src\Analysis\AnalystWorkflow.cs
 src\Analysis\GuidedHunt.cs
 src\Analysis\ParserNoteSummaryBuilder.cs
 src\Analysis\SummaryExport.cs
+src\Analysis\EvidenceManifest.cs
 src\Analysis\AnalysisCli.cs
 src\Analysis\RawArtifactCsvDeriver.cs
 src\Analysis\CorrelationExport.cs

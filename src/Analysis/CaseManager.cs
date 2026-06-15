@@ -32,6 +32,10 @@ namespace IR_Collect.Analysis
         public MemoryAcquisitionRecord MemoryAcquisitionMeta { get; set; }
         /// <summary>External memory analysis handoff sidecar (output orchestration only; no in-app memory verdicts).</summary>
         public MemoryAnalysisRecord MemoryAnalysisMeta { get; set; }
+        /// <summary>Phase 5.2: SHA-256 manifest of the input files as received (folder intake only).</summary>
+        public List<EvidenceFile> EvidenceFiles { get; set; }
+        /// <summary>Phase 5.2: rollup digest over the evidence manifest (one hash for the whole input set).</summary>
+        public string EvidenceDigest { get; set; }
 
         public CaseData()
         {
@@ -454,6 +458,16 @@ namespace IR_Collect.Analysis
                     if (line.StartsWith("Hostname:")) newCase.Hostname = line.Substring(9).Trim();
             }
             if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = leaf;
+
+            // Phase 5.2: hash the input files AS RECEIVED (before we derive any CSVs) so an analysis
+            // report can be cryptographically tied to exactly the evidence it consumed.
+            try
+            {
+                EvidenceManifestResult em = EvidenceManifest.HashFolder(newCase.ExtractPath);
+                newCase.EvidenceFiles = em.Files;
+                newCase.EvidenceDigest = em.Digest;
+            }
+            catch (Exception ex) { Logger.Warning("LoadCaseFromFolder evidence hash: " + (ex.Message ?? "")); }
 
             // Phase 3.1b: derive Amcache/ShimCache/SRUM CSVs from any RAW hive/ESE files present, so the
             // scan below registers them and the normalizers produce facts (foreign triage folders ship raw

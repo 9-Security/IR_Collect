@@ -59,6 +59,10 @@ namespace IR_Collect.Analysis
         public List<string> ParserNotes { get; set; }
         [DataMember(Name = "fact_samples")]
         public List<Fact> FactSamples { get; set; }
+        [DataMember(Name = "evidence_digest")]
+        public string EvidenceDigest { get; set; }
+        [DataMember(Name = "evidence")]
+        public List<EvidenceFile> Evidence { get; set; }
         [DataMember(Name = "analyst_workflow")]
         public AnalystWorkflowState AnalystWorkflow { get; set; }
         [DataMember(Name = "guided_hunt")]
@@ -127,6 +131,8 @@ namespace IR_Collect.Analysis
             copy.MemoryAcquisition = payload.MemoryAcquisition;
             copy.MemoryAnalysis = payload.MemoryAnalysis;
             copy.FactSamples = CopyFactsWithSafeTimes(payload.FactSamples);
+            copy.EvidenceDigest = payload.EvidenceDigest;
+            copy.Evidence = payload.Evidence;
             return copy;
         }
 

@@ -157,7 +157,14 @@ namespace IR_Collect.Analysis
             report.PerHopFanout = options.MaxResults;
             report.HostCount = caseList.Count;
             foreach (CaseData c in caseList)
-                report.Hosts.Add(new CorrelationHostInfo { Host = c.Hostname, CaseId = c.CaseID, FactCount = c.FactStore != null ? c.FactStore.Count : 0 });
+                report.Hosts.Add(new CorrelationHostInfo
+                {
+                    Host = c.Hostname,
+                    CaseId = c.CaseID,
+                    FactCount = c.FactStore != null ? c.FactStore.Count : 0,
+                    EvidenceDigest = c.EvidenceDigest,
+                    EvidenceFileCount = c.EvidenceFiles != null ? c.EvidenceFiles.Count : 0
+                });
 
             var nodes = new Dictionary<string, GraphNodeDto>(StringComparer.OrdinalIgnoreCase);
             var edges = new Dictionary<string, GraphEdgeDto>(StringComparer.OrdinalIgnoreCase);
