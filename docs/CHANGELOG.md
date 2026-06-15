@@ -7,8 +7,9 @@
 ## [Unreleased]
 
 ### Changed
+- **事件日誌過濾跨 log 平行化（實測:Event Logs 為收集最大宗）**：實機計時顯示 `Event Logs` 達 **200.8 秒**（收集器總計 378 秒中最大宗）——因每個 log 各自吃滿 90 秒格式化預算、又**逐一序列跑**。`LogCollector.TryCollectFiltered` 改用 `Parallel.ForEach`（degree = min(4, CPU 數)）平行過濾各 log：每個 log 各自獨立的 reader + 輸出 CSV、各自的格式化預算,彼此不相干;`successCount` 改用 `Interlocked`、`Logger` 本就 thread-safe（`lock`）。對 live log 唯讀。預期 Event Logs 由 ~200 秒降到 ~單一最慢 log（~90 秒）。
 - **打包壓縮改用 Fastest（預設；6.7× 快、體積僅 +2%）**：`PackDir` 原本對整個輸出（含 2.8 GB MFT）用 `CompressionLevel.Optimal`。實測 400 MB MFT-like 資料：**Optimal 43.6s→198MB vs Fastest 6.5s→202MB**（6.7× 快、僅大 2%）；對 ~3 GB 收集約由 ~5 分鐘降到 ~50 秒、體積幾乎不變。改為可由 `config.ini` 的 `CollectionZipCompression`（`Fastest`｜`Optimal`｜`NoCompression`）設定，**預設 `Fastest`**（live response 重速度；ZIP 為傳輸用暫存物）。打包時 console 提示目前壓縮等級。
-- **收集每步加上計時**：`RunCollectorStep` 與打包步驟現在印出各步耗時（`[t] <step> done in N.Ns`），讓最慢的收集器一目了然、便於後續針對性優化。
+- **收集每步加上計時**：`RunCollectorStep` 與打包步驟現在印出各步耗時（`[t] <step> done in N.Ns`），並把各步耗時（slowest-first + 總計）寫入收集輸出的 `collection_timing.txt`（GUI 模式不顯示 console，改由此檔取得），讓最慢的收集器一目了然、便於後續針對性優化。
 - **事件日誌過濾大幅加速（不丟事件）**：`EventLogFilteredCsvExporter` 每筆事件呼叫 `record.FormatDescription()` + `LevelDisplayName` + `TaskDisplayName`（皆需載入發行者資源範本），在大型 log（尤其 Security）成為瓶頸——對真實 20 MB Security.evtx 實測 **113.7 ms/筆**（≈ 1 萬筆要 ~19 分鐘）。新增**每個 log 的格式化時間預算**（`config.ini` 的 `EventLogMessageFormatBudgetSeconds`，預設 90 秒；`0`=不限）：超過預算後仍**保留每一筆事件與完整結構化 EventData**（normalizer 實際使用的欄位、不受影響），僅把 message／level／task 的「人類可讀顯示字串」降級為便宜的結構化／數值等價值。實測降級模式 **0.1 ms/筆（約 1022× 加速）**，Security log 由 ~19 分鐘降到 ~90 秒。超出預算時於 console 提示。既有 EventLog normalizer 自測全綠（契約不變）。
 
 ## [0.23.0] — 2026-06-15

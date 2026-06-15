@@ -99,6 +99,8 @@ namespace IR_Collect
 
             File.WriteAllText(Path.Combine(outputDir, ArtifactNames.SystemInfoTxt), "Hostname: " + Environment.MachineName + "\r\nOS: " + Environment.OSVersion, new System.Text.UTF8Encoding(false));
 
+            lock (_stepTimings) { _stepTimings.Clear(); }
+
             report("Collecting System Info...");
             RunCollectorStep("System Info", delegate { IR_Collect.Collectors.SystemCollector.Collect(outputDir); }, failedSteps);
             
@@ -252,6 +254,9 @@ namespace IR_Collect
                 Console.WriteLine("Waiting for file locks to release (" + delaySec + "s)...");
                 System.Threading.Thread.Sleep(delaySec * 1000);
             }
+
+            // Write the per-step timing breakdown into the output so it is captured in the ZIP.
+            try { WriteCollectionTiming(outputDir); } catch (Exception ex) { Logger.Warning("WriteCollectionTiming: " + (ex.Message ?? "")); }
 
             // Package Output
             string zipPath = finalEvidenceId + ".zip";
@@ -1027,6 +1032,11 @@ namespace IR_Collect
             }
         }
 
+        // Per-collection step timings, written to collection_timing.txt before packaging so the slowest
+        // collectors are visible even in GUI mode (where Console output is not displayed).
+        private static readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>> _stepTimings =
+            new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>>();
+
         private static void RunCollectorStep(string stepName, Action action, System.Collections.Generic.List<string> failedSteps)
         {
             var sw = Stopwatch.StartNew();
@@ -1043,9 +1053,27 @@ namespace IR_Collect
             finally
             {
                 sw.Stop();
-                // Per-step timing so the slowest collectors are visible in the console/log.
-                Console.WriteLine(string.Format("    [t] {0} done in {1:N1}s", stepName, sw.Elapsed.TotalSeconds));
+                double sec = sw.Elapsed.TotalSeconds;
+                // Per-step timing: shown on the console (CLI) and persisted to collection_timing.txt.
+                lock (_stepTimings) { _stepTimings.Add(new System.Collections.Generic.KeyValuePair<string, double>(stepName, sec)); }
+                Console.WriteLine(string.Format("    [t] {0} done in {1:N1}s", stepName, sec));
             }
+        }
+
+        // Write a sorted (slowest-first) per-step timing file into the collection output, so the timing
+        // breakdown is available from the ZIP regardless of GUI/CLI console capture.
+        private static void WriteCollectionTiming(string outputDir)
+        {
+            System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>> snapshot;
+            lock (_stepTimings) { snapshot = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, double>>(_stepTimings); }
+            if (snapshot.Count == 0) return;
+            double total = 0; foreach (var t in snapshot) total += t.Value;
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Step\tSeconds");
+            foreach (var t in snapshot.OrderByDescending(x => x.Value))
+                sb.AppendLine(t.Key + "\t" + t.Value.ToString("F1"));
+            sb.AppendLine("TOTAL_collectors\t" + total.ToString("F1"));
+            File.WriteAllText(Path.Combine(outputDir, "collection_timing.txt"), sb.ToString(), new System.Text.UTF8Encoding(false));
         }
 
 
