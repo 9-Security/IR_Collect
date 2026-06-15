@@ -218,6 +218,16 @@ namespace IR_Collect
             }
         }
 
+        private void BtnImportFolder_Click(object sender, EventArgs e)
+        {
+            using (var dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = "Select a folder of already-collected artifacts (triage output / unzipped case).";
+                if (dlg.ShowDialog() == DialogResult.OK && !string.IsNullOrEmpty(dlg.SelectedPath))
+                    LoadCaseFolder(dlg.SelectedPath);
+            }
+        }
+
         private void MainForm_DragDrop(object sender, DragEventArgs e)
         {
             if (e == null || e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
@@ -242,7 +252,32 @@ namespace IR_Collect
             try {
                 Cursor.Current = Cursors.WaitCursor;
                 var c = IR_Collect.Analysis.CaseManager.LoadCase(path);
+                return RegisterLoadedCase(c);
+            }
+            catch (Exception ex) { MessageBox.Show("Load Failed: " + ex.Message); Cursor.Current = Cursors.Default; }
+            return false;
+        }
 
+        // Load a folder of already-collected artifacts (Phase 3.1 LoadCaseFromFolder) into the host tree,
+        // exactly like a ZIP case. Surfaces the analysis-layer front door in the GUI.
+        private bool LoadCaseFolder(string folder)
+        {
+            try
+            {
+                Cursor.Current = Cursors.WaitCursor;
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(folder);
+                return RegisterLoadedCase(c);
+            }
+            catch (Exception ex) { MessageBox.Show("Folder Load Failed: " + ex.Message); Cursor.Current = Cursors.Default; }
+            return false;
+        }
+
+        // Shared post-load wiring used by both ZIP (LoadCase) and folder (LoadCaseFolder) intake:
+        // add the host node, surface load warnings, and kick off the background Fact Store build.
+        private bool RegisterLoadedCase(IR_Collect.Analysis.CaseData c)
+        {
+            try
+            {
                 TreeNode node = new TreeNode(c.Hostname);
                 node.Tag = c;
                 treeHosts.Nodes.Add(node);

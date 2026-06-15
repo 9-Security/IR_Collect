@@ -135,6 +135,11 @@ namespace IR_Collect
             itemOpen.ShortcutKeyDisplayString = "Ctrl+O";
             itemOpen.Click += (s, e) => BtnImport_Click(s, e);
             menuFile.DropDownItems.Add(itemOpen);
+            var itemOpenFolder = new ToolStripMenuItem("Open Folder (triage)...");
+            itemOpenFolder.ShortcutKeys = Keys.Control | Keys.Shift | Keys.O;
+            itemOpenFolder.ShortcutKeyDisplayString = "Ctrl+Shift+O";
+            itemOpenFolder.Click += (s, e) => BtnImportFolder_Click(s, e);
+            menuFile.DropDownItems.Add(itemOpenFolder);
             menuFile.DropDownItems.Add("-");
             menuFile.DropDownItems.Add("Clear all hosts", null, (s, e) => RunClearAllHosts());
             menuFile.DropDownItems.Add("-");
