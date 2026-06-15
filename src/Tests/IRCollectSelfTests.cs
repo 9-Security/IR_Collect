@@ -54,6 +54,7 @@ namespace IR_Collect.Tests
             failed += RunOne("RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer", RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer, sb) ? 0 : 1;
             failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
             failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
+            failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -584,6 +585,46 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Phase 5.2: the input folder is SHA-256-hashed at load time and the digest + per-file manifest
+        // must reach the summary output, tying the report to exactly the evidence it consumed. We use the
+        // textbook SHA-256 of "abc" as a known-answer check on the hashing.
+        private static bool EvidenceManifest_hashes_inputs_and_summary_carries_digest()
+        {
+            const string knownAbcSha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_ev_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                // Exactly the 3 bytes "abc" (UTF8 no BOM) so the SHA-256 is the textbook value.
+                File.WriteAllText(Path.Combine(dir, "evidence.bin"), "abc", new UTF8Encoding(false));
+
+                var em = IR_Collect.Analysis.EvidenceManifest.HashFolder(dir);
+                var hit = em.Files.FirstOrDefault(x => x.RelPath != null && x.RelPath.EndsWith("evidence.bin", StringComparison.OrdinalIgnoreCase));
+                if (hit == null || !string.Equals(hit.Sha256, knownAbcSha256, StringComparison.OrdinalIgnoreCase)) return false;
+                if (hit.SizeBytes != 3) return false;
+                if (string.IsNullOrEmpty(em.Digest)) return false;
+
+                // The digest + manifest must flow through LoadCaseFromFolder into the summary output.
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c.EvidenceFiles == null || !c.EvidenceFiles.Any(x => string.Equals(x.Sha256, knownAbcSha256, StringComparison.OrdinalIgnoreCase))) return false;
+                if (!string.Equals(c.EvidenceDigest, em.Digest, StringComparison.OrdinalIgnoreCase)) return false;
+
+                c.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                var payload = IR_Collect.Analysis.AnalysisCli.BuildHeadlessSummary(c);
+                string json = IR_Collect.Analysis.SummaryExport.Serialize(payload);
+                return json.IndexOf("evidence_digest", StringComparison.Ordinal) >= 0
+                    && json.IndexOf(knownAbcSha256, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
             }
         }
 

@@ -17,6 +17,8 @@ namespace IR_Collect.Analysis
         [DataMember(Name = "host")] public string Host { get; set; }
         [DataMember(Name = "case_id")] public string CaseId { get; set; }
         [DataMember(Name = "fact_count")] public int FactCount { get; set; }
+        [DataMember(Name = "evidence_digest")] public string EvidenceDigest { get; set; }
+        [DataMember(Name = "evidence_file_count")] public int EvidenceFileCount { get; set; }
     }
 
     [DataContract]

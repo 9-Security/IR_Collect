@@ -99,7 +99,9 @@ namespace IR_Collect.Analysis
                 {
                     Host = c.Hostname,
                     CaseId = c.CaseID,
-                    FactCount = c.FactStore != null ? c.FactStore.Count : 0
+                    FactCount = c.FactStore != null ? c.FactStore.Count : 0,
+                    EvidenceDigest = c.EvidenceDigest,
+                    EvidenceFileCount = c.EvidenceFiles != null ? c.EvidenceFiles.Count : 0
                 });
             }
 
