@@ -290,38 +290,7 @@ namespace IR_Collect.Collectors
             try
             {
                 ShimCacheParseResult parsed = ShimCacheParser.ParseFromLiveRegistry();
-                using (var sw = new StreamWriter(outFile, false, new UTF8Encoding(false)))
-                {
-                    sw.WriteLine("RegistryPath,ValueName,EntryIndex,Path,FileName,LastModifiedTime,DataHashPrefix,ParserNote");
-                    foreach (ShimCacheEntryRecord row in parsed.Entries)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(row.RegistryPath),
-                            CsvUtils.EscapeField(row.ValueName),
-                            CsvUtils.EscapeField(row.EntryIndex.ToString(CultureInfo.InvariantCulture)),
-                            CsvUtils.EscapeField(row.Path),
-                            CsvUtils.EscapeField(row.FileName),
-                            CsvUtils.EscapeField(row.LastModifiedTime),
-                            CsvUtils.EscapeField(row.DataHashPrefix),
-                            CsvUtils.EscapeField(row.ParserNote)
-                        }));
-                    }
-                    foreach (string note in parsed.ParserNotes)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(@"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\AppCompatCache"),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField("0"),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(note)
-                        }));
-                    }
-                }
+                ExecutionArtifactCsvWriter.WriteShimCacheEntriesCsv(parsed, outFile);
                 Console.WriteLine("    + ShimCache entry-level CSV exported.");
                 return true;
             }
@@ -362,63 +331,7 @@ namespace IR_Collect.Collectors
             try
             {
                 AmcacheParseResult parsed = AmcacheParser.ParseHive(hivePath);
-
-                using (var sw = new StreamWriter(programsCsv, false, new UTF8Encoding(false)))
-                {
-                    sw.WriteLine("RegistryKey,ProgramName,Publisher,Version,ProductName,InstallDate,UninstallString,ProgramId,ParserNote");
-                    foreach (AmcacheProgramRecord row in parsed.Programs)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(row.RegistryKey),
-                            CsvUtils.EscapeField(row.ProgramName),
-                            CsvUtils.EscapeField(row.Publisher),
-                            CsvUtils.EscapeField(row.Version),
-                            CsvUtils.EscapeField(row.ProductName),
-                            CsvUtils.EscapeField(row.InstallDate),
-                            CsvUtils.EscapeField(row.UninstallString),
-                            CsvUtils.EscapeField(row.ProgramId),
-                            CsvUtils.EscapeField(row.ParserNote)
-                        }));
-                    }
-                    foreach (string note in parsed.ParserNotes)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(note)
-                        }));
-                    }
-                }
-
-                using (var sw = new StreamWriter(filesCsv, false, new UTF8Encoding(false)))
-                {
-                    sw.WriteLine("RegistryKey,Path,FileName,Hash,ProductName,Publisher,ProgramId,FirstObservedTime,ExecutedTime,ParserNote");
-                    foreach (AmcacheFileRecord row in parsed.Files)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(row.RegistryKey),
-                            CsvUtils.EscapeField(row.Path),
-                            CsvUtils.EscapeField(row.FileName),
-                            CsvUtils.EscapeField(row.Hash),
-                            CsvUtils.EscapeField(row.ProductName),
-                            CsvUtils.EscapeField(row.Publisher),
-                            CsvUtils.EscapeField(row.ProgramId),
-                            CsvUtils.EscapeField(row.FirstObservedTime),
-                            CsvUtils.EscapeField(row.ExecutedTime),
-                            CsvUtils.EscapeField(row.ParserNote)
-                        }));
-                    }
-                }
-
+                ExecutionArtifactCsvWriter.WriteAmcacheCsvs(parsed, programsCsv, filesCsv);
                 Console.WriteLine("    + Amcache structured CSV exported.");
                 return true;
             }
@@ -463,71 +376,7 @@ namespace IR_Collect.Collectors
             try
             {
                 SrumExportResult export = SrumExporter.Export(dbPath);
-                using (var sw = new StreamWriter(networkCsv, false, new UTF8Encoding(false)))
-                {
-                    sw.WriteLine("Timestamp,AppId,Path,User,RemoteIP,Interface,BytesSent,BytesReceived,ParserNote");
-                    foreach (SrumNetworkRecord row in export.NetworkRows)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(row.Timestamp),
-                            CsvUtils.EscapeField(row.AppId),
-                            CsvUtils.EscapeField(row.Path),
-                            CsvUtils.EscapeField(row.User),
-                            CsvUtils.EscapeField(row.RemoteIP),
-                            CsvUtils.EscapeField(row.InterfaceName),
-                            CsvUtils.EscapeField(row.BytesSent),
-                            CsvUtils.EscapeField(row.BytesReceived),
-                            CsvUtils.EscapeField(row.ParserNote)
-                        }));
-                    }
-                    foreach (string note in export.ParserNotes)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(note)
-                        }));
-                    }
-                }
-
-                using (var sw = new StreamWriter(appCsv, false, new UTF8Encoding(false)))
-                {
-                    sw.WriteLine("Timestamp,AppId,Path,User,ForegroundCycleTime,BackgroundCycleTime,ParserNote");
-                    foreach (SrumAppRecord row in export.AppRows)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(row.Timestamp),
-                            CsvUtils.EscapeField(row.AppId),
-                            CsvUtils.EscapeField(row.Path),
-                            CsvUtils.EscapeField(row.User),
-                            CsvUtils.EscapeField(row.ForegroundCycleTime),
-                            CsvUtils.EscapeField(row.BackgroundCycleTime),
-                            CsvUtils.EscapeField(row.ParserNote)
-                        }));
-                    }
-                    foreach (string note in export.ParserNotes)
-                    {
-                        sw.WriteLine(string.Join(",", new string[]
-                        {
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(""),
-                            CsvUtils.EscapeField(note)
-                        }));
-                    }
-                }
+                ExecutionArtifactCsvWriter.WriteSrumCsvs(export, networkCsv, appCsv);
                 Console.WriteLine("    + SRUM structured CSV exported.");
                 return true;
             }

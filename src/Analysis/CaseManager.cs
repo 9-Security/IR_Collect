@@ -455,6 +455,12 @@ namespace IR_Collect.Analysis
             }
             if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = leaf;
 
+            // Phase 3.1b: derive Amcache/ShimCache/SRUM CSVs from any RAW hive/ESE files present, so the
+            // scan below registers them and the normalizers produce facts (foreign triage folders ship raw
+            // artifacts, not our CSVs). Best-effort; writes nothing for artifacts that need elevation.
+            try { RawArtifactCsvDeriver.DeriveInto(newCase.ExtractPath, newCase.LoadWarnings); }
+            catch (Exception ex) { Logger.Warning("LoadCaseFromFolder derive: " + (ex.Message ?? "")); }
+
             int mftMax = GetMftMaxEntries();
             string mftBinPath = null, mftPreviewPath = null, factStoreDbPath = null;
             foreach (string f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))

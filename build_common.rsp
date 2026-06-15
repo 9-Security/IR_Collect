@@ -30,6 +30,7 @@ src\Analysis\GuidedHunt.cs
 src\Analysis\ParserNoteSummaryBuilder.cs
 src\Analysis\SummaryExport.cs
 src\Analysis\AnalysisCli.cs
+src\Analysis\RawArtifactCsvDeriver.cs
 src\Analysis\SummaryPayloadAiRedactor.cs
 src\Analysis\Correlation\Fact.cs
 src\Analysis\Correlation\FactProvenanceHelper.cs
@@ -67,6 +68,7 @@ src\Analysis\Correlation\Normalizers\WmiPersistenceNormalizer.cs
 src\Collectors\SystemCollector.cs
 src\Collectors\PersistenceCollector.cs
 src\Collectors\ExecutionArtifactCollector.cs
+src\Collectors\ExecutionArtifactCsvWriter.cs
 src\Collectors\LogCollector.cs
 src\Collectors\UsnCollector.cs
 src\Collectors\BrowserCollector.cs
