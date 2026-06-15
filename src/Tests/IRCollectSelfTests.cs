@@ -52,6 +52,8 @@ namespace IR_Collect.Tests
             failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
             failed += RunOne("RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer", RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer, sb) ? 0 : 1;
+            failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
+            failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
             failed += RunOne("EventLog_1149_message_fallback_adds_target_user", EventLog_1149_message_fallback_adds_target_user, sb) ? 0 : 1;
@@ -526,6 +528,115 @@ namespace IR_Collect.Tests
             return string.Equals(e.Path, @"C:\Windows\System32\evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.FileName, "evil.exe", StringComparison.Ordinal)
                 && string.Equals(e.LastModifiedTime, "2025-03-14T09:30:00", StringComparison.Ordinal);
+        }
+
+        // Write a minimal artifact folder: system_info.txt (hostname) + mft_preview.csv with one row for
+        // `path`, so LoadCaseFromFolder + BuildFromCase yield a single MFT Path-entity fact.
+        private static void WriteMiniCaseFolder(string dir, string hostname, string path)
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.SystemInfoTxt), "Hostname: " + hostname + "\r\n", Encoding.UTF8);
+            var csv = new StringBuilder();
+            csv.AppendLine("RecordNumber,InUse,IsDir,FileName,FullPath,Size,StdCreated,StdModified,StdMftModified,StdAccessed,FnCreated,FnModified,FnMftModified,FnAccessed");
+            string name = System.IO.Path.GetFileName(path);
+            csv.AppendLine("7,True,False," + name + "," + path + ",2048,2025-02-01 12:00:00,2025-02-01 12:00:00,2025-02-01 12:00:00,2025-02-01 12:00:00,,,,");
+            File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.MftPreviewCsv), csv.ToString(), Encoding.UTF8);
+        }
+
+        // Phase 3.2: two hosts that each touched the same file path must surface that path as a cross-host
+        // shared entity, and the report must serialize to the correlation_v1 schema.
+        private static bool CorrelateCli_finds_shared_entity_across_two_folders()
+        {
+            string a = Path.Combine(Path.GetTempPath(), "ircol_corrA_" + Guid.NewGuid().ToString("N"));
+            string b = Path.Combine(Path.GetTempPath(), "ircol_corrB_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                const string shared = "C:\\Temp\\shared_evil.exe";
+                WriteMiniCaseFolder(a, "HOSTA", shared);
+                WriteMiniCaseFolder(b, "HOSTB", shared);
+
+                var ca = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(a);
+                ca.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(ca);
+                var cb = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(b);
+                cb.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(cb);
+
+                var report = IR_Collect.Analysis.CorrelationCli.BuildReport(
+                    new[] { ca, cb }, new[] { "Path" }, null);
+                if (report == null || report.HostCount != 2) return false;
+
+                var hit = report.SharedEntities.FirstOrDefault(s =>
+                    s.Value != null && s.Value.IndexOf("shared_evil.exe", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (hit == null) return false;
+                if (hit.HostCount != 2) return false;
+                if (!(hit.Hosts.Contains("HOSTA") && hit.Hosts.Contains("HOSTB"))) return false;
+
+                string json = IR_Collect.Analysis.CorrelationExport.Serialize(report);
+                return !string.IsNullOrEmpty(json)
+                    && json.IndexOf("correlation_v1", StringComparison.Ordinal) >= 0
+                    && json.IndexOf("shared_evil.exe", StringComparison.Ordinal) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
+                try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Phase 3.2b: two Amcache file rows share a Publisher but have different paths. Seeding the graph
+        // on a.exe's path must reach b.exe's path only at DEPTH 2 (a.exe --Publisher--> b.exe), proving
+        // genuine multi-hop expansion (not just single-hop co-occurrence).
+        private static bool GraphCli_multi_hop_reaches_sibling_via_shared_publisher()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_graph_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(Path.Combine(dir, IR_Collect.ArtifactNames.SystemInfoTxt), "Hostname: GHOST\r\n", Encoding.UTF8);
+                var parsed = new IR_Collect.Utils.AmcacheParseResult();
+                parsed.Files.Add(new IR_Collect.Utils.AmcacheFileRecord
+                {
+                    RegistryKey = "k1", Path = "C:\\Temp\\a.exe", FileName = "a.exe",
+                    Hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Publisher = "ACMECorp",
+                    ProgramId = "prog1", FirstObservedTime = "2025-01-01 08:00:00"
+                });
+                parsed.Files.Add(new IR_Collect.Utils.AmcacheFileRecord
+                {
+                    RegistryKey = "k2", Path = "C:\\Temp\\b.exe", FileName = "b.exe",
+                    Hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Publisher = "ACMECorp",
+                    ProgramId = "prog2", FirstObservedTime = "2025-01-01 09:00:00"
+                });
+                IR_Collect.Collectors.ExecutionArtifactCsvWriter.WriteAmcacheCsvs(parsed,
+                    Path.Combine(dir, IR_Collect.ArtifactNames.AmcacheProgramsCsv),
+                    Path.Combine(dir, IR_Collect.ArtifactNames.AmcacheFilesCsv));
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                c.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+
+                var g = IR_Collect.Analysis.GraphCli.BuildGraph(new[] { c }, "Path", "C:\\Temp\\a.exe", 2, null);
+                if (g == null) return false;
+                // The shared Publisher must appear at depth 1.
+                bool pubAtDepth1 = g.Nodes.Any(n => string.Equals(n.Type, "Publisher", StringComparison.OrdinalIgnoreCase)
+                    && n.Value != null && n.Value.IndexOf("ACMECorp", StringComparison.OrdinalIgnoreCase) >= 0 && n.Depth == 1);
+                // b.exe is only reachable via the Publisher -> depth 2.
+                bool siblingAtDepth2 = g.Nodes.Any(n => string.Equals(n.Type, "Path", StringComparison.OrdinalIgnoreCase)
+                    && n.Value != null && n.Value.IndexOf("b.exe", StringComparison.OrdinalIgnoreCase) >= 0 && n.Depth == 2);
+                if (!(pubAtDepth1 && siblingAtDepth2)) return false;
+
+                string json = IR_Collect.Analysis.GraphCli.Serialize(g);
+                return !string.IsNullOrEmpty(json) && json.IndexOf("graph_v1", StringComparison.Ordinal) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+            }
         }
 
         // Phase 3.1b: the deriver writes raw-hive results to CSV via ExecutionArtifactCsvWriter; this
