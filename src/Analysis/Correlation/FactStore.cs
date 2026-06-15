@@ -93,6 +93,14 @@ namespace IR_Collect.Analysis.Correlation
                 store.Facts.AddRange(kerberosFacts);
             }
 
+            // Prefetch (.pf) execution evidence: a directory of raw .pf, parsed in-place.
+            string prefetchDir = Path.Combine(basePath, "Prefetch");
+            if (Directory.Exists(prefetchDir))
+            {
+                var prefetchFacts = Normalizers.PrefetchNormalizer.ToFacts(prefetchDir);
+                store.Facts.AddRange(prefetchFacts);
+            }
+
             string memoryAcquisitionPath = ResolvePath(c, basePath, ArtifactNames.MemoryAcquisitionJson);
             if (!string.IsNullOrEmpty(memoryAcquisitionPath))
             {

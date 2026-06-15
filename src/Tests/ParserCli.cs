@@ -43,6 +43,8 @@ namespace IR_Collect.Tests
                 return RunAmcache(file, o);
             if (string.Equals(kind, "shimcache", StringComparison.OrdinalIgnoreCase))
                 return RunShimCache(file, o);
+            if (string.Equals(kind, "prefetch", StringComparison.OrdinalIgnoreCase))
+                return RunPrefetch(file, o);
 
             byte[] data;
             try { data = File.ReadAllBytes(file); }
@@ -212,6 +214,37 @@ namespace IR_Collect.Tests
                 if (string.IsNullOrEmpty(e.Path)) continue;
                 if (n++ > 0) sb.Append(",");
                 sb.Append("{\"p\":").Append(J(e.Path)).Append(",\"t\":").Append(J(e.LastModifiedTime)).Append("}");
+            }
+            sb.Append("]}");
+            o.WriteLine(sb.ToString());
+            return 0;
+        }
+
+        private static int RunPrefetch(string file, TextWriter o)
+        {
+            IR_Collect.Utils.PrefetchEntry e;
+            try { e = IR_Collect.Utils.PrefetchParser.ParseFile(file); }
+            catch (Exception ex)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"prefetch\",\"file\":" + J(file) + ",\"error\":" + J(ex.Message) + "}");
+                return 1;
+            }
+            if (e == null)
+            {
+                o.WriteLine("{\"ok\":false,\"kind\":\"prefetch\",\"file\":" + J(file) + ",\"error\":\"could not parse (not SCCA / decompress failed)\"}");
+                return 1;
+            }
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"kind\":\"prefetch\",\"file\":").Append(J(file));
+            sb.Append(",\"exe\":").Append(J(e.ExecutableName));
+            sb.Append(",\"version\":").Append(e.FormatVersion);
+            sb.Append(",\"runCount\":").Append(e.RunCount);
+            sb.Append(",\"hash\":").Append(J(e.Hash));
+            sb.Append(",\"lastRun\":[");
+            for (int i = 0; i < e.LastRunTimesUtc.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(J(Iso(e.LastRunTimesUtc[i])));
             }
             sb.Append("]}");
             o.WriteLine(sb.ToString());
