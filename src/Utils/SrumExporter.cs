@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Data.OleDb;
 using System.IO;
-using System.Linq;
 using System.Security.Principal;
 using System.Text;
 
@@ -50,13 +47,6 @@ namespace IR_Collect.Utils
 
     public static class SrumExporter
     {
-        private static readonly string[] ProviderCandidates = new[]
-        {
-            "Provider=Microsoft.ACE.OLEDB.16.0;Data Source={0};Persist Security Info=False;",
-            "Provider=Microsoft.ACE.OLEDB.12.0;Data Source={0};Persist Security Info=False;",
-            "Provider=Microsoft.Jet.OLEDB.4.0;Data Source={0};Extended Properties=Esent;"
-        };
-
         private static readonly string[] IdMapTableCandidates = new[]
         {
             "SruDbIdMapTable",
@@ -83,209 +73,132 @@ namespace IR_Collect.Utils
                 return result;
             }
 
-            OleDbConnection conn = null;
-            string providerName = "";
             try
             {
-                conn = OpenConnection(dbPath, out providerName);
-                if (conn == null)
+                using (var ese = new EseReader(dbPath))
                 {
-                    result.FallbackUsed = true;
-                    result.ParserNotes.Add("No available OLE DB provider could open SRUDB.dat on this host.");
-                    return result;
-                }
+                    List<string> tables = ese.GetTableNames();
+                    string idMapTable = ResolveTableName(tables, IdMapTableCandidates);
+                    string networkTable = ResolveTableName(tables, NetworkTableCandidates);
+                    string appTable = ResolveTableName(tables, AppTableCandidates);
 
-                var tableMap = LoadTableMap(conn);
-                var idMap = LoadIdMap(conn, tableMap, result);
-                string networkTable = ResolveTableName(tableMap, NetworkTableCandidates);
-                string appTable = ResolveTableName(tableMap, AppTableCandidates);
+                    Dictionary<long, string> idMap = LoadIdMap(ese, idMapTable, result);
 
-                if (string.IsNullOrWhiteSpace(networkTable))
-                {
-                    result.FallbackUsed = true;
-                    result.ParserNotes.Add("SRUM network usage table not found in this database schema.");
-                }
-                else
-                {
-                    ExtractNetworkRows(conn, networkTable, idMap, result);
-                }
+                    if (string.IsNullOrWhiteSpace(networkTable))
+                    {
+                        result.FallbackUsed = true;
+                        result.ParserNotes.Add("SRUM network usage table not found in this database schema.");
+                    }
+                    else
+                    {
+                        ExtractNetworkRows(ese, networkTable, idMap, result);
+                    }
 
-                if (string.IsNullOrWhiteSpace(appTable))
-                {
-                    result.FallbackUsed = true;
-                    result.ParserNotes.Add("SRUM app usage table not found in this database schema.");
-                }
-                else
-                {
-                    ExtractAppRows(conn, appTable, idMap, result);
-                }
+                    if (string.IsNullOrWhiteSpace(appTable))
+                    {
+                        result.FallbackUsed = true;
+                        result.ParserNotes.Add("SRUM app usage table not found in this database schema.");
+                    }
+                    else
+                    {
+                        ExtractAppRows(ese, appTable, idMap, result);
+                    }
 
-                if (result.NetworkRows.Count == 0 && result.AppRows.Count == 0)
-                {
-                    result.FallbackUsed = true;
-                    result.ParserNotes.Add("SRUM parse completed with provider '" + providerName + "' but extracted no structured rows.");
+                    if (result.NetworkRows.Count == 0 && result.AppRows.Count == 0)
+                    {
+                        result.FallbackUsed = true;
+                        result.ParserNotes.Add("SRUM ESE parse opened the database but extracted no structured rows.");
+                    }
                 }
             }
             catch (Exception ex)
             {
                 result.FallbackUsed = true;
-                result.ParserNotes.Add("SRUM export exception: " + Shorten(ex.Message, 220));
-            }
-            finally
-            {
-                if (conn != null)
-                {
-                    try { conn.Close(); }
-                    catch { }
-                    conn.Dispose();
-                }
+                result.ParserNotes.Add("SRUM ESE export exception: " + Shorten(ex.Message, 220));
             }
             return result;
         }
 
-        private static OleDbConnection OpenConnection(string dbPath, out string providerName)
-        {
-            providerName = "";
-            foreach (string template in ProviderCandidates)
-            {
-                string connStr = string.Format(template, dbPath);
-                OleDbConnection conn = null;
-                try
-                {
-                    conn = new OleDbConnection(connStr);
-                    conn.Open();
-                    providerName = template.Split(';')[0];
-                    return conn;
-                }
-                catch (Exception ex)
-                {
-                    if (conn != null) conn.Dispose();
-                    Logger.Warning("SrumExporter provider failed: " + ex.Message);
-                }
-            }
-            return null;
-        }
-
-        private static Dictionary<string, string> LoadTableMap(OleDbConnection conn)
-        {
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            DataTable schema = conn.GetOleDbSchemaTable(OleDbSchemaGuid.Tables, null);
-            if (schema == null) return map;
-            foreach (DataRow row in schema.Rows)
-            {
-                string tableType = SafeText(row["TABLE_TYPE"]);
-                if (!string.Equals(tableType, "TABLE", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                string tableName = SafeText(row["TABLE_NAME"]);
-                if (string.IsNullOrWhiteSpace(tableName))
-                    continue;
-                string normalized = NormalizeGuidLikeName(tableName);
-                if (!map.ContainsKey(normalized))
-                    map[normalized] = tableName;
-            }
-            return map;
-        }
-
-        private static Dictionary<long, string> LoadIdMap(OleDbConnection conn, Dictionary<string, string> tableMap, SrumExportResult result)
+        private static Dictionary<long, string> LoadIdMap(EseReader ese, string idMapTable, SrumExportResult result)
         {
             var idMap = new Dictionary<long, string>();
-            string idMapTable = ResolveTableName(tableMap, IdMapTableCandidates);
             if (string.IsNullOrWhiteSpace(idMapTable))
             {
                 result.FallbackUsed = true;
                 result.ParserNotes.Add("SRUM IdMap table not found; AppId/User mapping may stay numeric.");
                 return idMap;
             }
-
-            string sql = "SELECT * FROM [" + idMapTable + "]";
-            using (var cmd = new OleDbCommand(sql, conn))
-            using (var reader = cmd.ExecuteReader())
+            foreach (var row in ese.ReadRows(idMapTable, new[] { "IdType", "IdIndex", "IdBlob" }))
             {
-                if (reader == null) return idMap;
-                while (reader.Read())
-                {
-                    long id = TryGetInt64(reader, "IdIndex", "Id");
-                    if (id <= 0) continue;
-                    object blobObj = TryGet(reader, "IdBlob", "Blob", "Data");
-                    string decoded = DecodeIdBlob(blobObj);
-                    if (string.IsNullOrWhiteSpace(decoded))
-                        decoded = SafeText(TryGet(reader, "IdValue", "Value"));
-                    if (!string.IsNullOrWhiteSpace(decoded))
-                        idMap[id] = decoded;
-                }
+                long id = AsInt64(Pick(row, "IdIndex", "Id"));
+                if (id <= 0) continue;
+                object blobObj = Pick(row, "IdBlob", "Blob", "Data");
+                string decoded = DecodeIdBlob(blobObj);
+                if (!string.IsNullOrWhiteSpace(decoded))
+                    idMap[id] = decoded;
             }
             return idMap;
         }
 
-        private static void ExtractNetworkRows(OleDbConnection conn, string tableName, Dictionary<long, string> idMap, SrumExportResult result)
+        private static void ExtractNetworkRows(EseReader ese, string tableName, Dictionary<long, string> idMap, SrumExportResult result)
         {
-            string sql = "SELECT * FROM [" + tableName + "]";
-            using (var cmd = new OleDbCommand(sql, conn))
-            using (var reader = cmd.ExecuteReader())
+            string[] cols = { "AppId", "UserId", "InterfaceLuid", "L2ProfileId", "TimeStamp",
+                "BytesSent", "BytesRecvd", "RemoteAddress" };
+            foreach (var row in ese.ReadRows(tableName, cols))
             {
-                if (reader == null) return;
-                while (reader.Read())
+                string appId = ResolveMappedId(Pick(row, "AppId", "ApplicationId"), idMap);
+                string user = ResolveMappedId(Pick(row, "UserId", "UserSID"), idMap);
+                string iface = ResolveMappedId(Pick(row, "InterfaceLuid", "InterfaceId", "L2ProfileId"), idMap);
+                result.NetworkRows.Add(new SrumNetworkRecord
                 {
-                    string appId = ResolveMappedId(TryGet(reader, "AppId", "ApplicationId"), idMap);
-                    string user = ResolveMappedId(TryGet(reader, "UserId", "UserSID"), idMap);
-                    string iface = ResolveMappedId(TryGet(reader, "InterfaceLuid", "InterfaceId", "L2ProfileId"), idMap);
-                    string remoteIp = SafeText(TryGet(reader, "RemoteAddress", "RemoteIP", "DestinationIp", "DestIp"));
-                    string path = GuessPath(appId);
-                    string ts = ParseSrumTime(TryGet(reader, "TimeStamp", "Timestamp", "ConnectStartTime", "StartTime"));
-
-                    result.NetworkRows.Add(new SrumNetworkRecord
-                    {
-                        Timestamp = ts,
-                        AppId = appId,
-                        Path = path,
-                        User = user,
-                        RemoteIP = remoteIp,
-                        InterfaceName = iface,
-                        BytesSent = SafeText(TryGet(reader, "BytesSent", "OutgoingBytes", "SentBytes")),
-                        BytesReceived = SafeText(TryGet(reader, "BytesRecvd", "BytesReceived", "IncomingBytes", "RecvBytes")),
-                        ParserNote = "SRUM network row parsed from core table; available columns vary by Windows build."
-                    });
-                }
+                    Timestamp = ParseSrumTime(Pick(row, "TimeStamp", "Timestamp")),
+                    AppId = appId,
+                    Path = GuessPath(appId),
+                    User = user,
+                    RemoteIP = SafeText(Pick(row, "RemoteAddress", "RemoteIP")),
+                    InterfaceName = iface,
+                    BytesSent = SafeText(Pick(row, "BytesSent", "OutgoingBytes")),
+                    BytesReceived = SafeText(Pick(row, "BytesRecvd", "BytesReceived")),
+                    ParserNote = "SRUM network row parsed from ESE; column set varies by Windows build."
+                });
             }
         }
 
-        private static void ExtractAppRows(OleDbConnection conn, string tableName, Dictionary<long, string> idMap, SrumExportResult result)
+        private static void ExtractAppRows(EseReader ese, string tableName, Dictionary<long, string> idMap, SrumExportResult result)
         {
-            string sql = "SELECT * FROM [" + tableName + "]";
-            using (var cmd = new OleDbCommand(sql, conn))
-            using (var reader = cmd.ExecuteReader())
+            string[] cols = { "AppId", "UserId", "TimeStamp", "ForegroundCycleTime", "BackgroundCycleTime" };
+            foreach (var row in ese.ReadRows(tableName, cols))
             {
-                if (reader == null) return;
-                while (reader.Read())
+                string appId = ResolveMappedId(Pick(row, "AppId", "ApplicationId"), idMap);
+                string user = ResolveMappedId(Pick(row, "UserId", "UserSID"), idMap);
+                result.AppRows.Add(new SrumAppRecord
                 {
-                    string appId = ResolveMappedId(TryGet(reader, "AppId", "ApplicationId"), idMap);
-                    string user = ResolveMappedId(TryGet(reader, "UserId", "UserSID"), idMap);
-                    string ts = ParseSrumTime(TryGet(reader, "TimeStamp", "Timestamp", "EndTime", "StartTime"));
-                    string path = GuessPath(appId);
-
-                    result.AppRows.Add(new SrumAppRecord
-                    {
-                        Timestamp = ts,
-                        AppId = appId,
-                        Path = path,
-                        User = user,
-                        ForegroundCycleTime = SafeText(TryGet(reader, "ForegroundCycleTime", "ForegroundContextSwitches")),
-                        BackgroundCycleTime = SafeText(TryGet(reader, "BackgroundCycleTime", "BackgroundContextSwitches")),
-                        ParserNote = "SRUM app row parsed from core table; column set and counters vary across versions."
-                    });
-                }
+                    Timestamp = ParseSrumTime(Pick(row, "TimeStamp", "Timestamp")),
+                    AppId = appId,
+                    Path = GuessPath(appId),
+                    User = user,
+                    ForegroundCycleTime = SafeText(Pick(row, "ForegroundCycleTime")),
+                    BackgroundCycleTime = SafeText(Pick(row, "BackgroundCycleTime")),
+                    ParserNote = "SRUM app row parsed from ESE; column set and counters vary across versions."
+                });
             }
         }
 
-        private static string ResolveTableName(Dictionary<string, string> tableMap, IEnumerable<string> candidates)
+        // Match a SRUM table GUID candidate (with or without braces) to the actual ESE table name.
+        private static string ResolveTableName(List<string> tableNames, IEnumerable<string> candidates)
         {
-            if (tableMap == null || candidates == null) return "";
+            if (tableNames == null || candidates == null) return "";
+            var byNorm = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string t in tableNames)
+            {
+                string norm = NormalizeGuidLikeName(t);
+                if (!byNorm.ContainsKey(norm)) byNorm[norm] = t;
+            }
             foreach (string candidate in candidates)
             {
                 if (string.IsNullOrWhiteSpace(candidate)) continue;
-                string normalized = NormalizeGuidLikeName(candidate);
                 string actual;
-                if (tableMap.TryGetValue(normalized, out actual))
+                if (byNorm.TryGetValue(NormalizeGuidLikeName(candidate), out actual))
                     return actual;
             }
             return "";
@@ -298,41 +211,24 @@ namespace IR_Collect.Utils
             return "{" + n.ToUpperInvariant() + "}";
         }
 
-        private static object TryGet(IDataRecord r, params string[] names)
+        private static object Pick(Dictionary<string, object> row, params string[] names)
         {
-            if (r == null || names == null) return null;
-            for (int i = 0; i < names.Length; i++)
+            if (row == null || names == null) return null;
+            foreach (string n in names)
             {
-                string target = names[i];
-                if (string.IsNullOrWhiteSpace(target)) continue;
-                for (int c = 0; c < r.FieldCount; c++)
-                {
-                    if (string.Equals(r.GetName(c), target, StringComparison.OrdinalIgnoreCase))
-                    {
-                        object v = r.GetValue(c);
-                        return v == DBNull.Value ? null : v;
-                    }
-                }
+                object v;
+                if (!string.IsNullOrEmpty(n) && row.TryGetValue(n, out v) && v != null) return v;
             }
             return null;
         }
 
-        private static long TryGetInt64(IDataRecord r, params string[] names)
+        private static long AsInt64(object v)
         {
-            object v = TryGet(r, names);
             if (v == null) return 0;
-            try
-            {
-                if (v is long) return (long)v;
-                if (v is int) return (int)v;
-                if (v is short) return (short)v;
-                long parsed;
-                return long.TryParse(v.ToString(), out parsed) ? parsed : 0;
-            }
-            catch
-            {
-                return 0;
-            }
+            if (v is long) return (long)v;
+            if (v is int) return (int)v;
+            long parsed;
+            return long.TryParse(Convert.ToString(v), out parsed) ? parsed : 0;
         }
 
         private static string ResolveMappedId(object raw, Dictionary<long, string> idMap)

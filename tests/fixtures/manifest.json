@@ -1,0 +1,117 @@
+{
+  "corpusVersion": "1",
+  "synthesized": [
+    {
+      "format": "lnk",
+      "path": "lnk/valid_unicode_localbasepath.lnk",
+      "category": "valid",
+      "outcome": "ParsesTo",
+      "expectedValue": "C:\\Users\\x\\secret.docx",
+      "sizeBytes": 158,
+      "description": "Modern jump-list LNK with LocalBasePath stored as Unicode at LinkInfo offset 0x1C."
+    },
+    {
+      "format": "lnk",
+      "path": "lnk/valid_ansi_localbasepath.lnk",
+      "category": "valid",
+      "outcome": "ParsesTo",
+      "expectedValue": "C:\\temp\\a.txt",
+      "sizeBytes": 118,
+      "description": "Legacy LNK with ANSI LocalBasePath at LinkInfo offset 0x10."
+    },
+    {
+      "format": "lnk",
+      "path": "lnk/truncated_header.lnk",
+      "category": "truncated",
+      "outcome": "DegradesSafely",
+      "sizeBytes": 20,
+      "description": "Only 20 bytes — shorter than the 76-byte ShellLinkHeader. Must not over-read or throw."
+    },
+    {
+      "format": "lnk",
+      "path": "lnk/no_linkinfo_flag.lnk",
+      "category": "malformed",
+      "outcome": "DegradesSafely",
+      "sizeBytes": 76,
+      "description": "Full 76-byte header but LinkFlags clears HasLinkInfo; there is no LinkInfo block to read."
+    },
+    {
+      "format": "mft_runlist",
+      "path": "mft_runlist/valid_two_runs.bin",
+      "category": "valid",
+      "outcome": "CountIs",
+      "expectedCount": 2,
+      "sizeBytes": 7,
+      "description": "Two 1+1-byte runs (header 0x11) then 0x00 terminator."
+    },
+    {
+      "format": "mft_runlist",
+      "path": "mft_runlist/truncated_overclaim.bin",
+      "category": "truncated",
+      "outcome": "DegradesSafely",
+      "sizeBytes": 3,
+      "description": "Header 0x44 claims 4 length + 4 offset bytes but only 2 trailing bytes exist."
+    },
+    {
+      "format": "mft_runlist",
+      "path": "mft_runlist/zero_length_run.bin",
+      "category": "malformed",
+      "outcome": "DegradesSafely",
+      "sizeBytes": 3,
+      "description": "Header 0x01 with a zero length byte — a 0-cluster run must terminate parsing, not loop."
+    },
+    {
+      "format": "srum_idblob",
+      "path": "srum_idblob/sid_localsystem.bin",
+      "category": "valid",
+      "outcome": "ParsesTo",
+      "expectedValue": "S-1-5-18",
+      "sizeBytes": 12,
+      "description": "Binary SID S-1-5-18 (LocalSystem): rev=1, subAuthCount=1, authority=5, subAuth=18."
+    },
+    {
+      "format": "srum_idblob",
+      "path": "srum_idblob/utf16_appid_text.bin",
+      "category": "valid",
+      "outcome": "ParsesTo",
+      "expectedValue": "C:\\app.exe",
+      "sizeBytes": 20,
+      "description": "UTF-16LE application id text 'C:\\app.exe' that must NOT be misread as a SID."
+    },
+    {
+      "format": "srum_idblob",
+      "path": "srum_idblob/malformed_subauth_overflow.bin",
+      "category": "malformed",
+      "outcome": "DegradesSafely",
+      "sizeBytes": 8,
+      "description": "Claims rev=1 but subAuthCount=0xFF with no sub-authority bytes; must not be parsed as a SID or throw."
+    }
+  ],
+  "requiresRealSample": [
+    {
+      "format": "amcache",
+      "artifact": "Amcache.hve registry hive",
+      "validationPlan": "MFTECmd is N/A; compare against AmcacheParser. Sample hives: github.com/EricZimmerman/Samples."
+    },
+    {
+      "format": "shimcache",
+      "artifact": "AppCompatCache (SYSTEM hive value)",
+      "validationPlan": "Compare against AppCompatCacheParser. Needs a real SYSTEM hive."
+    },
+    {
+      "format": "srudb",
+      "artifact": "SRUDB.dat ESE database",
+      "validationPlan": "Compare against SrumECmd. Needs a real ESE database; the idblob fixtures above only cover the SID sub-decode."
+    },
+    {
+      "format": "shellbags",
+      "artifact": "UsrClass.dat / NTUSER.dat ShellBags",
+      "validationPlan": "Compare against SBECmd. Needs real user hives."
+    },
+    {
+      "format": "mft",
+      "artifact": "Full $MFT",
+      "validationPlan": "Compare against MFTECmd. The run-list fixtures cover only the DATA run-list sub-parser."
+    }
+  ]
+}

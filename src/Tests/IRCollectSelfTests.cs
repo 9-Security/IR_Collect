@@ -47,6 +47,9 @@ namespace IR_Collect.Tests
             failed += RunOne("Lnk_parser_reads_unicode_and_ansi_local_base_path", Lnk_parser_reads_unicode_and_ansi_local_base_path, sb) ? 0 : 1;
             failed += RunOne("MftRunList_parses_valid_and_survives_truncation", MftRunList_parses_valid_and_survives_truncation, sb) ? 0 : 1;
             failed += RunOne("MftNormalizer_action_reflects_timestamp_source", MftNormalizer_action_reflects_timestamp_source, sb) ? 0 : 1;
+            failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
+            failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
+            failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
             failed += RunOne("EventLog_1149_message_fallback_adds_target_user", EventLog_1149_message_fallback_adds_target_user, sb) ? 0 : 1;
@@ -136,6 +139,7 @@ namespace IR_Collect.Tests
             failed += RunOne("AiRedaction_strict_clears_fact_samples", AiRedaction_strict_clears_fact_samples, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_basic_masks_ipv4_in_highlights", AiRedaction_basic_masks_ipv4_in_highlights, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_none_unchanged_highlight", AiRedaction_none_unchanged_highlight, sb) ? 0 : 1;
+            failed += RunOne("FixtureCorpus_committed_files_match_builder_and_parse_as_expected", FixtureCorpus_committed_files_match_builder_and_parse_as_expected, sb) ? 0 : 1;
 
             sb.AppendLine();
             sb.AppendLine(failed == 0 ? "SUMMARY: 0 failed (all passed)." : "SUMMARY: " + failed + " failed.");
@@ -424,8 +428,115 @@ namespace IR_Collect.Tests
             return runs3 != null && runs3.Count == 2;
         }
 
+        private static bool MftFixup_restores_bytes_at_sector_boundaries()
+        {
+            // NTFS replaces the last 2 bytes of each 512-byte sector with the USN; the originals live in
+            // the Update Sequence Array. After fixup those boundary bytes must hold the USA values.
+            byte[] rec = new byte[1024];
+            rec[0] = 0x46; rec[1] = 0x49; rec[2] = 0x4C; rec[3] = 0x45;   // "FILE"
+            rec[0x04] = 0x30; rec[0x05] = 0x00;                            // usaOffset = 0x30
+            rec[0x06] = 0x03; rec[0x07] = 0x00;                            // usaCount  = 3 (USN + 2 sectors)
+            rec[0x30] = 0xAA; rec[0x31] = 0xBB;                            // USN signature word
+            rec[0x32] = 0x11; rec[0x33] = 0x22;                            // USA[1] -> sector 1 original
+            rec[0x34] = 0x33; rec[0x35] = 0x44;                            // USA[2] -> sector 2 original
+            rec[510] = 0xAA; rec[511] = 0xBB;                              // sector 1 boundary (holds USN)
+            rec[1022] = 0xAA; rec[1023] = 0xBB;                           // sector 2 boundary (holds USN)
+            bool applied = IR_Collect.MFT.MftParser.ApplyUsnFixup(rec, 1024);
+            return applied
+                && rec[510] == 0x11 && rec[511] == 0x22
+                && rec[1022] == 0x33 && rec[1023] == 0x44;
+        }
+
+        // Build a resident $FILE_NAME attribute carrying a name in the given namespace (1=Win32, 2=DOS).
+        private static byte[] BuildFileNameAttr(string name, byte ns)
+        {
+            byte[] nameBytes = Encoding.Unicode.GetBytes(name);
+            int contentLen = 0x42 + nameBytes.Length;
+            int attrLen = 0x18 + contentLen;
+            if (attrLen % 8 != 0) attrLen += 8 - (attrLen % 8);
+            byte[] a = new byte[attrLen];
+            BitConverter.GetBytes((uint)0x30).CopyTo(a, 0);                // type = $FILE_NAME
+            BitConverter.GetBytes((uint)attrLen).CopyTo(a, 4);            // attribute length
+            a[8] = 0;                                                      // resident
+            BitConverter.GetBytes((uint)contentLen).CopyTo(a, 0x10);     // content length
+            BitConverter.GetBytes((ushort)0x18).CopyTo(a, 0x14);         // content offset
+            int c = 0x18;
+            BitConverter.GetBytes((ulong)5).CopyTo(a, c + 0x00);         // parent ref (root)
+            a[c + 0x40] = (byte)name.Length;                              // name length (chars)
+            a[c + 0x41] = ns;                                             // namespace
+            nameBytes.CopyTo(a, c + 0x42);
+            return a;
+        }
+
+        private static byte[] BuildMftRecordWithAttrs(byte[][] attrs)
+        {
+            byte[] rec = new byte[1024];
+            rec[0] = 0x46; rec[1] = 0x49; rec[2] = 0x4C; rec[3] = 0x45;   // "FILE"
+            BitConverter.GetBytes((ushort)0x38).CopyTo(rec, 0x14);        // first attribute offset
+            BitConverter.GetBytes((ushort)0x01).CopyTo(rec, 0x16);        // flags: InUse
+            int off = 0x38;
+            foreach (var at in attrs) { Array.Copy(at, 0, rec, off, at.Length); off += at.Length; }
+            BitConverter.GetBytes((uint)0xFFFFFFFF).CopyTo(rec, off);     // attribute end marker
+            return rec;
+        }
+
+        private static bool MftParser_prefers_win32_long_name_over_dos_short_name()
+        {
+            byte[] dos = BuildFileNameAttr("TEST~1.TXT", 2);
+            byte[] win = BuildFileNameAttr("testfile.txt", 1);
+            // DOS first then Win32: the Win32 long name must still win (not the last attribute).
+            var e1 = IR_Collect.MFT.MftParser.ParseRecord(BuildMftRecordWithAttrs(new[] { dos, win }), 7);
+            if (e1 == null || !string.Equals(e1.FileName, "testfile.txt", StringComparison.Ordinal)) return false;
+            // Win32 first then DOS: still the Win32 long name.
+            var e2 = IR_Collect.MFT.MftParser.ParseRecord(BuildMftRecordWithAttrs(new[] { win, dos }), 7);
+            return e2 != null && string.Equals(e2.FileName, "testfile.txt", StringComparison.Ordinal);
+        }
+
+        // Build one Win10 ("10ts") AppCompatCache value: a header whose first DWORD points at the
+        // single entry, then a structured entry carrying a UTF-16 path and a FILETIME.
+        private static byte[] BuildWin10ShimValue(string path, DateTime lastModifiedUtc)
+        {
+            byte[] pathBytes = Encoding.Unicode.GetBytes(path);
+            int entryDataSize = 2 + pathBytes.Length + 8 + 4;   // pathSize + path + FILETIME + dataSize(0)
+            const int headerSize = 0x30;
+            byte[] v = new byte[headerSize + 12 + entryDataSize];
+            BitConverter.GetBytes(headerSize).CopyTo(v, 0);     // header DWORD == offset to first entry
+
+            int o = headerSize;
+            v[o] = 0x31; v[o + 1] = 0x30; v[o + 2] = 0x74; v[o + 3] = 0x73; // "10ts"
+            // o+4..o+7 unknown/seq = 0
+            BitConverter.GetBytes(entryDataSize).CopyTo(v, o + 8);
+            BitConverter.GetBytes((ushort)pathBytes.Length).CopyTo(v, o + 12);
+            pathBytes.CopyTo(v, o + 14);
+            int p = o + 14 + pathBytes.Length;
+            BitConverter.GetBytes(lastModifiedUtc.ToFileTimeUtc()).CopyTo(v, p);
+            // trailing dataSize DWORD stays 0
+            return v;
+        }
+
+        private static bool ShimCache_structured_win10_entry_recovers_path_and_filetime()
+        {
+            var when = new DateTime(2025, 3, 14, 9, 30, 0, DateTimeKind.Utc);
+            byte[] value = BuildWin10ShimValue(@"C:\Windows\System32\evil.exe", when);
+            var r = ShimCacheParser.ParseValueBytesForTest("AppCompatCache", value);
+            if (r.Entries.Count != 1) return false;
+            var e = r.Entries[0];
+            return string.Equals(e.Path, @"C:\Windows\System32\evil.exe", StringComparison.Ordinal)
+                && string.Equals(e.FileName, "evil.exe", StringComparison.Ordinal)
+                && string.Equals(e.LastModifiedTime, "2025-03-14T09:30:00", StringComparison.Ordinal);
+        }
+
+        private static bool FixtureCorpus_committed_files_match_builder_and_parse_as_expected()
+        {
+            var sb = new StringBuilder();
+            int failed = FixtureCorpus.Validate(sb);
+            // Surface the per-fixture detail under this test only when something fails.
+            if (failed != 0) Console.Write(sb.ToString());
+            return failed == 0;
+        }
+
         // Build a minimal MS-SHLLINK LNK (header + LinkInfo, no IDList) carrying a LocalBasePath.
-        private static byte[] BuildLnkFixture(string path, bool unicode)
+        internal static byte[] BuildLnkFixture(string path, bool unicode)
         {
             var header = new byte[76];
             BitConverter.GetBytes(0x4C).CopyTo(header, 0x00);                                  // HeaderSize

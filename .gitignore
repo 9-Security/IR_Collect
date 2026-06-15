@@ -16,6 +16,14 @@ config.ini
 # ---- Test / verification scratch dirs (may hold real artifact data) ----
 /tmp_*/
 
+# ---- Third-party reference tools (Eric Zimmerman tools for Phase 2.2 diff
+#      validation) — downloaded locally, never redistributed via this repo ----
+/tools/
+
+# ---- Real artifact samples extracted from the local host for diff validation
+#      ($MFT, registry hives, SRUDB.dat) — REAL EVIDENCE, never committed ----
+/samples/
+
 # ---- Assistant working notes (kept under ~/.claude, never in the repo) ----
 /memory/
 

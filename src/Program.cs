@@ -36,6 +36,8 @@ namespace IR_Collect
                     Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
 #if INCLUDE_TESTS
                     Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
+                    Console.WriteLine("  IR_Collect.exe -make-fixtures [dir]  Regenerate the parser fixture corpus (default: tests\\fixtures)");
+                    Console.WriteLine("  IR_Collect.exe -parse <kind> <file> [out]  Parse one artifact (lnk|jumplist); emit JSON (diff-validation harness)");
 #endif
                     Console.WriteLine("");
                     Console.WriteLine("Examples:");
@@ -113,6 +115,65 @@ namespace IR_Collect
                     int testExit = IRCollectSelfTests.RunAndWriteResultFile();
                     FreeConsole();
                     Environment.Exit(testExit);
+                }
+                else if (mode == "-parse")
+                {
+                    // -parse <kind> <file> [outFile]. This is a winexe (GUI subsystem), so stdout is not
+                    // reliably captured when piped; the optional outFile gives the harness a deterministic
+                    // result sink (mirrors how -test also writes a result file).
+                    string kind = args.Length > 1 ? args[1] : null;
+                    string file = args.Length > 2 ? args[2] : null;
+                    string outFile = args.Length > 3 ? args[3] : null;
+                    int rc;
+                    if (!string.IsNullOrEmpty(outFile))
+                    {
+                        using (var sw = new System.IO.StreamWriter(outFile, false, new System.Text.UTF8Encoding(false)))
+                            rc = IR_Collect.Tests.ParserCli.Run(kind, file, sw);
+                    }
+                    else
+                    {
+                        rc = IR_Collect.Tests.ParserCli.Run(kind, file, Console.Out);
+                    }
+                    FreeConsole();
+                    Environment.Exit(rc);
+                }
+                else if (mode == "-dump-mft")
+                {
+                    // -dump-mft <driveLetter> <outDir>. Raw-extract $MFT (needs admin). Used by the
+                    // local-sample extractor so MFTECmd and our MftParser can diff the same $MFT file.
+                    string drive = args.Length > 1 ? args[1] : "C";
+                    string outDir = args.Length > 2 ? args[2] : ".";
+                    try
+                    {
+                        System.IO.Directory.CreateDirectory(outDir);
+                        string path = IR_Collect.MFT.MftDumper.DumpMft(drive, outDir);
+                        Console.WriteLine("[+] $MFT dumped to: " + path);
+                        FreeConsole();
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[!] $MFT dump failed (run elevated?): " + ex.Message);
+                        FreeConsole();
+                        Environment.Exit(1);
+                    }
+                }
+                else if (mode == "-make-fixtures")
+                {
+                    string outDir = args.Length > 1 ? args[1] : System.IO.Path.Combine("tests", "fixtures");
+                    try
+                    {
+                        int n = IR_Collect.Tests.FixtureCorpus.WriteCorpus(outDir);
+                        Console.WriteLine("[+] Wrote " + n + " fixture(s) + manifest.json + README.md to " + outDir);
+                        FreeConsole();
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[!] Fixture generation failed: " + ex.Message);
+                        FreeConsole();
+                        Environment.Exit(1);
+                    }
                 }
 #endif
                 else
