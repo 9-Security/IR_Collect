@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Prefetch 解析器強化（code-review 跟進）**：(1) **v30（Win10）run-count offset 標明為「推測、未驗證」** —— 原本與已驗證的 v31 共用 `0xC8` 的 `default` case,現拆出獨立 `case 30`,並在該版本(及 v17/v23/v26)的 `ParserNote` 附上「RunCount offset 為推測、未對 PECmd 差異化驗證」字樣(全部驗證樣本皆為 Win11/v31;Win10 樣本到手前不應假裝已驗證)。(2) **referenced-files 清單加上限 8192**,避免畸形/惡意 `.pf`(解壓上限 64MB)撐爆清單(normalizer 的 entity 本就上限 15;此為 parser 層的防護)。(3) 解壓 workspace 改用 `Math.Max(compress, fragment)` 較大值更穩健。(4) 精簡冗餘的 hash 長度檢查。新增自測 `Prefetch_handles_v23_and_malformed_inputs`(空檔/過短/無 SCCA → 優雅回 null 不丟例外;v23 分支 run count @0x98、1 個 last run @0x80 正確解析)。v31 解析邏輯不變,先前 80/80 vs PECmd 結果維持。
+
 ## [0.24.1] — 2026-06-16
 
 > 本版主題:**Guided Hunt 規則 ×3（ATT&CK 對應）+ 分析層輸出的正式 JSON Schema**。

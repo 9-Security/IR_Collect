@@ -46,6 +46,7 @@ namespace IR_Collect.Utils
     public static class PrefetchParser
     {
         private const ushort COMPRESSION_FORMAT_XPRESS_HUFFMAN = 0x0004;
+        private const int MaxReferencedFiles = 8192;
 
         [DllImport("ntdll.dll")]
         private static extern uint RtlGetCompressionWorkSpaceSize(ushort CompressionFormatAndEngine, out uint CompressBufferWorkSpaceSize, out uint CompressFragmentWorkSpaceSize);
@@ -100,22 +101,26 @@ namespace IR_Collect.Utils
             entry.SourceFile = Path.GetFileName(path);
             entry.FormatVersion = version;
             entry.ExecutableName = ReadUtf16Z(data, 0x10, 60);
-            entry.Hash = (data.Length >= 0x50) ? BitConverter.ToUInt32(data, 0x4C).ToString("X8") : "";
+            entry.Hash = BitConverter.ToUInt32(data, 0x4C).ToString("X8"); // data.Length >= 0x54 guaranteed above
 
             // File Information section: last run times and run count offsets are version-specific.
             int runCountOffset;
             int lastRunOffset = 0x80;
             int lastRunCount;
+            bool runCountValidated;
             switch (version)
             {
                 case 17: // WinXP
-                    lastRunOffset = 0x78; lastRunCount = 1; runCountOffset = 0x90; break;
+                    lastRunOffset = 0x78; lastRunCount = 1; runCountOffset = 0x90; runCountValidated = false; break;
                 case 23: // Vista/Win7
-                    lastRunOffset = 0x80; lastRunCount = 1; runCountOffset = 0x98; break;
+                    lastRunOffset = 0x80; lastRunCount = 1; runCountOffset = 0x98; runCountValidated = false; break;
                 case 26: // Win8.1
-                    lastRunOffset = 0x80; lastRunCount = 8; runCountOffset = 0xD0; break;
-                default: // 30 (Win10), 31 (Win11): run count at 0xC8 (validated vs PECmd on real v31)
-                    lastRunOffset = 0x80; lastRunCount = 8; runCountOffset = 0xC8; break;
+                    lastRunOffset = 0x80; lastRunCount = 8; runCountOffset = 0xD0; runCountValidated = false; break;
+                case 30: // Win10 — run-count offset INFERRED from v31 (0xC8); NOT yet differentially
+                         // validated on a real Win10 sample (all validation samples were Win11/v31).
+                    lastRunOffset = 0x80; lastRunCount = 8; runCountOffset = 0xC8; runCountValidated = false; break;
+                default: // 31 (Win11) and newer: run count at 0xC8, validated 80/80 vs PECmd on real v31
+                    lastRunOffset = 0x80; lastRunCount = 8; runCountOffset = 0xC8; runCountValidated = (version == 31); break;
             }
 
             for (int i = 0; i < lastRunCount; i++)
@@ -150,6 +155,7 @@ namespace IR_Collect.Utils
                     string block = Encoding.Unicode.GetString(data, (int)fnOff, (int)fnSize);
                     foreach (string s in block.Split('\0'))
                     {
+                        if (entry.ReferencedFiles.Count >= MaxReferencedFiles) break; // bound a hostile/corrupt .pf
                         string t = s.Trim();
                         if (t.Length > 0) entry.ReferencedFiles.Add(t);
                     }
@@ -158,7 +164,8 @@ namespace IR_Collect.Utils
             if (entry.ReferencedFileCount == 0 && entry.ReferencedFiles.Count > 0)
                 entry.ReferencedFileCount = entry.ReferencedFiles.Count;
 
-            entry.ParserNote = "Prefetch v" + version + " (" + (data == raw ? "uncompressed" : "MAM/Xpress-Huffman") + ").";
+            entry.ParserNote = "Prefetch v" + version + " (" + (data == raw ? "uncompressed" : "MAM/Xpress-Huffman") + ")."
+                + (runCountValidated ? "" : " RunCount offset for this version is inferred (not differentially validated vs PECmd).");
             return entry;
         }
 
@@ -177,7 +184,8 @@ namespace IR_Collect.Utils
                     return null;
 
                 byte[] output = new byte[uncompressedSize];
-                IntPtr ws = Marshal.AllocHGlobal((int)wsCompress);
+                // RtlDecompressBufferEx needs a workspace; allocate the larger of the two reported sizes.
+                IntPtr ws = Marshal.AllocHGlobal((int)Math.Max(wsCompress, wsFragment));
                 try
                 {
                     uint finalSize;
