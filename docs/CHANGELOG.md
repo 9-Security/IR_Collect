@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Guided Hunt 規則:DLL side-loading（ATT&CK T1574.002,接上 Prefetch）**：新增 `GH-PF-SIDELOAD-001` 規則,偵測 Prefetch 執行 fact 載入了**使用者可寫/非系統路徑**的檔案(由 `PrefetchNormalizer` 的 `ReferencedFile` 實體判定——僅在載入自 Users／Temp／AppData／ProgramData／Downloads 時才有此實體)。對應 ATT&CK Defense Evasion / Hijack Execution Flow: DLL Side-Loading,severity High,附 hypothesis 範本。`BuildEvidenceLine` 強化:evidence 現在也顯示 `file=`(執行檔)與 `loaded=`(被載入的可疑檔案)。新增自測 `GuidedHunt_flags_prefetch_dll_sideload`(載入自 AppData 的 DLL → 觸發;單純系統載入 → 不誤觸)。把 v0.24.0 新增的 Prefetch 執行證據直接轉成可獵捕的訊號。
+
 ## [0.24.0] — 2026-06-16
 
 > 本版主題:**新增 Prefetch (.pf) 執行證據解析器（80/80 對 PECmd 差異化驗證）**。

@@ -57,6 +57,7 @@ namespace IR_Collect.Tests
             failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
             failed += RunOne("RecentFileScan_respects_time_budget", RecentFileScan_respects_time_budget, sb) ? 0 : 1;
             failed += RunOne("Prefetch_parses_v30_and_normalizer_emits_executed_facts", Prefetch_parses_v30_and_normalizer_emits_executed_facts, sb) ? 0 : 1;
+            failed += RunOne("GuidedHunt_flags_prefetch_dll_sideload", GuidedHunt_flags_prefetch_dll_sideload, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -587,6 +588,37 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Guided Hunt: a Prefetch fact that loaded a file from a user-writable path (ReferencedFile entity)
+        // must raise the DLL side-loading rule (T1574.002), with the loaded file shown in the evidence.
+        private static bool GuidedHunt_flags_prefetch_dll_sideload()
+        {
+            try
+            {
+                var store = new IR_Collect.Analysis.Correlation.FactStore();
+                var f = new IR_Collect.Analysis.Correlation.Fact("Prefetch_0_run_0", DateTime.UtcNow, "Prefetch", "Executed");
+                f.AddEntity("FileName", "TRUSTED.EXE");
+                f.AddEntity("ReferencedFile", "\\VOLUME{1}\\USERS\\BOB\\APPDATA\\LOCAL\\TEMP\\EVIL.DLL");
+                // A normal system-DLL load (no ReferencedFile entity) must NOT trip the rule on its own.
+                var g = new IR_Collect.Analysis.Correlation.Fact("Prefetch_1_run_0", DateTime.UtcNow, "Prefetch", "Executed");
+                g.AddEntity("FileName", "NOTEPAD.EXE");
+                store.AppendFacts(new[] { f, g });
+
+                var c = new IR_Collect.Analysis.CaseData();
+                c.FactStore = store;
+                var res = IR_Collect.Analysis.GuidedHuntPack.Evaluate(c, true);
+
+                var m = res.RuleMatches.FirstOrDefault(x => string.Equals(x.Id, "GH-PF-SIDELOAD-001", StringComparison.Ordinal));
+                if (m == null) return false;
+                if (!string.Equals(m.AttackTechniqueId, "T1574.002", StringComparison.Ordinal)) return false;
+                // Evidence must surface the loaded suspicious file.
+                return m.Evidence != null && m.Evidence.Any(e => e != null && e.IndexOf("EVIL.DLL", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            catch
+            {
+                return false;
             }
         }
 

@@ -129,6 +129,7 @@ namespace IR_Collect.Analysis
             AddAutorunRule(result, facts);
             AddScheduledTaskRule(result, facts);
             AddServiceRule(result, facts);
+            AddPrefetchSideLoadRule(result, facts);
 
             if (result.RuleMatches.Count == 0)
                 result.Notes.Add("No current Guided Hunt rules matched the loaded facts.");
@@ -415,6 +416,42 @@ namespace IR_Collect.Analysis
             result.RuleMatches.Add(match);
         }
 
+        private static void AddPrefetchSideLoadRule(GuidedHuntResult result, List<Fact> facts)
+        {
+            // Prefetch records the files an executable loaded at startup. PrefetchNormalizer only attaches
+            // a ReferencedFile entity when that file was loaded from a user-writable / non-system path
+            // (Users / Temp / AppData / ProgramData / Downloads) - a hallmark of DLL side-loading.
+            List<Fact> matches = facts.Where(f =>
+                f != null && string.Equals(f.Source, "Prefetch", StringComparison.OrdinalIgnoreCase) &&
+                GetEntityValues(f, "ReferencedFile").Any()).ToList();
+            if (matches.Count == 0)
+                return;
+
+            int exeCount = matches.SelectMany(f => GetEntityValues(f, "FileName"))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            var match = CreateMatch(
+                "GH-PF-SIDELOAD-001",
+                "Executable loaded a file from a user-writable location (possible DLL side-loading)",
+                "High",
+                "Defense Evasion",
+                "T1574.002",
+                "Hijack Execution Flow: DLL Side-Loading",
+                "GH-HYP-PF-SIDELOAD");
+            match.Summary = matches.Count.ToString() + " Prefetch execution fact(s) across " + exeCount
+                + " executable(s) loaded a file from a user-writable / non-system path (Users / Temp / AppData / ProgramData / Downloads).";
+            match.Explanation = "Loading a DLL or module from a user-writable location rather than System32 / WinSxS / Program Files is a hallmark of DLL side-loading and masquerading. Confirm the loaded file's Authenticode signature and whether the legitimate vendor ships it from that path.";
+            PopulateEvidence(match, matches, 6);
+            AddHypothesis(result,
+                "GH-HYP-PF-SIDELOAD",
+                "Confirm side-loaded module",
+                "Is the file loaded from the user-writable location a legitimate component of the executable, or a planted / masqueraded module (DLL side-loading)?",
+                "Adversaries place a malicious DLL next to (or in the search path of) a trusted signed executable so it loads their code; Prefetch's referenced-files list surfaces exactly which non-system files were loaded.",
+                new[] { "GH-PF-SIDELOAD-001" },
+                new[] { "execution", "dll-side-loading", "defense-evasion", "prefetch" });
+            result.RuleMatches.Add(match);
+        }
+
         private static GuidedHuntRuleMatch CreateMatch(string id, string title, string severity, string tactic, string techniqueId, string techniqueName, string hypothesisId)
         {
             return new GuidedHuntRuleMatch
@@ -458,6 +495,8 @@ namespace IR_Collect.Analysis
             if (string.IsNullOrWhiteSpace(remote))
                 remote = FirstEntity(fact, "TargetServer");
             string share = FirstEntity(fact, "ShareName");
+            string fileName = FirstEntity(fact, "FileName");
+            string loaded = FirstEntity(fact, "ReferencedFile");
 
             string detail = fact.Details ?? "";
             if (detail.Length > 120)
@@ -472,6 +511,10 @@ namespace IR_Collect.Analysis
                 parts.Add("remote=" + remote);
             if (!string.IsNullOrWhiteSpace(share))
                 parts.Add("share=" + share);
+            if (!string.IsNullOrWhiteSpace(fileName))
+                parts.Add("file=" + fileName);
+            if (!string.IsNullOrWhiteSpace(loaded))
+                parts.Add("loaded=" + loaded);
             if (!string.IsNullOrWhiteSpace(path))
                 parts.Add("path=" + path);
             if (!string.IsNullOrWhiteSpace(detail))
