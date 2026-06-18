@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [0.24.1] — 2026-06-16
+
+> 本版主題:**Guided Hunt 規則 ×3（ATT&CK 對應）+ 分析層輸出的正式 JSON Schema**。
+
 ### Docs
 - **分析層輸出的正式 JSON Schema（可呈堂/互通）**：新增 `docs/schemas/summary_v3.schema.json`、`correlation_v1.schema.json`、`graph_v1.schema.json`（JSON Schema draft-07）,讓第三方/法庭流程能驗證並消費 `-analyze`／`-correlate`／`-graph` 的輸出。新增漂移守門自測 `OutputSchemas_required_fields_present_in_generated_json`:實際產生的 correlation_v1／graph_v1 必須含 schema 標為 required 的每個欄位,使文件契約無法與程式碼靜默分歧。
 - **README 補上離線分析 CLI**：`README.md` 與 `README.zh-TW.md` 新增「離線分析與關聯」段落,記錄 `-analyze`／`-correlate`／`-graph`／`-version`、每份輸出帶工具版本 + 證據 SHA-256 manifest、以及 Prefetch facts 與 Guided Hunt 線索（先前 README 只提到 `-c` 採集,未涵蓋本季新增的分析層 CLI）。

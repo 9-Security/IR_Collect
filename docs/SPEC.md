@@ -1,7 +1,7 @@
 # IR Collector 開發規格手冊 (Development Specification)
 
 **專案名稱**: IR_Collect
-**版本**: v0.24.0
+**版本**: v0.24.1
 **最後更新時間**: 2026-06-16
 **開發者**: Antigravity (collaborating with User)
 
@@ -23,6 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
+| **v0.24.1** | 2026-06-16 | **Hunt / 互通** | **Guided Hunt 規則 ×3 + 輸出 JSON Schema**：新增 ATT&CK 對應規則——事件日誌被清除（T1070.001）、可疑路徑執行（T1204/T1036）、DLL side-loading（T1574.002,接 Prefetch）,各帶正反向自測。新增 `docs/schemas/` 的 `summary_v3`／`correlation_v1`／`graph_v1` JSON Schema（draft-07）+ 漂移守門測試。README 雙語補上離線分析 CLI 段落。詳見 CHANGELOG。 |
 | **v0.24.0** | 2026-06-16 | **Parser（執行證據）** | **Prefetch (.pf) 解析器 + normalizer**：補上「Prefetch 只被原始複製、從不變 facts」的分析層缺口。解壓 MAM/Xpress-Huffman（ntdll）→ 解析 SCCA（執行檔名、run count、最多 8 個 last-run 時間、載入檔案清單）→ `Source=Prefetch`／`Executed` facts（`FileName` 實體可跨來源關聯、user-writable 載入路徑以 `ReferencedFile` 實體呈現 = DLL side-load 訊號）。對真實 .pf **差異化驗證 80/80 完全一致 vs PECmd**（執行檔名 + run count + last-run + 載入檔案數）。詳見 CHANGELOG。 |
 | **v0.23.1** | 2026-06-15 | **Performance（收集速度）** | **Local Collect 大幅提速（實機驗證 ~16 分→~5.5 分）**：事件日誌過濾加格式化時間預算（`EventLogMessageFormatBudgetSeconds`，FormatDescription 瓶頸實測 1022×）並**跨 log 平行化**（Event Logs 200s→93s）；打包壓縮預設改 `Fastest`（`CollectionZipCompression`；6.7× 快、+2% 體積）；每步加計時並寫入 `collection_timing.txt`。鑑識零妥協（事件一筆不少、只降級顯示字串；檔案掃描誠實截斷）。詳見 CHANGELOG。 |
 | **v0.23.0** | 2026-06-15 | **Analysis layer / Court-admissibility** | **Phase 2–5 強化路線**：解析器對齊 EZ 工具（MFT USN/fixup + Win32 名、SRUM 原生 ESE reader、Amcache 現代 schema、ShimCache 結構化 + canonical-value）；**分析層前門** `-analyze <folder>`（吃任意已採集資料夾、原始 hive 自動解析）；**跨機關聯** `-correlate` + **多跳調查圖** `-graph`（`correlation_v1`／`graph_v1` JSON）；**可呈堂性**：`BuildInfo` 單一版本來源、所有輸出帶 `tool_name`/`tool_version`、`-version`、證據 SHA-256 manifest（`evidence_digest`）、`docs/SBOM.md` 相依宣告；GUI 新增「Open Folder (triage)」。詳見 CHANGELOG。 |
