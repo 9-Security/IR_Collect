@@ -10,6 +10,7 @@
 - **README 補上離線分析 CLI**：`README.md` 與 `README.zh-TW.md` 新增「離線分析與關聯」段落,記錄 `-analyze`／`-correlate`／`-graph`／`-version`、每份輸出帶工具版本 + 證據 SHA-256 manifest、以及 Prefetch facts 與 Guided Hunt 線索（先前 README 只提到 `-c` 採集,未涵蓋本季新增的分析層 CLI）。
 
 ### Added
+- **Guided Hunt 規則:事件日誌被清除（ATT&CK T1070.001;高訊號低誤報）**：新增 `GH-LOGCLEAR-001`,偵測 `EventLog:*` facts 中的 **Security 1102（稽核日誌被清除）** 或 **System 104（Eventlog 提供者的日誌被清除）**。清除日誌幾乎必然是反鑑識行為,severity High,附 hypothesis 範本(引導「誰、何時清的、缺口藏了什麼」)。新增自測 `GuidedHunt_flags_event_log_cleared`(1102 → 觸發;4624 登入 → 不誤觸)。
 - **Guided Hunt 規則:可疑路徑執行（ATT&CK T1204 / T1036）**：新增 `GH-EXEC-SUSPATH-001`,當執行證據來源(Amcache／ShimCache／BAM／DAM／Process)的 `Path` 實體指向**使用者可寫/非標準位置的可執行檔**(Temp／AppData／Downloads／ProgramData／`$Recycle.Bin`／Public／PerfLogs,副檔名 .exe/.dll/.scr/.bat/.ps1…)時觸發。severity High,附 hypothesis 範本。新增自測 `GuidedHunt_flags_execution_from_suspicious_path`(Temp 的 evil.exe → 觸發;Program Files 的正常程式 → 不誤觸)。
 - **Guided Hunt 規則:DLL side-loading（ATT&CK T1574.002,接上 Prefetch）**：新增 `GH-PF-SIDELOAD-001` 規則,偵測 Prefetch 執行 fact 載入了**使用者可寫/非系統路徑**的檔案(由 `PrefetchNormalizer` 的 `ReferencedFile` 實體判定——僅在載入自 Users／Temp／AppData／ProgramData／Downloads 時才有此實體)。對應 ATT&CK Defense Evasion / Hijack Execution Flow: DLL Side-Loading,severity High,附 hypothesis 範本。`BuildEvidenceLine` 強化:evidence 現在也顯示 `file=`(執行檔)與 `loaded=`(被載入的可疑檔案)。新增自測 `GuidedHunt_flags_prefetch_dll_sideload`(載入自 AppData 的 DLL → 觸發;單純系統載入 → 不誤觸)。把 v0.24.0 新增的 Prefetch 執行證據直接轉成可獵捕的訊號。
 

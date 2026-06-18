@@ -131,6 +131,7 @@ namespace IR_Collect.Analysis
             AddServiceRule(result, facts);
             AddPrefetchSideLoadRule(result, facts);
             AddSuspiciousExecutionPathRule(result, facts);
+            AddEventLogClearedRule(result, facts);
 
             if (result.RuleMatches.Count == 0)
                 result.Notes.Add("No current Guided Hunt rules matched the loaded facts.");
@@ -450,6 +451,40 @@ namespace IR_Collect.Analysis
                 "Adversaries place a malicious DLL next to (or in the search path of) a trusted signed executable so it loads their code; Prefetch's referenced-files list surfaces exactly which non-system files were loaded.",
                 new[] { "GH-PF-SIDELOAD-001" },
                 new[] { "execution", "dll-side-loading", "defense-evasion", "prefetch" });
+            result.RuleMatches.Add(match);
+        }
+
+        private static void AddEventLogClearedRule(GuidedHuntResult result, List<Fact> facts)
+        {
+            // Security 1102 (audit log cleared) and System 104 (a log was cleared, from the Eventlog
+            // provider) are near-certain anti-forensic actions (T1070.001) and very low false-positive.
+            List<Fact> matches = facts.Where(f =>
+                f != null && (f.Source ?? "").StartsWith("EventLog:", StringComparison.OrdinalIgnoreCase) &&
+                GetEntityValues(f, "EventId").Any(id =>
+                    string.Equals(id, "1102", StringComparison.Ordinal) ||
+                    (string.Equals(id, "104", StringComparison.Ordinal) &&
+                     GetEntityValues(f, "Provider").Any(p => p != null && p.IndexOf("Eventlog", StringComparison.OrdinalIgnoreCase) >= 0)))).ToList();
+            if (matches.Count == 0)
+                return;
+
+            var match = CreateMatch(
+                "GH-LOGCLEAR-001",
+                "Windows event log was cleared",
+                "High",
+                "Defense Evasion",
+                "T1070.001",
+                "Indicator Removal: Clear Windows Event Logs",
+                "GH-HYP-LOGCLEAR");
+            match.Summary = matches.Count.ToString() + " event-log-cleared record(s) (Security 1102 / System 104) - a near-certain anti-forensic action.";
+            match.Explanation = "Clearing the Security or System event log is rarely legitimate and destroys exactly the records most useful for reconstructing an intrusion. Correlate the clear time with the resulting gap and with the account that performed it.";
+            PopulateEvidence(match, matches, 5);
+            AddHypothesis(result,
+                "GH-HYP-LOGCLEAR",
+                "Investigate the log clear",
+                "Who cleared the event log and when, and what activity does the resulting gap conceal?",
+                "Adversaries clear logs to remove evidence; the clear event itself, its timing, and the actor are strong leads even when the cleared records are gone.",
+                new[] { "GH-LOGCLEAR-001" },
+                new[] { "anti-forensic", "defense-evasion", "log-clear" });
             result.RuleMatches.Add(match);
         }
 
