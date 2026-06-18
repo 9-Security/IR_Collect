@@ -13,6 +13,17 @@
 - **CLI 收集：** `IR_Collect.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
 - 建議將**輸出寫在外接媒體**，降低對受查主機的變動。
 
+### 離線分析與關聯（不碰 live 主機、不開 GUI）
+
+IR_Collect 也能分析**任何人**已採集好的 artifact —— 指向一個資料夾,即可跑與載入 case 完全相同的 facts-only 關聯管線:
+
+- `IR_Collect.exe -analyze <資料夾> [out.json]` —— 吃一個已採集資料夾（他牌 triage 輸出或解壓的 case;原始 `$MFT`／hive／`SRUDB.dat`／`.evtx` 自動解析）→ `summary_v3` JSON。
+- `IR_Collect.exe -correlate <out.json> <資料夾A> <資料夾B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
+- `IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <資料夾...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
+- `IR_Collect.exe -version` —— 工具名稱 + 版本。
+
+每份分析輸出都記錄**工具版本**與**逐檔 SHA-256 證據 manifest**（`evidence_digest`），把報告綁回它實際消耗的證據（見 `docs/SBOM.md`）。Prefetch（`.pf`）已解析為執行證據 facts（對 PECmd 驗證）；Guided Hunt 會標出 ATT&CK 對應的線索,例如 DLL side-loading 與從使用者可寫路徑執行。
+
 ## 定位（事件前—中期）
 
 最適合快速釐清：

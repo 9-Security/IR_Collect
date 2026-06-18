@@ -13,6 +13,17 @@
 - **CLI collection:** `IR_Collect.exe -c` (prefer an elevated prompt for full logs, raw volumes, etc.).
 - Prefer collection **output on removable media** to limit change on the examined system.
 
+### Offline analysis & correlation (no live host, no GUI)
+
+IR_Collect can also analyze artifacts **anyone** already collected — point it at a folder and it runs the same facts-only correlation pipeline:
+
+- `IR_Collect.exe -analyze <folder> [out.json]` — ingest a folder of collected artifacts (another tool's triage output, or an unzipped case; raw `$MFT` / hives / `SRUDB.dat` / `.evtx` are auto-parsed) → `summary_v3` JSON.
+- `IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]` — cross-host shared-entity + temporal correlation → `correlation_v1` JSON.
+- `IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <folder...>` — multi-hop investigation graph from a seed entity → `graph_v1` JSON.
+- `IR_Collect.exe -version` — tool name + version.
+
+Every analysis output records the **tool version** and a **per-input SHA-256 evidence manifest** (`evidence_digest`), tying a report to exactly the evidence it consumed (`docs/SBOM.md`). Prefetch (`.pf`) is parsed into execution-evidence facts (validated against PECmd); Guided Hunt surfaces ATT&CK-mapped leads such as DLL side-loading and execution from user-writable paths.
+
 ## Where it fits (early–mid incident)
 
 Best when you need fast answers to:
