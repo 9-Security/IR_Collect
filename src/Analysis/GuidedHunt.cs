@@ -130,6 +130,7 @@ namespace IR_Collect.Analysis
             AddScheduledTaskRule(result, facts);
             AddServiceRule(result, facts);
             AddPrefetchSideLoadRule(result, facts);
+            AddSuspiciousExecutionPathRule(result, facts);
 
             if (result.RuleMatches.Count == 0)
                 result.Notes.Add("No current Guided Hunt rules matched the loaded facts.");
@@ -449,6 +450,57 @@ namespace IR_Collect.Analysis
                 "Adversaries place a malicious DLL next to (or in the search path of) a trusted signed executable so it loads their code; Prefetch's referenced-files list surfaces exactly which non-system files were loaded.",
                 new[] { "GH-PF-SIDELOAD-001" },
                 new[] { "execution", "dll-side-loading", "defense-evasion", "prefetch" });
+            result.RuleMatches.Add(match);
+        }
+
+        private static readonly System.Collections.Generic.HashSet<string> ExecutionEvidenceSources =
+            new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Amcache", "ShimCache", "Process", "BAM", "DAM", "Prefetch" };
+
+        private static bool IsSuspiciousExecutablePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            string up = path.ToUpperInvariant();
+            bool exe = up.EndsWith(".EXE") || up.EndsWith(".DLL") || up.EndsWith(".SCR") || up.EndsWith(".COM")
+                || up.EndsWith(".BAT") || up.EndsWith(".CMD") || up.EndsWith(".PS1") || up.EndsWith(".VBS") || up.EndsWith(".JS");
+            if (!exe) return false;
+            return up.IndexOf("\\TEMP\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\APPDATA\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\DOWNLOADS\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\$RECYCLE.BIN\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\PROGRAMDATA\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\USERS\\PUBLIC\\", StringComparison.Ordinal) >= 0
+                || up.IndexOf("\\PERFLOGS\\", StringComparison.Ordinal) >= 0;
+        }
+
+        private static void AddSuspiciousExecutionPathRule(GuidedHuntResult result, List<Fact> facts)
+        {
+            List<Fact> matches = facts.Where(f =>
+                f != null && ExecutionEvidenceSources.Contains(f.Source ?? "") &&
+                GetEntityValues(f, "Path").Any(IsSuspiciousExecutablePath)).ToList();
+            if (matches.Count == 0)
+                return;
+
+            int pathCount = matches.SelectMany(f => GetEntityValues(f, "Path"))
+                .Where(IsSuspiciousExecutablePath).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            var match = CreateMatch(
+                "GH-EXEC-SUSPATH-001",
+                "Execution evidence for a binary in a user-writable / suspicious location",
+                "High",
+                "Execution",
+                "T1204",
+                "User Execution",
+                "GH-HYP-EXEC-SUSPATH");
+            match.Summary = pathCount.ToString() + " distinct executable(s) in user-writable / non-standard locations (Temp / AppData / Downloads / ProgramData / $Recycle.Bin / Public) have execution evidence (Amcache / ShimCache / BAM / Process).";
+            match.Explanation = "Legitimate software almost always runs from Program Files or System32. Execution of a binary from a user-writable location is a common malware / masquerading pattern (T1036). Review the binary's Authenticode signature, hash (Amcache SHA1) and first-seen time.";
+            PopulateEvidence(match, matches, 8);
+            AddHypothesis(result,
+                "GH-HYP-EXEC-SUSPATH",
+                "Triage suspicious-path execution",
+                "Is the binary that executed from a user-writable location a known / approved tool, or a dropped / masqueraded payload?",
+                "Adversaries drop and run payloads from Temp / AppData to evade controls keyed on trusted directories.",
+                new[] { "GH-EXEC-SUSPATH-001" },
+                new[] { "execution", "masquerading", "temp" });
             result.RuleMatches.Add(match);
         }
 
