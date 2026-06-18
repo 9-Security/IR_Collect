@@ -60,6 +60,7 @@ namespace IR_Collect.Tests
             failed += RunOne("GuidedHunt_flags_prefetch_dll_sideload", GuidedHunt_flags_prefetch_dll_sideload, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_execution_from_suspicious_path", GuidedHunt_flags_execution_from_suspicious_path, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_event_log_cleared", GuidedHunt_flags_event_log_cleared, sb) ? 0 : 1;
+            failed += RunOne("OutputSchemas_required_fields_present_in_generated_json", OutputSchemas_required_fields_present_in_generated_json, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -590,6 +591,33 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Drift guard: the generated correlation_v1 / graph_v1 JSON must contain every field the published
+        // JSON Schema files (docs/schemas/) mark as required, so the documented contract can't silently
+        // diverge from the code.
+        private static bool OutputSchemas_required_fields_present_in_generated_json()
+        {
+            try
+            {
+                var corr = IR_Collect.Analysis.CorrelationCli.BuildReport(new IR_Collect.Analysis.CaseData[0], new[] { "Path" }, null);
+                string cj = IR_Collect.Analysis.CorrelationExport.Serialize(corr);
+                string[] corrReq = { "export_schema", "generated_at", "tool_name", "tool_version", "host_count", "hosts", "shared_entities", "temporal_correlations" };
+                foreach (string field in corrReq)
+                    if (cj.IndexOf("\"" + field + "\"", StringComparison.Ordinal) < 0) return false;
+                if (cj.IndexOf("\"correlation_v1\"", StringComparison.Ordinal) < 0) return false;
+
+                var g = IR_Collect.Analysis.GraphCli.BuildGraph(new IR_Collect.Analysis.CaseData[0], "Path", "x", 1, null);
+                string gj = IR_Collect.Analysis.GraphCli.Serialize(g);
+                string[] graphReq = { "export_schema", "generated_at", "tool_name", "tool_version", "seed_type", "seed_value", "max_depth", "host_count", "node_count", "edge_count", "nodes", "edges" };
+                foreach (string field in graphReq)
+                    if (gj.IndexOf("\"" + field + "\"", StringComparison.Ordinal) < 0) return false;
+                return gj.IndexOf("\"graph_v1\"", StringComparison.Ordinal) >= 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 

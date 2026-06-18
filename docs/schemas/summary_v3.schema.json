@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/summary_v3.schema.json",
+  "title": "IR_Collect summary_v3",
+  "description": "Per-host analysis summary — output of `IR_Collect.exe -analyze` and the GUI Export Summary JSON.",
+  "type": "object",
+  "required": ["export_schema", "generated_at", "tool_name", "tool_version", "host", "fact_count"],
+  "properties": {
+    "export_schema": { "const": "summary_v3" },
+    "generated_at": { "type": "string", "description": "UTC ISO-8601 generation time." },
+    "tool_name": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "analysis_mode": { "type": "string", "description": "e.g. facts_only." },
+    "collection_mode_profile": { "type": "string" },
+    "host": { "type": "string" },
+    "case_id": { "type": "string" },
+    "artifacts_count": { "type": "integer" },
+    "mft_count": { "type": "integer" },
+    "fact_count": { "type": "integer" },
+    "fact_source_counts": { "type": "object", "description": "fact Source -> count." },
+    "entity_type_counts": { "type": "object", "description": "EntityRef Type -> count." },
+    "parser_notes": { "type": "array", "items": { "type": "string" } },
+    "load_warnings": { "type": "array", "items": { "type": "string" } },
+    "guided_hunt": { "type": ["object", "null"], "description": "ATT&CK-mapped rule matches + hypothesis templates." },
+    "evidence_digest": { "type": "string", "description": "Rollup SHA-256 over the per-input evidence manifest." },
+    "evidence": {
+      "type": "array",
+      "description": "Per-input-file SHA-256 manifest (folder intake), tying the report to the evidence consumed.",
+      "items": {
+        "type": "object",
+        "required": ["relpath", "size_bytes", "sha256"],
+        "properties": {
+          "relpath": { "type": "string" },
+          "size_bytes": { "type": "integer" },
+          "sha256": { "type": "string" }
+        }
+      }
+    },
+    "fact_samples": { "type": "array", "description": "Up to 100 representative facts.", "items": { "type": "object" } },
+    "collection_coverage": { "type": ["object", "null"] }
+  }
+}

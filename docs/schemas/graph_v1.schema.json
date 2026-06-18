@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/graph_v1.schema.json",
+  "title": "IR_Collect graph_v1",
+  "description": "Output of `IR_Collect.exe -graph` — multi-hop investigation graph expanded from a seed entity.",
+  "type": "object",
+  "required": ["export_schema", "generated_at", "tool_name", "tool_version", "seed_type", "seed_value", "max_depth", "host_count", "node_count", "edge_count", "nodes", "edges"],
+  "properties": {
+    "export_schema": { "const": "graph_v1" },
+    "generated_at": { "type": "string" },
+    "tool_name": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "seed_type": { "type": "string" },
+    "seed_value": { "type": "string" },
+    "max_depth": { "type": "integer" },
+    "per_hop_fanout": { "type": "integer", "description": "Max neighbours expanded per node." },
+    "host_count": { "type": "integer" },
+    "node_count": { "type": "integer" },
+    "edge_count": { "type": "integer" },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["host", "case_id", "fact_count"],
+        "properties": {
+          "host": { "type": "string" },
+          "case_id": { "type": "string" },
+          "fact_count": { "type": "integer" }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "value", "depth"],
+        "properties": {
+          "type": { "type": "string" },
+          "value": { "type": "string" },
+          "depth": { "type": "integer", "description": "Hops from the seed (0 = seed)." },
+          "host_count": { "type": "integer" },
+          "hosts": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from_type", "from_value", "to_type", "to_value", "depth"],
+        "properties": {
+          "from_type": { "type": "string" },
+          "from_value": { "type": "string" },
+          "to_type": { "type": "string" },
+          "to_value": { "type": "string" },
+          "fact_count": { "type": "integer" },
+          "host_count": { "type": "integer" },
+          "hosts": { "type": "array", "items": { "type": "string" } },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "actions": { "type": "array", "items": { "type": "string" } },
+          "first_seen": { "type": "string" },
+          "last_seen": { "type": "string" },
+          "depth": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
