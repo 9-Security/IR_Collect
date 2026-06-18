@@ -57,6 +57,7 @@ namespace IR_Collect.Tests
             failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
             failed += RunOne("RecentFileScan_respects_time_budget", RecentFileScan_respects_time_budget, sb) ? 0 : 1;
             failed += RunOne("Prefetch_parses_v30_and_normalizer_emits_executed_facts", Prefetch_parses_v30_and_normalizer_emits_executed_facts, sb) ? 0 : 1;
+            failed += RunOne("Prefetch_handles_v23_and_malformed_inputs", Prefetch_handles_v23_and_malformed_inputs, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_prefetch_dll_sideload", GuidedHunt_flags_prefetch_dll_sideload, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_execution_from_suspicious_path", GuidedHunt_flags_execution_from_suspicious_path, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_event_log_cleared", GuidedHunt_flags_event_log_cleared, sb) ? 0 : 1;
@@ -677,6 +678,50 @@ namespace IR_Collect.Tests
             catch
             {
                 return false;
+            }
+        }
+
+        // Prefetch hardening (code-review follow-up): malformed/truncated input must fail gracefully to
+        // null (never throw / never OOB), and the v23 (Vista/Win7) branch (1 last run @0x80, run count
+        // @0x98) must parse, locking those version-specific offsets.
+        private static bool Prefetch_handles_v23_and_malformed_inputs()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_pfm_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(dir);
+                // Malformed: empty, too-short, and a long buffer with no "SCCA" signature -> all null.
+                string empty = Path.Combine(dir, "EMPTY.pf"); File.WriteAllBytes(empty, new byte[0]);
+                string shortf = Path.Combine(dir, "SHORT.pf"); File.WriteAllBytes(shortf, new byte[16]);
+                string nosig = Path.Combine(dir, "NOSIG.pf"); File.WriteAllBytes(nosig, new byte[0x100]);
+                if (IR_Collect.Utils.PrefetchParser.ParseFile(empty) != null) return false;
+                if (IR_Collect.Utils.PrefetchParser.ParseFile(shortf) != null) return false;
+                if (IR_Collect.Utils.PrefetchParser.ParseFile(nosig) != null) return false;
+
+                // v23: version=23, "SCCA", exe @0x10, last run @0x80, run count @0x98.
+                byte[] buf = new byte[0xA0];
+                BitConverter.GetBytes(23).CopyTo(buf, 0x00);
+                buf[4] = 0x53; buf[5] = 0x43; buf[6] = 0x43; buf[7] = 0x41; // "SCCA"
+                Encoding.Unicode.GetBytes("OLD.EXE").CopyTo(buf, 0x10);
+                var when = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+                BitConverter.GetBytes(when.ToFileTimeUtc()).CopyTo(buf, 0x80);
+                BitConverter.GetBytes(7).CopyTo(buf, 0x98);
+                string v23 = Path.Combine(dir, "OLD.EXE-1.pf"); File.WriteAllBytes(v23, buf);
+
+                var e = IR_Collect.Utils.PrefetchParser.ParseFile(v23);
+                return e != null
+                    && e.FormatVersion == 23 && e.RunCount == 7
+                    && string.Equals(e.ExecutableName, "OLD.EXE", StringComparison.Ordinal)
+                    && e.LastRunTimesUtc.Count == 1
+                    && e.LastRunTimesUtc[0].ToString("yyyy-MM-ddTHH:mm:ss") == "2020-01-02T03:04:05";
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
             }
         }
 
