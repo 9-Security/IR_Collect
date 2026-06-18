@@ -59,6 +59,7 @@ namespace IR_Collect.Tests
             failed += RunOne("Prefetch_parses_v30_and_normalizer_emits_executed_facts", Prefetch_parses_v30_and_normalizer_emits_executed_facts, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_prefetch_dll_sideload", GuidedHunt_flags_prefetch_dll_sideload, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_execution_from_suspicious_path", GuidedHunt_flags_execution_from_suspicious_path, sb) ? 0 : 1;
+            failed += RunOne("GuidedHunt_flags_event_log_cleared", GuidedHunt_flags_event_log_cleared, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -589,6 +590,33 @@ namespace IR_Collect.Tests
             {
                 try { if (Directory.Exists(a)) Directory.Delete(a, true); } catch { }
                 try { if (Directory.Exists(b)) Directory.Delete(b, true); } catch { }
+            }
+        }
+
+        // Guided Hunt: a Security 1102 (audit log cleared) fact raises the log-clearing rule (T1070.001);
+        // a normal logon event (4624) must not.
+        private static bool GuidedHunt_flags_event_log_cleared()
+        {
+            try
+            {
+                var store = new IR_Collect.Analysis.Correlation.FactStore();
+                var clear = new IR_Collect.Analysis.Correlation.Fact("EventLog_Security_0", DateTime.UtcNow, "EventLog:Security", "LogCleared");
+                clear.AddEntity("EventId", "1102");
+                var logon = new IR_Collect.Analysis.Correlation.Fact("EventLog_Security_1", DateTime.UtcNow, "EventLog:Security", "Logon");
+                logon.AddEntity("EventId", "4624");
+                store.AppendFacts(new[] { clear, logon });
+
+                var c = new IR_Collect.Analysis.CaseData();
+                c.FactStore = store;
+                var res = IR_Collect.Analysis.GuidedHuntPack.Evaluate(c, true);
+
+                var m = res.RuleMatches.FirstOrDefault(x => string.Equals(x.Id, "GH-LOGCLEAR-001", StringComparison.Ordinal));
+                return m != null && string.Equals(m.AttackTechniqueId, "T1070.001", StringComparison.Ordinal)
+                    && m.FactIds.Contains("EventLog_Security_0") && !m.FactIds.Contains("EventLog_Security_1");
+            }
+            catch
+            {
+                return false;
             }
         }
 
