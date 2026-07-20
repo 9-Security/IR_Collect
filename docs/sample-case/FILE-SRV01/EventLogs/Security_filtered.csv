@@ -1,0 +1,3 @@
+TimeCreated,EventId,LevelDisplayName,ProviderName,Computer,UserId,TaskDisplayName,Message,EventData
+2025-03-14 09:20:11,4624,Information,Microsoft-Windows-Security-Auditing,FILE-SRV01,S-1-5-18,Logon,"An account was successfully logged on.","SubjectUserName=jdoe | TargetUserName=Administrator | TargetDomainName=FILE-SRV01 | LogonType=3 | IpAddress=10.20.30.41"
+2025-03-14 10:05:30,1102,Information,Microsoft-Windows-Eventlog,FILE-SRV01,S-1-5-21-2033551937-2222222222-333333333-500,Log clear,"The audit log was cleared.","SubjectUserName=Administrator | SubjectDomainName=FILE-SRV01 | SubjectLogonId=0x3e7"

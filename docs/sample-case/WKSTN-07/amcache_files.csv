@@ -1,0 +1,3 @@
+RegistryKey,Path,FileName,Hash,ProductName,Publisher,ProgramId,FirstObservedTime,ExecutedTime,ParserNote
+Root\InventoryApplicationFile\invoice_update.exe|0a1b,C:\Users\jdoe\AppData\Local\Temp\invoice_update.exe,invoice_update.exe,a94a8fe5ccb19ba61c4c0873d391e987982fbbd3,,,00061a2b3c4d5e6f0011223344556677889900aa,2025-03-14 09:12:29,2025-03-14 09:12:33,
+Root\InventoryApplicationFile\7z.exe|9f8e,C:\Program Files\7-Zip\7z.exe,7z.exe,2fd4e1c67a2d28fced849ee1bb76e7391b93eb12,7-Zip,Igor Pavlov,0006aabbccddeeff0011223344556677889900bb,2025-02-10 14:03:00,2025-03-13 17:41:22,Benign signed tool (should NOT flag)

@@ -1,0 +1,3 @@
+ObservedAtUtc,LocalName,RemoteName,UserName,ConnectionState,ProviderName,Persistent,DisplayType,Comment
+2025-03-14 09:20:10,,\\FILE-SRV01\C$,WKSTN-07\jdoe,OK,Microsoft Windows Network,No,Share,Admin share mounted from workstation (synthetic)
+2025-03-14 08:30:00,Z:,\\FILE-SRV01\Shared,WKSTN-07\jdoe,OK,Microsoft Windows Network,Yes,Disk,Mapped team drive (benign)
