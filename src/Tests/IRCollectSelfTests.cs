@@ -62,6 +62,7 @@ namespace IR_Collect.Tests
             failed += RunOne("GuidedHunt_flags_execution_from_suspicious_path", GuidedHunt_flags_execution_from_suspicious_path, sb) ? 0 : 1;
             failed += RunOne("GuidedHunt_flags_event_log_cleared", GuidedHunt_flags_event_log_cleared, sb) ? 0 : 1;
             failed += RunOne("OutputSchemas_required_fields_present_in_generated_json", OutputSchemas_required_fields_present_in_generated_json, sb) ? 0 : 1;
+            failed += RunOne("GuidedHunt_demo_case_trips_expected_rules", GuidedHunt_demo_case_trips_expected_rules, sb) ? 0 : 1;
             failed += RunOne("GraphCli_multi_hop_reaches_sibling_via_shared_publisher", GraphCli_multi_hop_reaches_sibling_via_shared_publisher, sb) ? 0 : 1;
             failed += RunOne("EventLog_5145_composes_absolute_path_from_share_local_path", EventLog_5145_composes_absolute_path_from_share_local_path, sb) ? 0 : 1;
             failed += RunOne("SrumDecodeIdBlob_distinguishes_sid_from_utf16_text", SrumDecodeIdBlob_distinguishes_sid_from_utf16_text, sb) ? 0 : 1;
@@ -620,6 +621,77 @@ namespace IR_Collect.Tests
             {
                 return false;
             }
+        }
+
+        // Integration + drift guard for the committed teaching sample (docs/sample-case/). Loading the two
+        // synthetic hosts through the real analysis pipeline must trip exactly the documented Guided Hunt
+        // rules, and the shared malicious-binary SHA-1 must surface as a cross-host correlation. Keeps
+        // docs/DEMO.md honest as the rules and normalizers evolve. Skips (passes) if the committed folder
+        // cannot be located on disk (e.g. running from a release-only directory), mirroring FixtureCorpus.
+        private static bool GuidedHunt_demo_case_trips_expected_rules()
+        {
+            try
+            {
+                string sampleRoot = LocateSampleCaseRoot();
+                if (string.IsNullOrEmpty(sampleRoot))
+                    return true; // committed sample not on disk here; nothing to guard
+
+                string wkstn = Path.Combine(sampleRoot, "WKSTN-07");
+                string srv = Path.Combine(sampleRoot, "FILE-SRV01");
+
+                var cw = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(wkstn);
+                cw.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(cw);
+                var wkstnRules = RuleIdSet(IR_Collect.Analysis.GuidedHuntPack.Evaluate(cw, true));
+                foreach (string id in new[] { "GH-EXEC-SUSPATH-001", "GH-AUTORUN-001", "GH-SMB-001", "GH-LOGCLEAR-001" })
+                    if (!wkstnRules.Contains(id)) return false;
+
+                var cs = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(srv);
+                cs.FactStore = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(cs);
+                var srvRules = RuleIdSet(IR_Collect.Analysis.GuidedHuntPack.Evaluate(cs, true));
+                foreach (string id in new[] { "GH-EXEC-SUSPATH-001", "GH-LOGCLEAR-001" })
+                    if (!srvRules.Contains(id)) return false;
+
+                // The dropped binary's SHA-1 must tie the two hosts together as a shared entity.
+                const string sharedHash = "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3";
+                var report = IR_Collect.Analysis.CorrelationCli.BuildReport(
+                    new[] { cw, cs }, new[] { "Hash" }, null);
+                if (report == null || report.HostCount != 2) return false;
+                var hit = report.SharedEntities.FirstOrDefault(s =>
+                    s.Value != null && string.Equals(s.Value, sharedHash, StringComparison.OrdinalIgnoreCase));
+                if (hit == null || hit.HostCount != 2) return false;
+                return hit.Hosts.Contains("WKSTN-07") && hit.Hosts.Contains("FILE-SRV01");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static HashSet<string> RuleIdSet(IR_Collect.Analysis.GuidedHuntResult r)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (r != null && r.RuleMatches != null)
+                foreach (var m in r.RuleMatches)
+                    if (m != null && !string.IsNullOrEmpty(m.Id)) set.Add(m.Id);
+            return set;
+        }
+
+        // Walk up from the executable directory looking for the committed sample case.
+        private static string LocateSampleCaseRoot()
+        {
+            try
+            {
+                var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+                for (int i = 0; i < 8 && dir != null; i++)
+                {
+                    string candidate = Path.Combine(dir.FullName, Path.Combine("docs", "sample-case"));
+                    if (File.Exists(Path.Combine(candidate, "WKSTN-07", IR_Collect.ArtifactNames.SystemInfoTxt)))
+                        return candidate;
+                    dir = dir.Parent;
+                }
+            }
+            catch { /* best-effort */ }
+            return null;
         }
 
         // Guided Hunt: a Security 1102 (audit log cleared) fact raises the log-clearing rule (T1070.001);

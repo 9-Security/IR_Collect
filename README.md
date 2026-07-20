@@ -24,6 +24,8 @@ IR_Collect can also analyze artifacts **anyone** already collected — point it 
 
 Every analysis output records the **tool version** and a **per-input SHA-256 evidence manifest** (`evidence_digest`), tying a report to exactly the evidence it consumed (`docs/SBOM.md`). Prefetch (`.pf`) is parsed into execution-evidence facts (validated against PECmd); Guided Hunt surfaces ATT&CK-mapped leads such as DLL side-loading and execution from user-writable paths.
 
+**Try it in 5 minutes** — a synthetic two-host case ships in [`docs/sample-case/`](docs/sample-case/); the guided walkthrough [`docs/DEMO.md`](docs/DEMO.md) ([繁體中文](docs/DEMO.zh-TW.md)) runs `-analyze` / `-correlate` / `-graph` end-to-end (no real evidence, no elevation).
+
 ## Where it fits (early–mid incident)
 
 Best when you need fast answers to:

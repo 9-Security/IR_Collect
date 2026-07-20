@@ -1,0 +1,3 @@
+Source,User,RegistryPath,ValueName,Path,LastExecutionTime,Details
+BAM,WKSTN-07\jdoe,\REGISTRY\MACHINE\SYSTEM\ControlSet001\Services\bam\State\UserSettings\S-1-5-21-1004336348-1177238915-682003330-1114,invoice_update.exe,C:\Users\jdoe\AppData\Local\Temp\invoice_update.exe,2025-03-14 09:12:33,BAM last-execution entry (synthetic)
+DAM,WKSTN-07\jdoe,\REGISTRY\MACHINE\SYSTEM\ControlSet001\Services\dam\State\UserSettings\S-1-5-21-1004336348-1177238915-682003330-1114,onedrivesync.exe,C:\Program Files\Microsoft OneDrive\onedrivesync.exe,2025-03-14 08:55:01,Benign background app (should NOT flag)

@@ -24,6 +24,8 @@ IR_Collect 也能分析**任何人**已採集好的 artifact —— 指向一個
 
 每份分析輸出都記錄**工具版本**與**逐檔 SHA-256 證據 manifest**（`evidence_digest`），把報告綁回它實際消耗的證據（見 `docs/SBOM.md`）。Prefetch（`.pf`）已解析為執行證據 facts（對 PECmd 驗證）；Guided Hunt 會標出 ATT&CK 對應的線索,例如 DLL side-loading 與從使用者可寫路徑執行。
 
+**5 分鐘試玩** —— [`docs/sample-case/`](docs/sample-case/) 附了一個合成的雙主機案卷；導覽 [`docs/DEMO.zh-TW.md`](docs/DEMO.zh-TW.md)（[English](docs/DEMO.md)）帶你把 `-analyze`／`-correlate`／`-graph` 完整跑過一遍（不含真實證據、免提權）。
+
 ## 定位（事件前—中期）
 
 最適合快速釐清：

@@ -1,0 +1,3 @@
+TimeCreated,EventId,LevelDisplayName,ProviderName,Computer,UserId,TaskDisplayName,Message,EventData
+2025-03-14 09:12:33,4688,Information,Microsoft-Windows-Security-Auditing,WKSTN-07,S-1-5-21-1004336348-1177238915-682003330-1114,Process Creation,"A new process has been created.","SubjectUserName=jdoe | SubjectDomainName=WKSTN-07 | NewProcessName=C:\Users\jdoe\AppData\Local\Temp\invoice_update.exe | ParentProcessName=C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE"
+2025-03-14 10:05:00,1102,Information,Microsoft-Windows-Eventlog,WKSTN-07,S-1-5-21-1004336348-1177238915-682003330-1114,Log clear,"The audit log was cleared.","SubjectUserName=jdoe | SubjectDomainName=WKSTN-07 | SubjectLogonId=0x3e7"

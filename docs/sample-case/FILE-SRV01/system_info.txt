@@ -1,0 +1,4 @@
+Hostname: FILE-SRV01
+OS: Windows Server 2019 (SYNTHETIC demo host)
+Note: This is a hand-authored teaching sample. It contains NO real evidence.
+      All names, SIDs, IPs, and hashes are fictitious.

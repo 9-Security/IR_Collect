@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### Added
+- **合成教學案卷 + 導覽（Phase 4.2 教學資產）**:新增 `docs/sample-case/`——一個**手工合成、零真實證據**的雙主機案卷（WKSTN-07 工作站 + FILE-SRV01 伺服器,ASCII-only）,示範一條完整入侵故事(釣魚 → 從 `Temp` 落地執行 → Run 機碼持久化 → `C$` 管理共享橫移 → 兩台都清 Security 日誌),兩台主機以同一支 `invoice_update.exe` 的 SHA-1 相連。搭配雙語導覽 `docs/DEMO.md` / `docs/DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過(免提權、不碰 live 主機):`-analyze WKSTN-07` 觸發 4 條 Guided Hunt(`GH-EXEC-SUSPATH-001`／`GH-AUTORUN-001`／`GH-SMB-001`／`GH-LOGCLEAR-001`)、`FILE-SRV01` 觸發 2 條;`-correlate` 找出跨主機共享的 Hash 與 User;`-graph` 以該 Hash 為種子展開 18 節點/34 邊、深度 2 一路回溯到 `OUTLOOK.EXE` 釣魚源頭。刻意放的正常列(OneDrive、已簽章 7-Zip、System32、映射磁碟)不誤觸。新增整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`:載入這個 committed 資料夾跑真實分析管線,斷言上述規則 ID 與共享 Hash 皆命中,讓範例與 `docs/DEMO.md` 無法與程式碼靜默分歧。README(中英)加上「5 分鐘試玩」指路。
+
 ### Fixed
 - **Prefetch 解析器強化（code-review 跟進）**：(1) **v30（Win10）run-count offset 標明為「推測、未驗證」** —— 原本與已驗證的 v31 共用 `0xC8` 的 `default` case,現拆出獨立 `case 30`,並在該版本(及 v17/v23/v26)的 `ParserNote` 附上「RunCount offset 為推測、未對 PECmd 差異化驗證」字樣(全部驗證樣本皆為 Win11/v31;Win10 樣本到手前不應假裝已驗證)。(2) **referenced-files 清單加上限 8192**,避免畸形/惡意 `.pf`(解壓上限 64MB)撐爆清單(normalizer 的 entity 本就上限 15;此為 parser 層的防護)。(3) 解壓 workspace 改用 `Math.Max(compress, fragment)` 較大值更穩健。(4) 精簡冗餘的 hash 長度檢查。新增自測 `Prefetch_handles_v23_and_malformed_inputs`(空檔/過短/無 SCCA → 優雅回 null 不丟例外;v23 分支 run count @0x98、1 個 last run @0x80 正確解析)。v31 解析邏輯不變,先前 80/80 vs PECmd 結果維持。
 
