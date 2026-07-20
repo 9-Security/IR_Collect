@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [0.24.2] — 2026-07-20
+
+> 本版主題:**上手教學資產（合成範例案卷 + 雙語導覽）+ Prefetch 解析器 code-review 強化**。
+
 ### Added
 - **合成教學案卷 + 導覽（Phase 4.2 教學資產）**:新增 `docs/sample-case/`——一個**手工合成、零真實證據**的雙主機案卷（WKSTN-07 工作站 + FILE-SRV01 伺服器,ASCII-only）,示範一條完整入侵故事(釣魚 → 從 `Temp` 落地執行 → Run 機碼持久化 → `C$` 管理共享橫移 → 兩台都清 Security 日誌),兩台主機以同一支 `invoice_update.exe` 的 SHA-1 相連。搭配雙語導覽 `docs/DEMO.md` / `docs/DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過(免提權、不碰 live 主機):`-analyze WKSTN-07` 觸發 4 條 Guided Hunt(`GH-EXEC-SUSPATH-001`／`GH-AUTORUN-001`／`GH-SMB-001`／`GH-LOGCLEAR-001`)、`FILE-SRV01` 觸發 2 條;`-correlate` 找出跨主機共享的 Hash 與 User;`-graph` 以該 Hash 為種子展開 18 節點/34 邊、深度 2 一路回溯到 `OUTLOOK.EXE` 釣魚源頭。刻意放的正常列(OneDrive、已簽章 7-Zip、System32、映射磁碟)不誤觸。新增整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`:載入這個 committed 資料夾跑真實分析管線,斷言上述規則 ID 與共享 Hash 皆命中,讓範例與 `docs/DEMO.md` 無法與程式碼靜默分歧。README(中英)加上「5 分鐘試玩」指路。
 

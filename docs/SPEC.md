@@ -1,8 +1,8 @@
 # IR Collector 開發規格手冊 (Development Specification)
 
 **專案名稱**: IR_Collect
-**版本**: v0.24.1
-**最後更新時間**: 2026-06-16
+**版本**: v0.24.2
+**最後更新時間**: 2026-07-20
 **開發者**: Antigravity (collaborating with User)
 
 ---
@@ -23,6 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
+| **v0.24.2** | 2026-07-20 | **教學資產 / Fix** | **上手教學資產 + Prefetch 解析器強化**:新增 `docs/sample-case/`——手工合成、零真實證據的雙主機案卷（釣魚→Temp 執行→Run 機碼→C$ 橫移→清日誌,兩台以同一 SHA-1 相連）+ 雙語導覽 `docs/DEMO.md`／`DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過（實測觸發 4+2 條 Guided Hunt、跨主機共享 Hash、18 節點調查圖）;整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`。另收 v0.24.1 後的 Prefetch code-review 強化:v30（Win10）run-count offset 誠實標為「推測、未驗證」、referenced-files 上限 8192、解壓 workspace 用較大值、malformed/v23 自測。詳見 CHANGELOG。 |
 | **v0.24.1** | 2026-06-16 | **Hunt / 互通** | **Guided Hunt 規則 ×3 + 輸出 JSON Schema**：新增 ATT&CK 對應規則——事件日誌被清除（T1070.001）、可疑路徑執行（T1204/T1036）、DLL side-loading（T1574.002,接 Prefetch）,各帶正反向自測。新增 `docs/schemas/` 的 `summary_v3`／`correlation_v1`／`graph_v1` JSON Schema（draft-07）+ 漂移守門測試。README 雙語補上離線分析 CLI 段落。詳見 CHANGELOG。 |
 | **v0.24.0** | 2026-06-16 | **Parser（執行證據）** | **Prefetch (.pf) 解析器 + normalizer**：補上「Prefetch 只被原始複製、從不變 facts」的分析層缺口。解壓 MAM/Xpress-Huffman（ntdll）→ 解析 SCCA（執行檔名、run count、最多 8 個 last-run 時間、載入檔案清單）→ `Source=Prefetch`／`Executed` facts（`FileName` 實體可跨來源關聯、user-writable 載入路徑以 `ReferencedFile` 實體呈現 = DLL side-load 訊號）。對真實 .pf **差異化驗證 80/80 完全一致 vs PECmd**（執行檔名 + run count + last-run + 載入檔案數）。詳見 CHANGELOG。 |
 | **v0.23.1** | 2026-06-15 | **Performance（收集速度）** | **Local Collect 大幅提速（實機驗證 ~16 分→~5.5 分）**：事件日誌過濾加格式化時間預算（`EventLogMessageFormatBudgetSeconds`，FormatDescription 瓶頸實測 1022×）並**跨 log 平行化**（Event Logs 200s→93s）；打包壓縮預設改 `Fastest`（`CollectionZipCompression`；6.7× 快、+2% 體積）；每步加計時並寫入 `collection_timing.txt`。鑑識零妥協（事件一筆不少、只降級顯示字串；檔案掃描誠實截斷）。詳見 CHANGELOG。 |
