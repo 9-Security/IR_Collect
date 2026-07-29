@@ -6,6 +6,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using IR_Collect.Analysis.Correlation;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Analysis
 {
@@ -97,11 +98,12 @@ namespace IR_Collect.Analysis
             {
                 try
                 {
-                    CaseData c = CaseManager.LoadCaseFromFolder(folder);
-                    c.FactStore = FactStore.BuildFromCase(c);
+                    CaseData c = CaseManager.LoadCaseFromPath(folder);
+                    FactStoreBuildResult build = FactStoreBuildCoordinator.BuildConfigured(c);
+                    c.FactStore = build.Store;
                     cases.Add(c);
                     console.WriteLine("[+] Loaded " + (string.IsNullOrEmpty(c.Hostname) ? folder : c.Hostname) + ": "
-                        + (c.FactStore != null ? c.FactStore.Count : 0) + " facts.");
+                        + (c.FactStore != null ? c.FactStore.Count : 0) + " facts (" + build.BuildMode + ").");
                 }
                 catch (Exception ex)
                 {
@@ -119,7 +121,7 @@ namespace IR_Collect.Analysis
             string outPath = outFile;
             if (string.IsNullOrEmpty(outPath))
                 outPath = Path.Combine(Directory.GetCurrentDirectory(), "ir_graph.json");
-            try { File.WriteAllText(outPath, Serialize(report), new UTF8Encoding(false)); }
+            try { AtomicFile.WriteAllText(outPath, Serialize(report), new UTF8Encoding(false)); }
             catch (Exception ex)
             {
                 console.WriteLine("[!] Could not write " + outPath + ": " + ex.Message);
@@ -163,7 +165,10 @@ namespace IR_Collect.Analysis
                     CaseId = c.CaseID,
                     FactCount = c.FactStore != null ? c.FactStore.Count : 0,
                     EvidenceDigest = c.EvidenceDigest,
-                    EvidenceFileCount = c.EvidenceFiles != null ? c.EvidenceFiles.Count : 0
+                    EvidenceFileCount = c.EvidenceFiles != null ? c.EvidenceFiles.Count : 0,
+                    SourceFormat = c.SourceFormat,
+                    SourceEvidenceSha256 = c.SourceEvidenceSha256,
+                    Uac = c.UacEvidence
                 });
 
             var nodes = new Dictionary<string, GraphNodeDto>(StringComparer.OrdinalIgnoreCase);

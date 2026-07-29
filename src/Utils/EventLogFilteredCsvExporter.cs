@@ -191,13 +191,14 @@ namespace IR_Collect.Utils
         {
             count = 0;
             error = null;
+            int writtenCount = 0;
             string csvDir = Path.GetDirectoryName(csvPath);
             if (!string.IsNullOrEmpty(csvDir) && !Directory.Exists(csvDir))
                 Directory.CreateDirectory(csvDir);
 
             try
             {
-                using (var sw = new StreamWriter(csvPath, false, new UTF8Encoding(false)))
+                AtomicFile.WriteText(csvPath, new UTF8Encoding(false), delegate(StreamWriter sw)
                 {
                     sw.WriteLine("TimeCreated,EventId,LevelDisplayName,ProviderName,Computer,UserId,TaskDisplayName,Message," + EventLogDataHelper.EventDataColumn);
 
@@ -206,7 +207,7 @@ namespace IR_Collect.Utils
                     int degraded = 0;
 
                     EventRecord record;
-                    while (count < maxPerLog && (record = reader.ReadEvent()) != null)
+                    while (writtenCount < maxPerLog && (record = reader.ReadEvent()) != null)
                     {
                         try
                         {
@@ -217,7 +218,7 @@ namespace IR_Collect.Utils
                             bool degrade = DateTime.UtcNow >= formatDeadline;
                             WriteRecord(sw, record, degrade);
                             if (degrade) degraded++;
-                            count++;
+                            writtenCount++;
                         }
                         catch (Exception ex)
                         {
@@ -230,15 +231,16 @@ namespace IR_Collect.Utils
                     }
 
                     if (degraded > 0)
-                        Console.WriteLine(string.Format("      ({0}s format budget exceeded: {1}/{2} events kept with fast formatting; all events + structured EventData retained, message/level/task display degraded)", budgetSec, degraded, count));
-                }
+                        Console.WriteLine(string.Format("      ({0}s format budget exceeded: {1}/{2} events kept with fast formatting; all events + structured EventData retained, message/level/task display degraded)", budgetSec, degraded, writtenCount));
+                });
 
+                count = writtenCount;
                 return true;
             }
             catch (Exception ex)
             {
+                count = writtenCount;
                 error = ex.Message;
-                TryDeleteIncompleteCsv(csvPath);
                 return false;
             }
         }

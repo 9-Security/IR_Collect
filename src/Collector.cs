@@ -28,7 +28,9 @@ namespace IR_Collect
                 get
                 {
                     return CoverageReport != null &&
-                        ((CoverageReport.PartialSteps > 0) || (CoverageReport.MissingSteps > 0));
+                        ((CoverageReport.PartialSteps > 0) ||
+                         (CoverageReport.MissingSteps > 0) ||
+                         (CoverageReport.SkippedByProfile != null && CoverageReport.SkippedByProfile.Count > 0));
                 }
             }
 
@@ -81,16 +83,28 @@ namespace IR_Collect
 
         public static CollectionResult RunCollectionDetailed(string evidenceId, Action<string> reportProgress)
         {
+            return RunCollectionDetailed(evidenceId, reportProgress, null);
+        }
+
+        public static CollectionResult RunCollectionDetailed(
+            string evidenceId,
+            Action<string> reportProgress,
+            CollectionRunContext requestedContext)
+        {
             Action<string> report = reportProgress ?? (s => { });
             var failedSteps = new System.Collections.Generic.List<string>();
             var cfgProfile = new ConfigManager();
-            string collectionModeProfile = CollectionModeProfileHelper.GetActive(cfgProfile);
-            Console.WriteLine("Collection mode profile: " + collectionModeProfile);
-            Console.WriteLine("Collecting System Info...");
-            report("Collecting System Info...");
-            
             string finalEvidenceId = NormalizeEvidenceId(evidenceId);
             string outputDir = "IR_Output_" + finalEvidenceId;
+            bool acknowledged = requestedContext != null && requestedContext.OperatorAcknowledgedRisks;
+            CollectionRunContext runContext = CollectionImpactPolicy.Create(cfgProfile, outputDir, acknowledged);
+            ValidateCollectionRunContext(runContext);
+
+            string collectionModeProfile = runContext.CollectionModeProfile;
+            Console.WriteLine("Collection mode profile: " + collectionModeProfile);
+            Console.WriteLine("Output target class: " + runContext.OutputTargetClass);
+            Console.WriteLine("Collecting System Info...");
+            report("Collecting System Info...");
             
             if (!Directory.Exists(outputDir))
             {
@@ -200,7 +214,9 @@ namespace IR_Collect
             report("Memory acquisition...");
             try
             {
-                MemoryAcquisitionCollector.Collect(outputDir);
+                MemoryAcquisitionCollector.Collect(
+                    outputDir,
+                    runContext.SkippedByProfile.Contains(CollectionImpactPolicy.MemoryAcquisitionStep));
             }
             catch (Exception ex)
             {
@@ -212,7 +228,9 @@ namespace IR_Collect
             report("Memory analysis handoff...");
             try
             {
-                MemoryAnalysisCollector.Collect(outputDir);
+                MemoryAnalysisCollector.Collect(
+                    outputDir,
+                    runContext.SkippedByProfile.Contains(CollectionImpactPolicy.MemoryAnalysisStep));
             }
             catch (Exception ex)
             {
@@ -224,7 +242,7 @@ namespace IR_Collect
             CollectionCoverageReport coverageReport = null;
             try
             {
-                coverageReport = BuildCollectionCoverageReport(outputDir, finalEvidenceId, failedSteps, collectionModeProfile);
+                coverageReport = BuildCollectionCoverageReportForPolicy(outputDir, finalEvidenceId, failedSteps, runContext);
                 CollectionCoverageSerializer.SaveToFile(coverageReport, Path.Combine(outputDir, ArtifactNames.CollectionCoverageJson));
             }
             catch (Exception ex)
@@ -322,13 +340,46 @@ namespace IR_Collect
             return "IR_Output_" + NormalizeEvidenceId(evidenceId);
         }
 
+        internal static void ValidateCollectionRunContext(CollectionRunContext runContext)
+        {
+            if (CollectionImpactPolicy.RequiresOperatorAcknowledgment(runContext) &&
+                !runContext.OperatorAcknowledgedRisks)
+                throw new InvalidOperationException(
+                    "ForensicStrict collection requires explicit operator risk acknowledgment before Collector starts.");
+        }
+
         private static CollectionCoverageReport BuildCollectionCoverageReport(string outputDir, string evidenceId, System.Collections.Generic.List<string> failedSteps, string collectionModeProfile)
+        {
+            var legacyContext = new CollectionRunContext();
+            legacyContext.CollectionModeProfile = CollectionModeProfileHelper.Normalize(collectionModeProfile);
+            legacyContext.OutputTargetPath = outputDir ?? "";
+            legacyContext.OutputTargetClass = CollectionImpactPolicy.ClassifyOutputTarget(outputDir);
+            return BuildCollectionCoverageReportForPolicy(outputDir, evidenceId, failedSteps, legacyContext);
+        }
+
+        internal static CollectionCoverageReport BuildCollectionCoverageReportForPolicy(
+            string outputDir,
+            string evidenceId,
+            System.Collections.Generic.List<string> failedSteps,
+            CollectionRunContext runContext)
         {
             var report = new CollectionCoverageReport();
             report.GeneratedAt = DateTime.UtcNow.ToString("o");
             report.Host = Environment.MachineName;
             report.EvidenceId = evidenceId ?? "";
-            report.CollectionModeProfile = CollectionModeProfileHelper.Normalize(collectionModeProfile);
+            report.CollectionModeProfile = runContext != null
+                ? CollectionModeProfileHelper.Normalize(runContext.CollectionModeProfile)
+                : CollectionModeProfileHelper.Standard;
+            report.OperatorAcknowledgedRisks = runContext != null && runContext.OperatorAcknowledgedRisks;
+            report.OutputTargetClass = runContext != null
+                ? (runContext.OutputTargetClass ?? CollectionImpactPolicy.OutputUnknown)
+                : CollectionImpactPolicy.OutputUnknown;
+            report.RestrictedSteps = runContext != null && runContext.RestrictedSteps != null
+                ? new System.Collections.Generic.List<string>(runContext.RestrictedSteps)
+                : new System.Collections.Generic.List<string>();
+            report.SkippedByProfile = runContext != null && runContext.SkippedByProfile != null
+                ? new System.Collections.Generic.List<string>(runContext.SkippedByProfile)
+                : new System.Collections.Generic.List<string>();
             report.Steps = new System.Collections.Generic.List<CollectionCoverageStep>();
             PopulateCollectionRuntimeContext(report);
 
@@ -367,7 +418,9 @@ namespace IR_Collect
 
             if (report.FailedSteps > 0)
                 report.OverallStatus = "failed";
-            else if (report.PartialSteps > 0 || report.MissingSteps > 0)
+            else if (report.PartialSteps > 0 ||
+                     report.MissingSteps > 0 ||
+                     report.SkippedByProfile.Count > 0)
                 report.OverallStatus = "partial";
             else
                 report.OverallStatus = "complete";

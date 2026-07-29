@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/diff_v1.schema.json",
+  "title": "9SEC Evidence Workbench diff_v1",
+  "description": "Facts-only baseline-to-target case comparison produced by `9SEC_Evidence_Workbench.exe -diff`.",
+  "type": "object",
+  "required": [
+    "diff_schema",
+    "generated_at",
+    "tool_name",
+    "tool_version",
+    "analysis_mode",
+    "baseline_ref",
+    "target_ref",
+    "change_count",
+    "changes_truncated",
+    "max_changes",
+    "changes"
+  ],
+  "properties": {
+    "diff_schema": { "const": "diff_v1" },
+    "generated_at": { "type": "string", "description": "UTC ISO-8601 generation time." },
+    "tool_name": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "analysis_mode": { "const": "facts_only" },
+    "baseline_ref": { "$ref": "#/definitions/caseReference" },
+    "target_ref": { "$ref": "#/definitions/caseReference" },
+    "change_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total detected changes before the output cap is applied."
+    },
+    "changes_truncated": { "type": "boolean" },
+    "max_changes": { "type": "integer", "minimum": 1 },
+    "changes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/change" }
+    }
+  },
+  "definitions": {
+    "caseReference": {
+      "type": "object",
+      "required": [
+        "host",
+        "case_id",
+        "fact_count",
+        "evidence_digest",
+        "source_format",
+        "source_evidence_sha256",
+        "collection_coverage_status",
+        "fact_store_freshness_status",
+        "fact_store_build_mode"
+      ],
+      "properties": {
+        "host": { "type": "string" },
+        "case_id": { "type": "string" },
+        "fact_count": { "type": "integer", "minimum": 0 },
+        "evidence_digest": { "type": "string" },
+        "source_format": { "type": "string" },
+        "source_evidence_sha256": { "type": "string" },
+        "collection_coverage_status": { "type": "string" },
+        "fact_store_freshness_status": { "type": "string" },
+        "fact_store_build_mode": { "type": "string" }
+      }
+    },
+    "factReference": {
+      "type": "object",
+      "required": [
+        "id",
+        "source",
+        "action",
+        "source_file",
+        "raw_ref",
+        "collection_step",
+        "collection_status",
+        "collection_privilege",
+        "parse_level",
+        "fallback_used",
+        "parser_note"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string" },
+        "action": { "type": "string" },
+        "source_file": { "type": "string" },
+        "raw_ref": { "type": "string" },
+        "collection_step": { "type": "string" },
+        "collection_status": { "type": "string" },
+        "collection_privilege": { "type": "string" },
+        "parse_level": { "type": "string" },
+        "fallback_used": { "type": "boolean" },
+        "parser_note": { "type": "string" }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": [
+        "category",
+        "change_type",
+        "entity_key",
+        "display_value",
+        "source_names",
+        "confidence",
+        "baseline_fact_count",
+        "target_fact_count",
+        "baseline_fact_refs",
+        "target_fact_refs",
+        "notes"
+      ],
+      "properties": {
+        "category": {
+          "enum": ["Process", "Persistence", "File", "Identity", "Network", "Fact"]
+        },
+        "change_type": {
+          "enum": ["Added", "Removed", "Modified"]
+        },
+        "entity_key": { "type": "string" },
+        "display_value": { "type": "string" },
+        "source_names": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "enum": ["High", "Medium", "Low"] },
+        "baseline_fact_count": { "type": "integer", "minimum": 0 },
+        "target_fact_count": { "type": "integer", "minimum": 0 },
+        "baseline_fact_refs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/factReference" }
+        },
+        "target_fact_refs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/factReference" }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

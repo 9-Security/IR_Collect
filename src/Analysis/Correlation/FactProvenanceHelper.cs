@@ -62,6 +62,30 @@ namespace IR_Collect.Analysis.Correlation
                 return "Event Logs";
             if (string.Equals(source, "Process", StringComparison.OrdinalIgnoreCase))
                 return "System Info";
+            if (string.Equals(source, "UacAuth", StringComparison.OrdinalIgnoreCase))
+                return "Event Logs";
+            if (string.Equals(source, "UacNetworkConnection", StringComparison.OrdinalIgnoreCase))
+                return "Network";
+            if (string.Equals(source, "UacPackage", StringComparison.OrdinalIgnoreCase))
+                return "System Info";
+            if (string.Equals(source, "UacWebServer", StringComparison.OrdinalIgnoreCase))
+                return "Web Server Logs";
+            if (string.Equals(source, "UacFileHash", StringComparison.OrdinalIgnoreCase))
+                return "Execution Artifacts";
+            if (string.Equals(source, "UacEvidence", StringComparison.OrdinalIgnoreCase))
+                return "External Evidence Intake";
+            if (string.Equals(source, "UacAccount", StringComparison.OrdinalIgnoreCase))
+                return "Accounts";
+            if (string.Equals(source, "UacShellHistory", StringComparison.OrdinalIgnoreCase))
+                return "Shell History";
+            if (string.Equals(source, "UacPersistence", StringComparison.OrdinalIgnoreCase))
+                return "Persistence";
+            if (string.Equals(source, "UacJournalFile", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacBootSession", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacLoginEvent", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacAudit", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacSystemLog", StringComparison.OrdinalIgnoreCase))
+                return "System Logs";
             if (string.Equals(source, "LogonSession", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "StoredCredential", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "KerberosTicketCache", StringComparison.OrdinalIgnoreCase) ||
@@ -98,6 +122,9 @@ namespace IR_Collect.Analysis.Correlation
 
         private static string InferCollectionStatus(CaseData c, string stepName)
         {
+            if (c != null && c.UacEvidence != null && c.UacEvidence.IsUac &&
+                (c.CollectionCoverage == null || c.CollectionCoverage.Steps == null))
+                return "imported";
             if (c == null || c.CollectionCoverage == null || c.CollectionCoverage.Steps == null || string.IsNullOrWhiteSpace(stepName))
                 return "unknown";
 
@@ -137,6 +164,9 @@ namespace IR_Collect.Analysis.Correlation
             if (source.StartsWith("EventLog", StringComparison.OrdinalIgnoreCase))
                 return FactProvenanceMetadata.StructuredParseLevel;
             if (string.Equals(source, "Process", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacAuth", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacNetworkConnection", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(source, "UacFileHash", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "LogonSession", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "NetworkResource", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(source, "Service", StringComparison.OrdinalIgnoreCase) ||

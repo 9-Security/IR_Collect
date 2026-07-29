@@ -10,7 +10,12 @@ namespace IR_Collect
     /// </summary>
     public static class BuildInfo
     {
-        public const string ToolName = "IR_Collect";
+        public const string ToolName = "9SEC Evidence Workbench";
+        public const string ExecutableBaseName = "9SEC_Evidence_Workbench";
+        public const string ExecutableName = ExecutableBaseName + ".exe";
+        public const string ReviewExecutableName = ExecutableBaseName + "_review.exe";
+        public const string ReleaseCandidateExecutableName = ExecutableBaseName + "_release_candidate.exe";
+        public const string SelfTestResultFileName = ExecutableBaseName + "_TestResult.txt";
 
         private static string _version;
         private static readonly object _sync = new object();
@@ -42,7 +47,7 @@ namespace IR_Collect
             }
         }
 
-        /// <summary>"IR_Collect 0.22.2" - the canonical tool-identity string for output headers/CLI.</summary>
+        /// <summary>"9SEC Evidence Workbench 0.22.2" - the canonical tool-identity string for output headers/CLI.</summary>
         public static string ToolIdentity
         {
             get { return ToolName + " " + Version; }

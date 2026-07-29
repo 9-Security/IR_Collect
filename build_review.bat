@@ -3,14 +3,14 @@ setlocal
 cd /d "%~dp0"
 
 set "CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-set "TARGET_EXE=IR_Collect_review.exe"
+set "TARGET_EXE=9SEC_Evidence_Workbench_review.exe"
 
 if not exist "%CSC%" (
     echo [!] csc.exe not found at %CSC%
     exit /b 1
 )
 
-echo [+] Compiling %TARGET_EXE% with INCLUDE_TESTS (does not overwrite IR_Collect.exe^)...
+echo [+] Compiling %TARGET_EXE% with INCLUDE_TESTS (does not overwrite 9SEC_Evidence_Workbench.exe^)...
 "%CSC%" /nologo /define:INCLUDE_TESTS /out:%TARGET_EXE% @build_common.rsp src\Tests\IRCollectSelfTests.cs src\Tests\FixtureCorpus.cs src\Tests\ParserCli.cs
 if errorlevel 1 (
     echo [!] Build failed.

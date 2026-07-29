@@ -11,11 +11,11 @@ namespace IR_Collect.Tests
 {
     /// <summary>
     /// Phase 2.2 — single-artifact parse CLI used by the differential-validation harness
-    /// (scripts/DiffValidate.ps1). It runs IR_Collect's REAL production parser on one input
+    /// (scripts/DiffValidate.ps1). It runs 9SEC Evidence Workbench's real production parser on one input
     /// file and emits a stable one-line JSON result, so the harness can diff our output against
     /// the corresponding Eric Zimmerman tool (LECmd / JLECmd / MFTECmd / …) on the same file.
     ///
-    /// Invoked via:  IR_Collect_review.exe -parse &lt;kind&gt; &lt;file&gt;
+    /// Invoked via:  9SEC_Evidence_Workbench_review.exe -parse &lt;kind&gt; &lt;file&gt;
     /// Output (stdout): {"kind":"lnk","file":"...","ok":true,"paths":["C:\\...", ...]}
     /// </summary>
     internal static class ParserCli

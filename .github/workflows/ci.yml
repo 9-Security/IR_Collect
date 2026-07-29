@@ -23,7 +23,7 @@ jobs:
       - name: Run headless self-tests
         shell: cmd
         run: |
-          IR_Collect_review.exe -test
+          9SEC_Evidence_Workbench_review.exe -test
           if %ERRORLEVEL% neq 0 (echo Self-tests failed & exit /b %ERRORLEVEL%)
 
       - name: Upload test result
@@ -31,5 +31,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: self-test-result
-          path: ${{ runner.temp }}\IR_Collect_TestResult.txt
+          path: ${{ runner.temp }}\9SEC_Evidence_Workbench_TestResult.txt
           if-no-files-found: ignore

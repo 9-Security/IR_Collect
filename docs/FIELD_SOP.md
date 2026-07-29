@@ -1,4 +1,4 @@
-# IR_Collect — Field SOP (short)
+# 9SEC Evidence Workbench — Field SOP (short)
 
 **English** | [繁體中文](FIELD_SOP.zh-TW.md)
 
@@ -6,26 +6,30 @@ Short on-scene playbook for responders. For full operator documentation see **[U
 
 ## 1. Pre-flight
 
-- Prefer running `IR_Collect.exe` **elevated (Administrator)**.
+- Prefer running `9SEC_Evidence_Workbench.exe` **elevated (Administrator)**.
 - Prefer running from **removable media** and writing output to removable media.
 - Confirm free disk space, especially if Memory acquisition is enabled.
 - For sensitive matters, verify `config.ini` AI / Upload endpoints against policy **before** collection.
+- For a lower-impact run, select `ForensicStrict` in **Advanced → Settings** and keep its five safeguards enabled. Confirm the displayed output class; `unknown` is not proof of removable or trusted media.
 
 ## 2. Quick collection
 
 ### GUI
 
-1. Run `IR_Collect.exe`
+1. Run `9SEC_Evidence_Workbench.exe`
 2. Click `Local Collect`
 3. Enter an `Evidence ID`
 4. Wait for collection to finish
 5. Confirm the tool auto-loads the new ZIP
 
+Under `ForensicStrict`, review the output class and restricted steps, then complete both confirmations.
+Enabled memory acquisition/analysis is skipped by default and manual Deep Scan is blocked.
+
 ### CLI
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
 ```
 
 After collection you should see:
@@ -38,15 +42,17 @@ After collection you should see:
 After collect or import, open **Summary** in this order:
 
 1. `collection_coverage`
-2. `load warnings`
-3. `parser notes`
-4. `memory acquisition` / `memory analysis`
-5. `fact store freshness`
+2. profile, output target, acknowledgement, restrictions, and profile skips
+3. `load warnings`
+4. `parser notes`
+5. `memory acquisition` / `memory analysis`
+6. `fact store freshness`
 
 Rules of thumb:
 
 - Confirm collection completeness **before** inferring activity.
 - Do **not** read `missing` as “this never happened.”
+- Treat `skipped_by_profile` as an explicit coverage limitation; enabled profile skips make overall coverage `partial`.
 - If you see parser fallback or odd sidecars, record the uncertainty in your notes.
 
 ## 4. Single-host shortest path

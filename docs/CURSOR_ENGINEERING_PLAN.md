@@ -1,4 +1,11 @@
-# IR_Collect Cursor 工程計畫書
+# 9SEC Evidence Workbench 歷史工程計畫
+
+> **歷史文件（2026-07-29 標記）**：本計畫記錄 Fact Store、Investigation Workspace、
+> lateral movement、provenance 與 memory orchestration 的早期分期；主要階段均已落地，
+> 且當時尚未納入 UAC Linux/macOS evidence intake。現行產品邊界與工作包狀態以
+> [SPEC.md](SPEC.md)、[REASONABLE_ENDPOINT_PLAN.md](REASONABLE_ENDPOINT_PLAN.md) 與
+> [V0_25_ENGINEERING_SPEC.md](V0_25_ENGINEERING_SPEC.md) 為準。文內 `IR_Collect`
+> 是歷史專案名稱／現存程式 namespace，不是目前產品名稱。
 
 ## 1. 目標
 

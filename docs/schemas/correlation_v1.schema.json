@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/correlation_v1.schema.json",
-  "title": "IR_Collect correlation_v1",
-  "description": "Output of `IR_Collect.exe -correlate` — cross-host shared-entity and temporal correlation.",
+  "title": "9SEC Evidence Workbench correlation_v1",
+  "description": "Output of `9SEC_Evidence_Workbench.exe -correlate` — cross-host shared-entity and temporal correlation.",
   "type": "object",
   "required": ["export_schema", "generated_at", "tool_name", "tool_version", "host_count", "hosts", "shared_entities", "temporal_correlations"],
   "properties": {
@@ -25,7 +25,10 @@
           "case_id": { "type": "string" },
           "fact_count": { "type": "integer" },
           "evidence_digest": { "type": "string" },
-          "evidence_file_count": { "type": "integer" }
+          "evidence_file_count": { "type": "integer" },
+          "source_format": { "type": "string" },
+          "source_evidence_sha256": { "type": "string" },
+          "uac": { "type": ["object", "null"] }
         }
       }
     },

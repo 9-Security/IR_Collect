@@ -1,20 +1,20 @@
-# IR_Collect — Software Bill of Materials (SBOM) & Dependency Governance
+# 9SEC Evidence Workbench — Software Bill of Materials (SBOM) & Dependency Governance
 
-This document declares everything IR_Collect is built from and depends on at runtime, for
+This document declares everything 9SEC Evidence Workbench is built from and depends on at runtime, for
 dependency governance and court-admissibility. It is maintained by hand; the authoritative
 build-input list is [`build_common.rsp`](../build_common.rsp).
 
 ## Tool identity
 
-- **Name:** IR_Collect
+- **Name:** 9SEC Evidence Workbench
 - **Version:** single source of truth = `AssemblyVersion` in [`src/AssemblyInfo.cs`](../src/AssemblyInfo.cs),
-  read at runtime by `IR_Collect.BuildInfo` and printed by `IR_Collect.exe -version`.
+  read at runtime by `IR_Collect.BuildInfo` and printed by `9SEC_Evidence_Workbench.exe -version`.
 - **Version surfacing:** stamped as `tool_name` + `tool_version` into every machine-readable
-  output (`summary_v3`, `correlation_v1`, `graph_v1`, `full_log_v3`).
+  output (`summary_v3`, `diff_v1`, `correlation_v1`, `graph_v1`, `full_log_v3`).
 
 ## Build
 
-- **Output:** a single portable `IR_Collect.exe` (WinForms, `winexe`).
+- **Output:** a single portable `9SEC_Evidence_Workbench.exe` (WinForms, `winexe`).
 - **Target:** .NET Framework 4.5 / C# 5.
 - **Compiler (pinned):** `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` (the in-box
   .NET Framework compiler). Invoked from [`build.bat`](../build.bat) / [`build_release.bat`](../build_release.bat).
@@ -53,6 +53,7 @@ build-input list is [`build_common.rsp`](../build_common.rsp).
 ## Code signing
 
 - Local builds are signed by [`scripts/SignLocalBuild.ps1`](../scripts/SignLocalBuild.ps1) with a
-  **self-signed** code-signing certificate (locally untrusted). A production CA / EV certificate is
-  outstanding; until then SmartScreen will warn on first run. Runtime Authenticode status is checked
-  via `src/SignatureHelper.cs`.
+  **self-signed** code-signing certificate (locally untrusted). Existing certificates are reused only
+  when the code-signing EKU is present and the RSA private key can actually be opened; broken provider
+  registrations are ignored. A production CA / EV certificate is outstanding; until then SmartScreen
+  will warn on first run. Runtime Authenticode status is checked via `src/SignatureHelper.cs`.

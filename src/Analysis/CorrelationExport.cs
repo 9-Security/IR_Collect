@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Analysis
 {
@@ -19,6 +20,9 @@ namespace IR_Collect.Analysis
         [DataMember(Name = "fact_count")] public int FactCount { get; set; }
         [DataMember(Name = "evidence_digest")] public string EvidenceDigest { get; set; }
         [DataMember(Name = "evidence_file_count")] public int EvidenceFileCount { get; set; }
+        [DataMember(Name = "source_format")] public string SourceFormat { get; set; }
+        [DataMember(Name = "source_evidence_sha256")] public string SourceEvidenceSha256 { get; set; }
+        [DataMember(Name = "uac")] public UacEvidenceMetadata Uac { get; set; }
     }
 
     [DataContract]
@@ -85,7 +89,7 @@ namespace IR_Collect.Analysis
 
         public static void SaveToFile(CorrelationReport report, string path)
         {
-            File.WriteAllText(path, Serialize(report), new UTF8Encoding(false));
+            AtomicFile.WriteAllText(path, Serialize(report), new UTF8Encoding(false));
         }
 
         /// <summary>ISO-8601 UTC, second precision; empty for sentinel/unset times.</summary>

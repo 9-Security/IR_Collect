@@ -3,7 +3,11 @@ param(
     [string]$TargetPath,
 
     [Parameter(Mandatory = $true)]
-    [string]$Label
+    [string]$Label,
+
+    [switch]$RequireSignature,
+
+    [switch]$RequireTimestamp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,6 +15,60 @@ $ErrorActionPreference = 'Stop'
 $subjectName = 'CN=nine-security Inc'
 $timestampServer = 'http://timestamp.digicert.com'
 $codeSigningOid = '1.3.6.1.5.5.7.3.3'
+
+function Test-CertificateHasEku {
+    param(
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [string]$RequiredEkuOid
+    )
+
+    foreach ($eku in @($Certificate.EnhancedKeyUsageList)) {
+        $oid = $null
+        if ($eku -and $eku.PSObject.Properties['Value']) {
+            $oid = [string]$eku.Value
+        }
+        if ([string]::IsNullOrWhiteSpace($oid) -and
+            $eku -and
+            $eku.PSObject.Properties['ObjectId']) {
+            if ($eku.ObjectId -is [System.Security.Cryptography.Oid]) {
+                $oid = $eku.ObjectId.Value
+            }
+            else {
+                $oid = [string]$eku.ObjectId
+            }
+        }
+
+        if ($oid -eq $RequiredEkuOid) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-CertificatePrivateKeyAccessible {
+    param(
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate
+    )
+
+    if (-not $Certificate -or -not $Certificate.HasPrivateKey) {
+        return $false
+    }
+
+    $rsa = $null
+    try {
+        $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($Certificate)
+        return ($null -ne $rsa)
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($rsa) {
+            $rsa.Dispose()
+        }
+    }
+}
 
 function Get-LocalCodeSigningCertificate {
     param(
@@ -25,14 +83,29 @@ function Get-LocalCodeSigningCertificate {
             $store.Certificates |
                 Where-Object {
                     $_.Subject -eq $SubjectName -and
-                    $_.HasPrivateKey -and
-                    (@($_.EnhancedKeyUsageList | Where-Object { $_.ObjectId.Value -eq $RequiredEkuOid }).Count -gt 0)
+                    (Test-CertificateHasEku -Certificate $_ -RequiredEkuOid $RequiredEkuOid) -and
+                    (Test-CertificatePrivateKeyAccessible -Certificate $_)
                 } |
-                Sort-Object NotAfter -Descending
+                Sort-Object -Property @{ Expression = 'NotAfter'; Descending = $true }, @{ Expression = 'Thumbprint'; Descending = $false }
         )
 
         if ($matches.Count -gt 0) {
             return $matches[0]
+        }
+
+        # Some local certificates omit or expose EKU metadata inconsistently. Reuse only a
+        # certificate whose private key can actually be opened by the signing process.
+        $fallbackMatches = @(
+            $store.Certificates |
+                Where-Object {
+                    $_.Subject -eq $SubjectName -and
+                    (Test-CertificatePrivateKeyAccessible -Certificate $_)
+                } |
+                Sort-Object -Property @{ Expression = 'NotAfter'; Descending = $true }, @{ Expression = 'Thumbprint'; Descending = $false }
+        )
+
+        if ($fallbackMatches.Count -gt 0) {
+            return $fallbackMatches[0]
         }
 
         return $null
@@ -67,6 +140,78 @@ function Test-ExpectedLocalSelfSignedStatus {
     return ($Signature.StatusMessage -like '*root certificate which is not trusted by the trust provider*')
 }
 
+function Get-TimestampFailureDetail {
+    param(
+        $Signature
+    )
+
+    if (-not $Signature) {
+        return $null
+    }
+
+    if ($Signature.Status -ne [System.Management.Automation.SignatureStatus]::UnknownError) {
+        return $null
+    }
+
+    $message = $Signature.StatusMessage
+    if ([string]::IsNullOrWhiteSpace($message)) {
+        return $null
+    }
+
+    if ($message -like '*0x80072efd*' -or
+        $message -like '*0x80072ee7*' -or
+        $message -like '*timestamp*' -or
+        $message -like '*server name or address could not be resolved*' -or
+        $message -like '*could not establish trust relationship*') {
+        return $message
+    }
+
+    return $null
+}
+
+function Test-FileSharingViolation {
+    param(
+        $ErrorRecord
+    )
+
+    $exception = $ErrorRecord.Exception
+    while ($exception) {
+        if ($exception -is [System.IO.IOException]) {
+            $win32Code = $exception.HResult -band 0xFFFF
+            if ($win32Code -eq 32 -or $win32Code -eq 33) {
+                return $true
+            }
+        }
+        $exception = $exception.InnerException
+    }
+
+    return $false
+}
+
+function Set-SignatureWithFileLockRetry {
+    param(
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$Certificate,
+        [string]$FilePath,
+        [string]$TimestampUrl
+    )
+
+    $maxAttempts = 5
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            return Set-AuthenticodeSignature -Certificate $Certificate -FilePath $FilePath -HashAlgorithm SHA256 -TimestampServer $TimestampUrl
+        }
+        catch {
+            if (-not (Test-FileSharingViolation -ErrorRecord $_) -or $attempt -ge $maxAttempts) {
+                throw
+            }
+
+            $delayMs = 500 * $attempt
+            Write-Host ('[!] Signing target is temporarily locked; retrying in ' + $delayMs + ' ms (' + $attempt + '/' + $maxAttempts + ').')
+            Start-Sleep -Milliseconds $delayMs
+        }
+    }
+}
+
 $target = (Resolve-Path -LiteralPath $TargetPath).Path
 Write-Host ('[+] Signing ' + $Label + ': ' + $target)
 
@@ -79,14 +224,20 @@ if (-not $cert) {
     catch {
         Write-Host '[!] Signature status: SkippedLocalCertUnavailable'
         Write-Host ('[!] Signature detail: Local code-signing certificate could not be created on this machine. ' + $_.Exception.Message)
+        if ($RequireSignature) {
+            throw 'A signature is required for this release build.'
+        }
         exit 0
     }
 }
 
 Write-Host ('[+] Signing with cert: ' + $cert.Thumbprint)
 
-$sig = Set-AuthenticodeSignature -Certificate $cert -FilePath $target -HashAlgorithm SHA256 -TimestampServer $timestampServer
-if (-not $sig.SignerCertificate -or $sig.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned -or $sig.Status -eq [System.Management.Automation.SignatureStatus]::HashMismatch) {
+$sig = Set-SignatureWithFileLockRetry -Certificate $cert -FilePath $target -TimestampUrl $timestampServer
+$timestampFailureDetail = Get-TimestampFailureDetail -Signature $sig
+if (($sig.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned -or
+     $sig.Status -eq [System.Management.Automation.SignatureStatus]::HashMismatch) -and
+    -not $timestampFailureDetail) {
     throw ('Signing failed: ' + $sig.Status)
 }
 
@@ -100,7 +251,12 @@ if ($verify.Status -eq [System.Management.Automation.SignatureStatus]::Valid) {
 }
 elseif (Test-ExpectedLocalSelfSignedStatus -Signature $verify -ExpectedCertificate $cert) {
     Write-Host '[+] Signature status: LocalSelfSignedUntrusted'
-    Write-Host '[+] Signature detail: The file is signed and timestamped, but the local self-signed root is not trusted on this machine.'
+    if ($verify.TimeStamperCertificate) {
+        Write-Host '[+] Signature detail: The file is signed and timestamped, but the local self-signed root is not trusted on this machine.'
+    }
+    else {
+        Write-Host '[+] Signature detail: The file is signed, but the local self-signed root is not trusted on this machine.'
+    }
 }
 else {
     $detail = $verify.StatusMessage
@@ -116,4 +272,11 @@ if ($verify.TimeStamperCertificate) {
 }
 else {
     Write-Host '[!] Timestamp signer: not attached'
+    if ($timestampFailureDetail) {
+        Write-Host '[!] Timestamp status: TimestampServerUnavailable'
+        Write-Host ('[!] Timestamp detail: Signature was applied, but the timestamp server could not be reached. ' + $timestampFailureDetail)
+    }
+    if ($RequireTimestamp) {
+        throw 'A trusted timestamp is required for this release build.'
+    }
 }

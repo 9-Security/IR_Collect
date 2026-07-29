@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -31,6 +32,365 @@ namespace IR_Collect
         private bool _timelineGraphHandoffHasWindow;
         private DateTime _timelineGraphHandoffWindowFrom;
         private DateTime _timelineGraphHandoffWindowTo;
+
+        private sealed class DiffCaseChoice
+        {
+            public IR_Collect.Analysis.CaseData CaseData;
+
+            public override string ToString()
+            {
+                if (CaseData == null) return "(unavailable)";
+                string host = string.IsNullOrWhiteSpace(CaseData.Hostname) ? "host" : CaseData.Hostname;
+                string caseId = string.IsNullOrWhiteSpace(CaseData.CaseID) ? "" : " | " + CaseData.CaseID;
+                return host + caseId + " | " + (CaseData.FactStore != null ? CaseData.FactStore.Count : 0).ToString("N0") + " facts";
+            }
+        }
+
+        private TabPage CreateDiffTab(IR_Collect.Analysis.CaseData target)
+        {
+            var page = new TabPage("Diff");
+            var top = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 78,
+                Padding = new Padding(8, 6, 8, 4),
+                ColumnCount = 10,
+                RowCount = 2
+            };
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 58));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 102));
+            top.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            top.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+
+            var baselineCombo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            var categoryCombo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            categoryCombo.Items.AddRange(new object[] { "All", "Process", "Persistence", "File", "Identity", "Network", "Fact" });
+            categoryCombo.SelectedIndex = 0;
+            var changeCombo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            changeCombo.Items.AddRange(new object[] { "All", "Added", "Modified", "Removed" });
+            changeCombo.SelectedIndex = 0;
+            var sourceText = new TextBox { Dock = DockStyle.Fill };
+            var compareButton = new Button { Text = "Compare", Dock = DockStyle.Fill, Height = 26 };
+            var exportButton = new Button { Text = "Export JSON", Dock = DockStyle.Fill, Height = 26, Enabled = false };
+            var openFactsButton = new Button { Text = "Open Facts", Height = 26, Enabled = false };
+            var openTimelineButton = new Button { Text = "Open Timeline", Height = 26, Enabled = false };
+            var summary = new Label
+            {
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = "Select a ready baseline case."
+            };
+
+            top.Controls.Add(new Label { Text = "Baseline:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+            top.Controls.Add(baselineCombo, 1, 0);
+            top.SetColumnSpan(baselineCombo, 3);
+            top.Controls.Add(compareButton, 8, 0);
+            top.Controls.Add(exportButton, 9, 0);
+            top.Controls.Add(new Label { Text = "Category:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
+            top.Controls.Add(categoryCombo, 1, 1);
+            top.Controls.Add(new Label { Text = "Change:", AutoSize = true, Anchor = AnchorStyles.Left }, 2, 1);
+            top.Controls.Add(changeCombo, 3, 1);
+            top.Controls.Add(new Label { Text = "Source:", AutoSize = true, Anchor = AnchorStyles.Left }, 4, 1);
+            top.Controls.Add(sourceText, 5, 1);
+            top.SetColumnSpan(sourceText, 2);
+            top.Controls.Add(summary, 7, 1);
+
+            var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.WhiteSmoke };
+            openFactsButton.Width = 96;
+            openFactsButton.Height = 26;
+            openFactsButton.Left = 8;
+            openFactsButton.Top = 4;
+            openTimelineButton.Width = 108;
+            openTimelineButton.Height = 26;
+            openTimelineButton.Left = 110;
+            openTimelineButton.Top = 4;
+            var actionHint = new Label
+            {
+                AutoSize = true,
+                Left = 230,
+                Top = 9,
+                Text = "Double-click opens the contributing Facts row. Added/Modified use target; Removed uses baseline."
+            };
+            actionBar.Controls.Add(openFactsButton);
+            actionBar.Controls.Add(openTimelineButton);
+            actionBar.Controls.Add(actionHint);
+
+            DataGridView grid = CreateGrid();
+            grid.Columns.Add("Category", "Category");
+            grid.Columns.Add("ChangeType", "Change");
+            grid.Columns.Add("EntityKey", "Entity Key");
+            grid.Columns.Add("DisplayValue", "Value");
+            grid.Columns.Add("Sources", "Sources");
+            grid.Columns.Add("Confidence", "Confidence");
+            grid.Columns.Add("BaselineFacts", "Baseline Facts");
+            grid.Columns.Add("TargetFacts", "Target Facts");
+            grid.Columns.Add("Notes", "Notes");
+            grid.Columns[0].Width = 100;
+            grid.Columns[1].Width = 86;
+            grid.Columns[2].Width = 250;
+            grid.Columns[3].Width = 280;
+            grid.Columns[4].Width = 180;
+            grid.Columns[5].Width = 85;
+            grid.Columns[6].Width = 92;
+            grid.Columns[7].Width = 92;
+            grid.Columns[8].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            foreach (DataGridViewColumn column in grid.Columns)
+                column.SortMode = DataGridViewColumnSortMode.NotSortable;
+
+            var content = new Panel { Dock = DockStyle.Fill };
+            Panel paging;
+            Action<List<string[]>, List<object>> setRows = CreatePagingBar(content, grid, 9, PagingThresholdDefault, out paging);
+            content.Controls.Add(grid);
+            content.Controls.Add(paging);
+
+            IR_Collect.Analysis.DiffReport currentReport = null;
+            Action applyFilters = delegate
+            {
+                string category = categoryCombo.SelectedItem != null ? categoryCombo.SelectedItem.ToString() : "All";
+                string changeType = changeCombo.SelectedItem != null ? changeCombo.SelectedItem.ToString() : "All";
+                string sourceNeedle = (sourceText.Text ?? "").Trim();
+                var visible = currentReport != null && currentReport.Changes != null
+                    ? currentReport.Changes.Where(change =>
+                        (category == "All" || string.Equals(change.Category, category, StringComparison.OrdinalIgnoreCase)) &&
+                        (changeType == "All" || string.Equals(change.ChangeType, changeType, StringComparison.OrdinalIgnoreCase)) &&
+                        (sourceNeedle.Length == 0 || (change.SourceNames ?? new List<string>())
+                            .Any(source => (source ?? "").IndexOf(sourceNeedle, StringComparison.OrdinalIgnoreCase) >= 0))).ToList()
+                    : new List<IR_Collect.Analysis.DiffChange>();
+                var rows = visible.Select(change => new string[]
+                {
+                    change.Category ?? "",
+                    change.ChangeType ?? "",
+                    change.EntityKey ?? "",
+                    change.DisplayValue ?? "",
+                    string.Join(", ", (change.SourceNames ?? new List<string>()).ToArray()),
+                    change.Confidence ?? "",
+                    change.BaselineFactCount.ToString("N0"),
+                    change.TargetFactCount.ToString("N0"),
+                    string.Join(" ", (change.Notes ?? new List<string>()).ToArray())
+                }).ToList();
+                setRows(rows, visible.Cast<object>().ToList());
+                summary.Text = currentReport == null
+                    ? "Select a ready baseline case."
+                    : visible.Count.ToString("N0") + " shown of " + currentReport.ChangeCount.ToString("N0") +
+                        " changes" + (currentReport.ChangesTruncated ? " (capped)" : "") +
+                        ". Coverage baseline=" + DisplayDiffCoverage(currentReport.BaselineRef) +
+                        ", target=" + DisplayDiffCoverage(currentReport.TargetRef) + ".";
+            };
+
+            foreach (IR_Collect.Analysis.CaseData candidate in CollectLoadedCases())
+            {
+                if (candidate == null || object.ReferenceEquals(candidate, target)) continue;
+                if (candidate.FactStoreBuilding || candidate.FactStore == null || candidate.FactStore.Facts == null) continue;
+                baselineCombo.Items.Add(new DiffCaseChoice { CaseData = candidate });
+            }
+            if (baselineCombo.Items.Count > 0) baselineCombo.SelectedIndex = 0;
+
+            Action compare = delegate
+            {
+                var choice = baselineCombo.SelectedItem as DiffCaseChoice;
+                if (choice == null || choice.CaseData == null)
+                {
+                    currentReport = null;
+                    exportButton.Enabled = false;
+                    applyFilters();
+                    return;
+                }
+                if (target == null || target.FactStoreBuilding || target.FactStore == null || target.FactStore.Facts == null)
+                {
+                    MessageBox.Show("Target Fact Store is still building or unavailable.", "Case Diff", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                try
+                {
+                    currentReport = IR_Collect.Analysis.Correlation.DiffBuilder.Build(choice.CaseData, target);
+                    exportButton.Enabled = true;
+                    applyFilters();
+                }
+                catch (Exception ex)
+                {
+                    currentReport = null;
+                    exportButton.Enabled = false;
+                    applyFilters();
+                    MessageBox.Show("Diff failed: " + ex.Message, "Case Diff", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+
+            Func<IR_Collect.Analysis.DiffChange> selectedChange = delegate
+            {
+                return grid.SelectedRows.Count > 0
+                    ? grid.SelectedRows[0].Tag as IR_Collect.Analysis.DiffChange
+                    : (grid.CurrentRow != null ? grid.CurrentRow.Tag as IR_Collect.Analysis.DiffChange : null);
+            };
+            Action refreshSelection = delegate
+            {
+                bool hasSelection = selectedChange() != null;
+                openFactsButton.Enabled = hasSelection;
+                openTimelineButton.Enabled = hasSelection;
+            };
+
+            compareButton.Click += delegate { compare(); };
+            categoryCombo.SelectedIndexChanged += delegate { applyFilters(); };
+            changeCombo.SelectedIndexChanged += delegate { applyFilters(); };
+            sourceText.TextChanged += delegate { applyFilters(); };
+            grid.SelectionChanged += delegate { refreshSelection(); };
+            grid.CellDoubleClick += delegate(object sender, DataGridViewCellEventArgs e)
+            {
+                if (e.RowIndex >= 0)
+                {
+                    IR_Collect.Analysis.DiffChange change = grid.Rows[e.RowIndex].Tag as IR_Collect.Analysis.DiffChange;
+                    NavigateFromDiff(change, (baselineCombo.SelectedItem as DiffCaseChoice), target, false);
+                }
+            };
+            openFactsButton.Click += delegate
+            {
+                NavigateFromDiff(selectedChange(), baselineCombo.SelectedItem as DiffCaseChoice, target, false);
+            };
+            openTimelineButton.Click += delegate
+            {
+                NavigateFromDiff(selectedChange(), baselineCombo.SelectedItem as DiffCaseChoice, target, true);
+            };
+            exportButton.Click += delegate
+            {
+                if (currentReport == null) return;
+                using (var dialog = new SaveFileDialog())
+                {
+                    dialog.Filter = "JSON files|*.json|All files|*.*";
+                    dialog.FileName = "case_diff.json";
+                    if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                    try
+                    {
+                        IR_Collect.Analysis.DiffExport.SaveToFile(currentReport, dialog.FileName);
+                        MessageBox.Show("Diff JSON exported.", "Case Diff", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Export failed: " + ex.Message, "Case Diff", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+            };
+
+            page.Controls.Add(content);
+            page.Controls.Add(actionBar);
+            page.Controls.Add(top);
+            if (baselineCombo.Items.Count > 0)
+                compare();
+            else
+                compareButton.Enabled = false;
+            return page;
+        }
+
+        private static string DisplayDiffCoverage(IR_Collect.Analysis.DiffCaseReference reference)
+        {
+            if (reference == null || string.IsNullOrWhiteSpace(reference.CollectionCoverageStatus))
+                return "unknown";
+            return reference.CollectionCoverageStatus;
+        }
+
+        private void NavigateFromDiff(
+            IR_Collect.Analysis.DiffChange change,
+            DiffCaseChoice baselineChoice,
+            IR_Collect.Analysis.CaseData target,
+            bool timeline)
+        {
+            if (change == null) return;
+            bool useBaseline = string.Equals(change.ChangeType, "Removed", StringComparison.OrdinalIgnoreCase);
+            IR_Collect.Analysis.CaseData selectedCase = useBaseline
+                ? (baselineChoice != null ? baselineChoice.CaseData : null)
+                : target;
+            if (selectedCase == null) return;
+
+            List<IR_Collect.Analysis.DiffFactReference> references = useBaseline
+                ? change.BaselineFactRefs
+                : change.TargetFactRefs;
+            IR_Collect.Analysis.DiffFactReference factRef = references != null ? references.FirstOrDefault() : null;
+            string rawRef = factRef != null ? (factRef.RawRef ?? "") : "";
+            string entityType;
+            string entityValue;
+            ResolveDiffNavigationIdentity(change, selectedCase, factRef, out entityType, out entityValue);
+
+            if (timeline)
+            {
+                var edge = new IR_Collect.Analysis.Correlation.InvestigationGraphEdge
+                {
+                    RelatedType = entityType,
+                    NormalizedValue = entityValue != null ? entityValue.ToLowerInvariant() : "",
+                    DisplayValue = entityValue,
+                    FirstSeen = DateTime.MinValue,
+                    LastSeen = DateTime.MinValue
+                };
+                IR_Collect.Analysis.Correlation.Fact fact = FindDiffFact(selectedCase, factRef);
+                if (fact != null && IR_Collect.Analysis.Correlation.FactTimeMetadata.HasUsableTime(fact.Time))
+                {
+                    edge.FirstSeen = fact.Time;
+                    edge.LastSeen = fact.Time;
+                }
+                SetTimelineGraphHandoffFromInvestigation(selectedCase, edge, "Case Diff: " + (change.ChangeType ?? "") + " " + (change.DisplayValue ?? ""));
+            }
+            else if (!string.IsNullOrWhiteSpace(entityType) && !string.IsNullOrWhiteSpace(entityValue))
+            {
+                SetFactsNavigationFocus(selectedCase, entityType, entityValue, rawRef);
+            }
+
+            TreeNode node = FindHostNode(selectedCase);
+            if (node == null) return;
+            bool alreadySelected = object.ReferenceEquals(treeHosts.SelectedNode, node);
+            treeHosts.SelectedNode = node;
+            if (alreadySelected) BuildHostTabs(selectedCase);
+            if (dashboardPanel != null) dashboardPanel.Visible = false;
+            if (rightContentPanel != null) rightContentPanel.Visible = true;
+            SelectTopLevelHostTab(timeline ? "Timeline Analysis" : "Facts");
+        }
+
+        private void ResolveDiffNavigationIdentity(
+            IR_Collect.Analysis.DiffChange change,
+            IR_Collect.Analysis.CaseData selectedCase,
+            IR_Collect.Analysis.DiffFactReference factRef,
+            out string entityType,
+            out string entityValue)
+        {
+            entityType = "";
+            entityValue = "";
+            string key = change != null ? (change.EntityKey ?? "") : "";
+            int colon = key.IndexOf(':');
+            if (colon > 0 && !key.StartsWith("FactFingerprint:", StringComparison.OrdinalIgnoreCase))
+            {
+                entityType = key.Substring(0, colon);
+                entityValue = change.DisplayValue ?? key.Substring(colon + 1);
+                return;
+            }
+
+            IR_Collect.Analysis.Correlation.Fact fact = FindDiffFact(selectedCase, factRef);
+            IR_Collect.Analysis.Correlation.EntityRef entity = fact != null && fact.EntityRefs != null
+                ? fact.EntityRefs.FirstOrDefault(x => x != null && !string.IsNullOrWhiteSpace(x.Value))
+                : null;
+            if (entity != null)
+            {
+                entityType = entity.Type ?? "";
+                entityValue = entity.Value ?? "";
+            }
+        }
+
+        private IR_Collect.Analysis.Correlation.Fact FindDiffFact(
+            IR_Collect.Analysis.CaseData selectedCase,
+            IR_Collect.Analysis.DiffFactReference factRef)
+        {
+            if (selectedCase == null || selectedCase.FactStore == null || selectedCase.FactStore.Facts == null || factRef == null)
+                return null;
+            return selectedCase.FactStore.Facts.FirstOrDefault(fact =>
+                fact != null &&
+                ((!string.IsNullOrWhiteSpace(factRef.RawRef) && string.Equals(fact.RawRef, factRef.RawRef, StringComparison.OrdinalIgnoreCase)) ||
+                 (!string.IsNullOrWhiteSpace(factRef.Id) && string.Equals(fact.Id, factRef.Id, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(fact.Source, factRef.Source, StringComparison.OrdinalIgnoreCase))));
+        }
 
         private void RunCorrelation()
         {
@@ -1391,11 +1751,21 @@ namespace IR_Collect
             worker.RunWorkerAsync(c);
         }
 
-        private void RunRebuildSelectedFactStore()
+        private void RunRebuildSelectedFactStore(bool changedArtifactsOnly)
         {
             IR_Collect.Analysis.CaseData c;
             if (!EnsureSelectedHostMaintenanceReady("Rebuild Fact Store", out c))
                 return;
+            bool incrementalCacheEnabled = config.Get("FactStoreIncrementalCache") == "1";
+            if (changedArtifactsOnly && !incrementalCacheEnabled)
+            {
+                MessageBox.Show(
+                    "Enable \"Persist Fact Store cache in Local AppData\" in Advanced -> Settings before using changed-artifacts-only rebuild.",
+                    "Rebuild Fact Store",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
 
             c.FactStoreBuilding = true;
             RefreshSelectedHostAfterMaintenance(c);
@@ -1411,13 +1781,19 @@ namespace IR_Collect
                 try
                 {
                     _autoBuildFactStoreSemaphore.Wait();
-                    store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(caseData);
-                    if (writeSqlite && store != null && store.Count > 0 && !string.IsNullOrEmpty(caseData.ExtractPath))
+                    var build = IR_Collect.Analysis.Correlation.FactStoreBuildCoordinator.Build(
+                        caseData,
+                        changedArtifactsOnly && incrementalCacheEnabled,
+                        incrementalCacheEnabled);
+                    store = build.Store;
+                    if (writeSqlite && store != null && store.Count > 0)
                     {
                         try
                         {
-                            string dbPath = System.IO.Path.Combine(caseData.ExtractPath, ArtifactNames.FactStoreDb);
-                            sqliteSaved = IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, dbPath);
+                            string dbPath = IR_Collect.Analysis.CaseManager.GetAnalysisOutputPath(caseData, ArtifactNames.FactStoreDb);
+                            if (!string.IsNullOrEmpty(dbPath))
+                                sqliteSaved = IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, dbPath);
+                            IR_Collect.Analysis.CaseManager.RefreshAnalysisWorkspaceManifest(caseData);
                         }
                         catch (Exception ex)
                         {
@@ -1469,6 +1845,9 @@ namespace IR_Collect
                 int count = caseData.FactStore != null ? caseData.FactStore.Count : 0;
                 var sb = new StringBuilder();
                 sb.AppendFormat("Rebuilt Fact Store for {0}: {1} fact(s).", caseData.Hostname ?? "host", count);
+                sb.Append("\nBuild mode: " + (caseData.FactStoreBuildMode ?? "unknown") + ".");
+                if (!string.IsNullOrWhiteSpace(caseData.FactStoreBuildDetail))
+                    sb.Append("\n" + caseData.FactStoreBuildDetail);
                 if (result.Item3)
                     sb.Append("\nSQLite cache updated.");
                 else if (writeSqlite)
@@ -1516,18 +1895,21 @@ namespace IR_Collect
                     var builtStores = new List<Tuple<IR_Collect.Analysis.CaseData, IR_Collect.Analysis.Correlation.FactStore, bool>>();
                     foreach (var c in list)
                     {
-                        var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                        var build = IR_Collect.Analysis.Correlation.FactStoreBuildCoordinator.BuildConfigured(c);
+                        var store = build.Store;
                         int count = store != null ? store.Count : 0;
                         totalFacts += count;
                         if (built.Length > 0) built.AppendLine();
                         built.AppendFormat("{0}: {1} facts", c.Hostname ?? "host", count);
                         bool sqliteSaved = false;
-                        if (sqlite && store != null && count > 0 && !string.IsNullOrEmpty(c.ExtractPath))
+                        if (sqlite && store != null && count > 0)
                         {
                             try
                             {
-                                string dbPath = System.IO.Path.Combine(c.ExtractPath, ArtifactNames.FactStoreDb);
-                                sqliteSaved = IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, dbPath);
+                                string dbPath = IR_Collect.Analysis.CaseManager.GetAnalysisOutputPath(c, ArtifactNames.FactStoreDb);
+                                if (!string.IsNullOrEmpty(dbPath))
+                                    sqliteSaved = IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, dbPath);
+                                IR_Collect.Analysis.CaseManager.RefreshAnalysisWorkspaceManifest(c);
                                 if (sqliteSaved)
                                     built.Append(" [SQLite]");
                             }

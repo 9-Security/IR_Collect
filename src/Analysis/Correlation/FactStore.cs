@@ -58,6 +58,104 @@ namespace IR_Collect.Analysis.Correlation
                 store.Facts.AddRange(processFacts);
             }
 
+            string uacAuthPath = ResolvePath(c, basePath, ArtifactNames.UacAuthEventsCsv);
+            if (!string.IsNullOrEmpty(uacAuthPath))
+            {
+                var uacAuthFacts = Normalizers.UacAuthEventNormalizer.ToFacts(uacAuthPath);
+                store.Facts.AddRange(uacAuthFacts);
+            }
+
+            string uacNetworkPath = ResolvePath(c, basePath, ArtifactNames.UacNetworkConnectionsCsv);
+            if (!string.IsNullOrEmpty(uacNetworkPath))
+            {
+                var uacNetworkFacts = Normalizers.UacNetworkConnectionNormalizer.ToFacts(uacNetworkPath);
+                store.Facts.AddRange(uacNetworkFacts);
+            }
+
+            string uacEvidenceIndexPath = ResolvePath(c, basePath, ArtifactNames.UacEvidenceIndexCsv);
+            if (!string.IsNullOrEmpty(uacEvidenceIndexPath))
+            {
+                var uacEvidenceFacts = Normalizers.UacEvidenceIndexNormalizer.ToFacts(uacEvidenceIndexPath);
+                store.Facts.AddRange(uacEvidenceFacts);
+            }
+
+            string uacAccountsPath = ResolvePath(c, basePath, ArtifactNames.UacAccountsCsv);
+            if (!string.IsNullOrEmpty(uacAccountsPath))
+            {
+                var uacAccountFacts = Normalizers.UacAccountNormalizer.ToFacts(uacAccountsPath);
+                store.Facts.AddRange(uacAccountFacts);
+            }
+
+            string uacShellHistoryPath = ResolvePath(c, basePath, ArtifactNames.UacShellHistoryCsv);
+            if (!string.IsNullOrEmpty(uacShellHistoryPath))
+            {
+                var uacShellHistoryFacts = Normalizers.UacShellHistoryNormalizer.ToFacts(uacShellHistoryPath);
+                store.Facts.AddRange(uacShellHistoryFacts);
+            }
+
+            string uacPersistencePath = ResolvePath(c, basePath, ArtifactNames.UacPersistenceCsv);
+            if (!string.IsNullOrEmpty(uacPersistencePath))
+            {
+                var uacPersistenceFacts = Normalizers.UacPersistenceNormalizer.ToFacts(uacPersistencePath);
+                store.Facts.AddRange(uacPersistenceFacts);
+            }
+
+            string uacJournalFilesPath = ResolvePath(c, basePath, ArtifactNames.UacJournalFilesCsv);
+            if (!string.IsNullOrEmpty(uacJournalFilesPath))
+            {
+                var uacJournalFacts = Normalizers.UacJournalFileNormalizer.ToFacts(uacJournalFilesPath);
+                store.Facts.AddRange(uacJournalFacts);
+            }
+
+            string uacBootSessionsPath = ResolvePath(c, basePath, ArtifactNames.UacBootSessionsCsv);
+            if (!string.IsNullOrEmpty(uacBootSessionsPath))
+            {
+                var uacBootFacts = Normalizers.UacBootSessionNormalizer.ToFacts(uacBootSessionsPath);
+                store.Facts.AddRange(uacBootFacts);
+            }
+
+            string uacLoginEventsPath = ResolvePath(c, basePath, ArtifactNames.UacLoginEventsCsv);
+            if (!string.IsNullOrEmpty(uacLoginEventsPath))
+            {
+                var uacLoginFacts = Normalizers.UacLoginEventNormalizer.ToFacts(uacLoginEventsPath);
+                store.Facts.AddRange(uacLoginFacts);
+            }
+
+            string uacAuditEventsPath = ResolvePath(c, basePath, ArtifactNames.UacAuditEventsCsv);
+            if (!string.IsNullOrEmpty(uacAuditEventsPath))
+            {
+                var uacAuditFacts = Normalizers.UacAuditEventNormalizer.ToFacts(uacAuditEventsPath);
+                store.Facts.AddRange(uacAuditFacts);
+            }
+
+            string uacSystemLogEventsPath = ResolvePath(c, basePath, ArtifactNames.UacSystemLogEventsCsv);
+            if (!string.IsNullOrEmpty(uacSystemLogEventsPath))
+            {
+                var uacSystemLogFacts = Normalizers.UacSystemLogNormalizer.ToFacts(uacSystemLogEventsPath);
+                store.Facts.AddRange(uacSystemLogFacts);
+            }
+
+            string uacPackagesPath = ResolvePath(c, basePath, ArtifactNames.UacPackagesCsv);
+            if (!string.IsNullOrEmpty(uacPackagesPath))
+            {
+                var uacPackageFacts = Normalizers.UacPackageNormalizer.ToFacts(uacPackagesPath);
+                store.Facts.AddRange(uacPackageFacts);
+            }
+
+            string uacWebServerEventsPath = ResolvePath(c, basePath, ArtifactNames.UacWebServerEventsCsv);
+            if (!string.IsNullOrEmpty(uacWebServerEventsPath))
+            {
+                var uacWebServerFacts = Normalizers.UacWebServerEventNormalizer.ToFacts(uacWebServerEventsPath);
+                store.Facts.AddRange(uacWebServerFacts);
+            }
+
+            string uacFileHashesPath = ResolvePath(c, basePath, ArtifactNames.UacFileHashesCsv);
+            if (!string.IsNullOrEmpty(uacFileHashesPath))
+            {
+                var uacFileHashFacts = Normalizers.UacFileHashNormalizer.ToFacts(uacFileHashesPath);
+                store.Facts.AddRange(uacFileHashFacts);
+            }
+
             string logonSessionsPath = ResolvePath(c, basePath, ArtifactNames.LogonSessionsCsv);
             if (!string.IsNullOrEmpty(logonSessionsPath))
             {
@@ -269,6 +367,19 @@ namespace IR_Collect.Analysis.Correlation
             }
         }
 
+        internal static FactStore CreateFromFacts(CaseData c, IEnumerable<Fact> facts)
+        {
+            var store = new FactStore
+            {
+                CaseId = c != null ? c.CaseID : "",
+                Hostname = c != null ? (c.Hostname ?? "") : ""
+            };
+            store.Facts = (facts ?? Enumerable.Empty<Fact>()).Where(x => x != null).ToList();
+            FactProvenanceHelper.ApplyCaseMetadata(c, store.Facts);
+            store.BuildEntityIndex();
+            return store;
+        }
+
         private static Dictionary<string, HashSet<Fact>> BuildIndexFor(List<Fact> facts)
         {
             var index = new Dictionary<string, HashSet<Fact>>(StringComparer.OrdinalIgnoreCase);
@@ -350,6 +461,11 @@ namespace IR_Collect.Analysis.Correlation
         }
 
         /// <summary>傳回 logLabel -> 完整路徑，僅包含 *_filtered.csv 的 Event Log CSV。</summary>
+        internal static Dictionary<string, string> GetEventLogFilteredCsvPaths(CaseData c)
+        {
+            return ResolveEventLogFilteredCsvPaths(c, c != null ? (c.ExtractPath ?? "") : "");
+        }
+
         private static Dictionary<string, string> ResolveEventLogFilteredCsvPaths(CaseData c, string basePath)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

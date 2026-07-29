@@ -31,31 +31,32 @@ namespace IR_Collect
                     // Court-admissibility / reproducibility: report tool identity headlessly. The same
                     // tool_name/tool_version is stamped into every analysis JSON output.
                     Console.WriteLine(BuildInfo.ToolIdentity);
-                    Console.WriteLine("output_schemas: summary_v3, correlation_v1, graph_v1, full_log_v3");
+                    Console.WriteLine("output_schemas: summary_v3, correlation_v1, graph_v1, diff_v1, full_log_v3");
                     FreeConsole();
                     Environment.Exit(0);
                 }
                 else if (mode == "-h" || mode == "--help")
                 {
-                    Console.WriteLine("\nIR_Collect — Windows DFIR Artifact Collector & Analyzer");
+                    Console.WriteLine("\n" + BuildInfo.ToolName + " - Windows DFIR Artifact Collector & Analyzer");
                     Console.WriteLine("");
                     Console.WriteLine("Usage:");
-                    Console.WriteLine("  IR_Collect.exe                 Launch GUI");
-                    Console.WriteLine("  IR_Collect.exe -c [EvidenceID]  Run collection (CLI). Output: <EvidenceID>.zip in current directory.");
-                    Console.WriteLine("  IR_Collect.exe -analyze <folder|-> [out.json]  Analyze an already-collected artifact folder -> summary JSON (no live host).");
-                    Console.WriteLine("  IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]  Cross-host correlation over >=2 folders -> correlation JSON.");
-                    Console.WriteLine("  IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <folderA> [...]  Multi-hop investigation graph -> graph JSON.");
-                    Console.WriteLine("  IR_Collect.exe -version         Print tool name + version + output schema versions");
-                    Console.WriteLine("  IR_Collect.exe -h, --help       Show this help");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + "                 Launch GUI");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -c [EvidenceID]  Run collection (CLI). Output: <EvidenceID>.zip in current directory.");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -analyze <evidence-path|-> [out.json]  Analyze a folder or ZIP/TAR/TAR.GZ/TGZ archive -> summary JSON.");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -correlate <out.json> <pathA> <pathB> [...]  Cross-host correlation over >=2 folders/archives -> correlation JSON.");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -graph <seedType> <seedValue> <maxDepth> <out.json> <pathA> [...]  Multi-hop investigation graph -> graph JSON.");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -diff <baseline> <target> [out.json]  Compare two folders/archives -> facts-only diff JSON.");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -version         Print tool name + version + output schema versions");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -h, --help       Show this help");
 #if INCLUDE_TESTS
-                    Console.WriteLine("  IR_Collect.exe -test            Run built-in self-tests (writes %TEMP%\\IR_Collect_TestResult.txt)");
-                    Console.WriteLine("  IR_Collect.exe -make-fixtures [dir]  Regenerate the parser fixture corpus (default: tests\\fixtures)");
-                    Console.WriteLine("  IR_Collect.exe -parse <kind> <file> [out]  Parse one artifact (lnk|jumplist); emit JSON (diff-validation harness)");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -test            Run built-in self-tests (writes %TEMP%\\" + BuildInfo.SelfTestResultFileName + ")");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -make-fixtures [dir]  Regenerate the parser fixture corpus (default: tests\\fixtures)");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -parse <kind> <file> [out]  Parse one artifact (lnk|jumplist); emit JSON (diff-validation harness)");
 #endif
                     Console.WriteLine("");
                     Console.WriteLine("Examples:");
-                    Console.WriteLine("  IR_Collect.exe -c              Collect with auto-generated ID");
-                    Console.WriteLine("  IR_Collect.exe -c MyCase-001   Collect with ID MyCase-001");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -c              Collect with auto-generated ID");
+                    Console.WriteLine("  " + BuildInfo.ExecutableName + " -c MyCase-001   Collect with ID MyCase-001");
                     Console.WriteLine("");
                 }
                 else if (mode == "-c" || mode == "--collect")
@@ -66,7 +67,10 @@ namespace IR_Collect
                     {
                         var cfgCli = new ConfigManager();
                         string cliProfile = CollectionModeProfileHelper.GetActive(cfgCli);
+                        string outputDirectory = Collector.GetCollectionOutputDirectoryName(evidenceId);
+                        CollectionRunContext runContext = CollectionImpactPolicy.Create(cfgCli, outputDirectory, false);
                         Console.WriteLine("[i] Collection mode profile: " + cliProfile);
+                        Console.WriteLine("[i] Output target class: " + runContext.OutputTargetClass);
                         if (CollectionModeProfileHelper.IsTriageFast(cliProfile))
                         {
                             Console.WriteLine("[i] TriageFast: live response still changes the host; outputs are labeled for faster triage workflows (not a footprint guarantee).");
@@ -79,11 +83,36 @@ namespace IR_Collect
                             catch { outFull = outName; }
                             Console.WriteLine("[!] ForensicStrict: live-response collection can perturb the system; this is not zero-footprint or a full low-impact forensic suite.");
                             Console.WriteLine("[!] Output workspace directory (before ZIP): " + outFull);
-                            Console.WriteLine("[!] Prefer an isolated output volume when possible; writing on a suspect disk can be risky.");
+                            if (CollectionImpactPolicy.ShouldWarnOnSystemDisk(cfgCli, runContext))
+                                Console.WriteLine("[!] HIGH IMPACT WARNING: output is on the Windows system disk.");
+                            if (CollectionImpactPolicy.RequiresNonRemovableAcknowledgment(cfgCli, runContext))
+                                Console.WriteLine("[!] Output is not confirmed as removable media; prefer an isolated evidence volume.");
+                            if (runContext.RestrictedSteps.Count > 0)
+                                Console.WriteLine("[i] Restricted by profile: " + string.Join(", ", runContext.RestrictedSteps.ToArray()));
                             Console.WriteLine("[!] Outbound ZIP upload and in-app AI Analyze are blocked while ForensicStrict is selected in Settings.");
+                            Console.Write("[?] Continue ForensicStrict live collection? Type YES: ");
+                            string firstAnswer = Console.ReadLine();
+                            if (!string.Equals((firstAnswer ?? "").Trim(), "YES", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Console.WriteLine("[!] Collection cancelled: operator risk acknowledgment was not provided.");
+                                FreeConsole();
+                                Environment.Exit(3);
+                            }
+                            if (CollectionImpactPolicy.RequiresSecondConfirmation(cfgCli, runContext))
+                            {
+                                Console.Write("[?] Second confirmation - type FORENSIC-STRICT: ");
+                                string secondAnswer = Console.ReadLine();
+                                if (!string.Equals((secondAnswer ?? "").Trim(), "FORENSIC-STRICT", StringComparison.Ordinal))
+                                {
+                                    Console.WriteLine("[!] Collection cancelled: second ForensicStrict confirmation did not match.");
+                                    FreeConsole();
+                                    Environment.Exit(3);
+                                }
+                            }
+                            runContext.OperatorAcknowledgedRisks = true;
                         }
 
-                        var result = Collector.RunCollectionDetailed(evidenceId, null);
+                        var result = Collector.RunCollectionDetailed(evidenceId, null, runContext);
                         string zipPath = result != null ? result.ZipPath : null;
                         if (result != null && result.HasErrors)
                         {
@@ -106,6 +135,9 @@ namespace IR_Collect
                                     result.CoverageReport.FailedSteps,
                                     result.CoverageReport.SkippedSteps,
                                     result.CoverageReport.MissingSteps));
+                                if (result.CoverageReport.SkippedByProfile != null &&
+                                    result.CoverageReport.SkippedByProfile.Count > 0)
+                                    Console.WriteLine("[!] Skipped by profile: " + string.Join(", ", result.CoverageReport.SkippedByProfile.ToArray()));
                             }
                             if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
                             FreeConsole();
@@ -132,7 +164,7 @@ namespace IR_Collect
                     int rc;
                     if (string.IsNullOrEmpty(folder))
                     {
-                        Console.WriteLine("\n[!] Usage: IR_Collect.exe -analyze <folder|-> [out.json]");
+                        Console.WriteLine("\n[!] Usage: " + BuildInfo.ExecutableName + " -analyze <evidence-path|-> [out.json]");
                         rc = 2;
                     }
                     else
@@ -149,7 +181,7 @@ namespace IR_Collect
                     int rc;
                     if (args.Length < 4)
                     {
-                        Console.WriteLine("\n[!] Usage: IR_Collect.exe -correlate <out.json> <folderA> <folderB> [...]");
+                        Console.WriteLine("\n[!] Usage: " + BuildInfo.ExecutableName + " -correlate <out.json> <pathA> <pathB> [...]");
                         rc = 2;
                     }
                     else
@@ -169,7 +201,7 @@ namespace IR_Collect
                     int rc;
                     if (args.Length < 6)
                     {
-                        Console.WriteLine("\n[!] Usage: IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <folderA> [...]");
+                        Console.WriteLine("\n[!] Usage: " + BuildInfo.ExecutableName + " -graph <seedType> <seedValue> <maxDepth> <out.json> <pathA> [...]");
                         rc = 2;
                     }
                     else
@@ -182,6 +214,25 @@ namespace IR_Collect
                         var folders = new System.Collections.Generic.List<string>();
                         for (int i = 5; i < args.Length; i++) folders.Add(args[i]);
                         rc = IR_Collect.Analysis.GraphCli.Run(seedType, seedValue, maxDepth, outFile, folders, Console.Out);
+                    }
+                    FreeConsole();
+                    Environment.Exit(rc);
+                }
+                else if (mode == "-diff")
+                {
+                    int rc;
+                    if (args.Length < 3 || args.Length > 4)
+                    {
+                        Console.WriteLine("\n[!] Usage: " + BuildInfo.ExecutableName + " -diff <baseline> <target> [out.json]");
+                        rc = 2;
+                    }
+                    else
+                    {
+                        rc = IR_Collect.Analysis.DiffCli.Run(
+                            args[1],
+                            args[2],
+                            args.Length > 3 ? args[3] : null,
+                            Console.Out);
                     }
                     FreeConsole();
                     Environment.Exit(rc);

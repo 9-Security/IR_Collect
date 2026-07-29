@@ -1,4 +1,9 @@
-# IR_Collect 合理終點開發計畫書
+# 9SEC Evidence Workbench 合理終點與維運邊界
+
+**狀態（2026-07-29）**：核心合理終點第一階段已達成。Windows live collection、
+UAC Linux/macOS evidence intake、facts-only analysis、memory handoff、Case Diff、
+增量 Fact Store cache、ForensicStrict 與 release regression 均已落地。本文後半保留
+原工作包，並標記完成／defer 狀態，避免把歷史規劃誤讀成目前待辦。
 
 ## 1. 目的
 
@@ -15,11 +20,11 @@
 
 ## 2. 合理終點定義
 
-`IR_Collect` 的合理終點，不是成為 EDR、SIEM、雲端調查平台、或完整法院級鑑識套件。
+`9SEC Evidence Workbench` 的合理終點，不是成為 EDR、SIEM、雲端調查平台、或完整法院級鑑識套件。
 
 它的合理終點應該是：
 
-**一個成熟、穩定、facts-first 的 Windows host DFIR investigation workbench。**
+**一個以 Windows live collection 為核心、可分析 Windows 與 UAC Linux/macOS 證據的成熟 facts-first DFIR investigation workbench。**
 
 也就是說，專案在合理終點時，應具備：
 
@@ -36,7 +41,7 @@
 
 ### 本專案應持續維持的定位
 
-1. Windows host 為主的 DFIR 工具。
+1. Windows live collection 為主；Linux/macOS 僅分析已由 UAC 收集的證據，不在遠端 Unix-like 主機執行本工具收集。
 2. facts-only。
 3. portable。
 4. 分析師優先，而不是自動判案優先。
@@ -61,25 +66,32 @@
 
 ## 4. 目前已完成能力概況
 
-截至目前，專案已大致完成：
+截至 2026-07-29，專案已完成：
 
 1. Execution / persistence artifacts 結構化解析。
 2. Investigation Graph Workspace。
 3. Lateral movement / identity abuse 事實層強化。
 4. Analyst workflow 與 evidence provenance 的主要骨架。
-5. Memory acquisition integration（collection-only）。
+5. Memory acquisition 與 external analysis handoff（orchestration、sidecar、coverage、facts-only metadata）。
+6. UAC folder / ZIP / TAR / TAR.GZ/TGZ intake，以及 Linux/macOS 高價值來源的 bounded normalization。
+7. Case Diff / Baseline Diff、Fact Store exact reuse 與 EventLog-only incremental rebuild。
+8. ForensicStrict 輸出風險確認、restricted steps、coverage/export metadata。
+9. Schema drift tests、fixture/differential validation 與 build/release/signing gate。
 
 這代表專案已跨過「功能完全不足」階段，開始進入「收斂、強化可信度、控制邊界」階段。
 
 ---
 
-## 5. 合理終點前的剩餘工作包
+## 5. 合理終點工作包狀態
 
-以下工作包依建議順序排列。
+以下保留原工作包定義，並以目前狀態標記。
 
 ---
 
 ## Work Package A: Regression / Release Hardening
+
+**狀態：已完成第一階段。** Review build、內建 self-tests、schema drift、synthetic
+sample case、parser differential validation、endpoint gate 與簽章驗證皆已有可重跑入口。
 
 ### 目標
 
@@ -111,6 +123,9 @@
 ---
 
 ## Work Package B: Memory Analysis Handoff
+
+**狀態：已完成。** `memory_acquisition_v2` / `memory_analysis_v2`、preset、validation、
+diagnostics、coverage reconcile、Summary/HTML/JSON/Fact Store metadata 均已實作；平台仍不解析 dump。
 
 ### 目標
 
@@ -145,6 +160,9 @@
 
 ## Work Package C: Selective Memory Facts Pack
 
+**狀態：defer／選配，未納入目前核心終點。** 現行只正規化 acquisition / handoff
+metadata，不解析外部工具的 process/network/module/handle 結果。
+
 ### 目標
 
 只把少數高價值、低爭議、可 facts-only 化的記憶體分析結果納入平台。
@@ -177,6 +195,10 @@
 ---
 
 ## Work Package D: Performance / Large-Case Scaling
+
+**狀態：第一階段完成。** Fact Store cache 支援 exact `Reused`、filtered EventLog-only
+`Incremental` 與其他變更 fail-safe `Full`；大型 view 延遲載入與多項上限已存在。
+更廣泛的 source-level incremental rebuild 與額外 UI profiling 仍屬後續深化。
 
 ### 目標
 
@@ -240,14 +262,14 @@
 
 ---
 
-## 8. 建議的最終順序
+## 8. 工作包完成順序
 
 ### 建議順序（收斂導向）
 
-1. Work Package A: Regression / Release Hardening
-2. Work Package B: Memory Analysis Handoff
-3. Work Package D: Performance / Large-Case Scaling
-4. Work Package C: Selective Memory Facts Pack（若需要再做）
+1. [x] Work Package A: Regression / Release Hardening
+2. [x] Work Package B: Memory Analysis Handoff
+3. [x] Work Package D: Performance / Large-Case Scaling（第一階段）
+4. [ ] Work Package C: Selective Memory Facts Pack（defer；需有明確案件需求才評估）
 
 ### 為什麼不是先做更多功能
 
@@ -259,23 +281,24 @@
 
 ---
 
-## 9. 何時可以宣告「合理終點已達成」
+## 9. 合理終點驗收狀態
 
-當以下條件都成立時，可以視為達成合理終點：
+目前第一階段已符合：
 
-1. 主要 Windows host artifacts 收集穩定。
-2. Event / persistence / execution / lateral movement / memory acquisition 都已有可用事實層。
-3. 多主機 investigation workspace 穩定可用。
-4. exports / sidecars / provenance / coverage 一致。
-5. 有 fixture-based regression pack。
-6. build / release / docs / versioning 可穩定維護。
-7. 沒有繼續擴張成 EDR / SIEM / AI verdict platform 的需求。
+1. [x] 主要 Windows host artifacts 具備 collection coverage 與失敗可見性。
+2. [x] Windows 與支援的 UAC Linux/macOS artifacts 共用 facts-only 分析管線。
+3. [x] Event / persistence / execution / lateral movement / memory orchestration 具可用事實層。
+4. [x] 多主機 investigation workspace、Diff、Timeline、Correlation、Graph 可用。
+5. [x] exports / sidecars / provenance / coverage 有 schema 與 drift tests。
+6. [x] 有 fixture-based regression pack 與 synthetic sample case。
+7. [x] build / release / signing / docs 可由 gate 重跑。
+8. [x] 產品邊界仍排除 EDR / SIEM / automatic verdict / full memory forensics。
 
 ---
 
 ## 10. 終點後的策略
 
-達成合理終點後，建議策略不是持續新增大 phase，而是：
+達成第一階段合理終點後，策略不是持續新增大 phase，而是：
 
 1. bug fix
 2. parser compatibility updates
@@ -297,7 +320,7 @@
 
 這個專案的最佳終點，不是「什麼都做」，而是：
 
-**在明確邊界內，把 Windows host DFIR 的 facts-first investigation workbench 做到成熟、穩定、可信。**
+**在明確邊界內，把 Windows live collection 與 Windows/UAC 跨平台證據分析的 facts-first investigation workbench 做到成熟、穩定、可信。**
 
 如果後續需求開始要求：
 

@@ -6,6 +6,7 @@ using System.Runtime.Serialization.Json;
 using System.Text;
 using IR_Collect.Analysis.Correlation;
 using IR_Collect;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Analysis
 {
@@ -49,6 +50,14 @@ namespace IR_Collect.Analysis
         public string FactStoreFreshnessStatus { get; set; }
         [DataMember(Name = "fact_store_freshness_detail")]
         public string FactStoreFreshnessDetail { get; set; }
+        [DataMember(Name = "fact_store_build_mode")]
+        public string FactStoreBuildMode { get; set; }
+        [DataMember(Name = "fact_store_build_generated_at")]
+        public string FactStoreBuildGeneratedAt { get; set; }
+        [DataMember(Name = "fact_store_build_detail")]
+        public string FactStoreBuildDetail { get; set; }
+        [DataMember(Name = "fact_store_build_inputs")]
+        public List<FactStoreInputFingerprint> FactStoreBuildInputs { get; set; }
         [DataMember(Name = "fact_count")]
         public int FactCount { get; set; }
         [DataMember(Name = "fact_source_counts")]
@@ -63,6 +72,12 @@ namespace IR_Collect.Analysis
         public string EvidenceDigest { get; set; }
         [DataMember(Name = "evidence")]
         public List<EvidenceFile> Evidence { get; set; }
+        [DataMember(Name = "source_format")]
+        public string SourceFormat { get; set; }
+        [DataMember(Name = "source_evidence_sha256")]
+        public string SourceEvidenceSha256 { get; set; }
+        [DataMember(Name = "uac")]
+        public UacEvidenceMetadata Uac { get; set; }
         [DataMember(Name = "analyst_workflow")]
         public AnalystWorkflowState AnalystWorkflow { get; set; }
         [DataMember(Name = "guided_hunt")]
@@ -95,7 +110,7 @@ namespace IR_Collect.Analysis
         public static void SaveToFile(SummaryPayload payload, string path)
         {
             var json = Serialize(payload);
-            File.WriteAllText(path, json, new UTF8Encoding(false));
+            AtomicFile.WriteAllText(path, json, new UTF8Encoding(false));
         }
 
         private static SummaryPayload ClonePayloadWithSafeFactTimes(SummaryPayload payload)
@@ -122,6 +137,10 @@ namespace IR_Collect.Analysis
             copy.FactStoreStatus = payload.FactStoreStatus;
             copy.FactStoreFreshnessStatus = payload.FactStoreFreshnessStatus;
             copy.FactStoreFreshnessDetail = payload.FactStoreFreshnessDetail;
+            copy.FactStoreBuildMode = payload.FactStoreBuildMode;
+            copy.FactStoreBuildGeneratedAt = payload.FactStoreBuildGeneratedAt;
+            copy.FactStoreBuildDetail = payload.FactStoreBuildDetail;
+            copy.FactStoreBuildInputs = payload.FactStoreBuildInputs;
             copy.FactCount = payload.FactCount;
             copy.FactSourceCounts = payload.FactSourceCounts;
             copy.EntityTypeCounts = payload.EntityTypeCounts;
@@ -133,6 +152,9 @@ namespace IR_Collect.Analysis
             copy.FactSamples = CopyFactsWithSafeTimes(payload.FactSamples);
             copy.EvidenceDigest = payload.EvidenceDigest;
             copy.Evidence = payload.Evidence;
+            copy.SourceFormat = payload.SourceFormat;
+            copy.SourceEvidenceSha256 = payload.SourceEvidenceSha256;
+            copy.Uac = payload.Uac;
             return copy;
         }
 

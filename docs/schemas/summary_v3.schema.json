@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/summary_v3.schema.json",
-  "title": "IR_Collect summary_v3",
-  "description": "Per-host analysis summary — output of `IR_Collect.exe -analyze` and the GUI Export Summary JSON.",
+  "title": "9SEC Evidence Workbench summary_v3",
+  "description": "Per-host analysis summary — output of `9SEC_Evidence_Workbench.exe -analyze` and the GUI Export Summary JSON.",
   "type": "object",
   "required": ["export_schema", "generated_at", "tool_name", "tool_version", "host", "fact_count"],
   "properties": {
@@ -17,12 +17,32 @@
     "artifacts_count": { "type": "integer" },
     "mft_count": { "type": "integer" },
     "fact_count": { "type": "integer" },
+    "fact_store_build_mode": { "enum": ["Full", "Incremental", "Reused", "NotBuilt", ""] },
+    "fact_store_build_generated_at": { "type": "string" },
+    "fact_store_build_detail": { "type": "string" },
+    "fact_store_build_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relative_path", "size", "mtime_utc", "sha256", "normalizer_name"],
+        "properties": {
+          "relative_path": { "type": "string" },
+          "size": { "type": "integer" },
+          "mtime_utc": { "type": "string" },
+          "sha256": { "type": "string" },
+          "normalizer_name": { "type": "string" }
+        }
+      }
+    },
     "fact_source_counts": { "type": "object", "description": "fact Source -> count." },
     "entity_type_counts": { "type": "object", "description": "EntityRef Type -> count." },
     "parser_notes": { "type": "array", "items": { "type": "string" } },
     "load_warnings": { "type": "array", "items": { "type": "string" } },
     "guided_hunt": { "type": ["object", "null"], "description": "ATT&CK-mapped rule matches + hypothesis templates." },
     "evidence_digest": { "type": "string", "description": "Rollup SHA-256 over the per-input evidence manifest." },
+    "source_format": { "type": "string", "description": "Input container format, such as folder, zip, tar, or tar.gz." },
+    "source_evidence_sha256": { "type": "string", "description": "SHA-256 of the original archive when archive intake is used." },
+    "uac": { "type": ["object", "null"], "description": "Detected UAC collection metadata and intake coverage counters." },
     "evidence": {
       "type": "array",
       "description": "Per-input-file SHA-256 manifest (folder intake), tying the report to the evidence consumed.",
@@ -37,6 +57,15 @@
       }
     },
     "fact_samples": { "type": "array", "description": "Up to 100 representative facts.", "items": { "type": "object" } },
-    "collection_coverage": { "type": ["object", "null"] }
+    "collection_coverage": {
+      "type": ["object", "null"],
+      "properties": {
+        "collection_mode_profile": { "enum": ["Standard", "TriageFast", "ForensicStrict", ""] },
+        "operator_acknowledged_risks": { "type": "boolean" },
+        "restricted_steps": { "type": "array", "items": { "type": "string" } },
+        "skipped_by_profile": { "type": "array", "items": { "type": "string" } },
+        "output_target_class": { "enum": ["system_disk", "removable", "network", "unknown", ""] }
+      }
+    }
   }
 }

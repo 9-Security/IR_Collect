@@ -1,6 +1,6 @@
 # Sample case — "Operation Paper Trail" (synthetic)
 
-A tiny, **hand-authored, synthetic** two-host case you can run the IR_Collect
+A tiny, **hand-authored, synthetic** two-host case you can run the 9SEC Evidence Workbench
 analysis layer against without any real evidence. Every name, SID, IP, and hash
 here is fictitious — this folder contains **no** collected data from any host.
 

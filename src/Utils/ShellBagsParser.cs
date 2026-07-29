@@ -21,21 +21,32 @@ namespace IR_Collect.Utils
         /// <summary>Writes Registry\shellbags.csv under baseDir when stale or missing. Returns row count or -1 on error.</summary>
         public static int TryEnsureShellBagsCsv(string extractPath, bool force, out string detail)
         {
+            return TryEnsureShellBagsCsv(extractPath, extractPath, force, out detail);
+        }
+
+        /// <summary>Reads ShellBags exports under sourceRoot and writes Registry\shellbags.csv under outputRoot.</summary>
+        public static int TryEnsureShellBagsCsv(string sourceRoot, string outputRoot, bool force, out string detail)
+        {
             detail = "";
-            if (string.IsNullOrEmpty(extractPath) || !Directory.Exists(extractPath))
+            if (string.IsNullOrEmpty(sourceRoot) || !Directory.Exists(sourceRoot))
             {
                 detail = "extract path missing";
+                return -1;
+            }
+            if (string.IsNullOrEmpty(outputRoot))
+            {
+                detail = "output path missing";
                 return -1;
             }
 
             var regFiles = new List<string>();
             try
             {
-                foreach (string f in Directory.GetFiles(extractPath, ShellBagsRegGlob, SearchOption.AllDirectories))
+                foreach (string f in Directory.GetFiles(sourceRoot, ShellBagsRegGlob, SearchOption.AllDirectories))
                 {
                     try
                     {
-                        if (IsPathSafeUnder(f, extractPath))
+                        if (IsPathSafeUnder(f, sourceRoot))
                             regFiles.Add(Path.GetFullPath(f));
                     }
                     catch { }
@@ -53,7 +64,7 @@ namespace IR_Collect.Utils
                 return 0;
             }
 
-            string registryDir = Path.Combine(extractPath, "Registry");
+            string registryDir = Path.Combine(outputRoot, "Registry");
             string outPath = Path.Combine(registryDir, ArtifactNames.ShellBagsCsv);
             try
             {
@@ -139,10 +150,10 @@ namespace IR_Collect.Utils
                 }
             }
 
-            using (var sw = new StreamWriter(outPath, false, new UTF8Encoding(false)))
+            int n = 0;
+            AtomicFile.WriteText(outPath, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("Sid,User,BagPath,RegistryKey,ValueName,DecodedPath,MruSlot,LastWriteTime,ParserNote,SourceFile");
-                int n = 0;
                 foreach (ShellBagCsvRow row in allRows)
                 {
                     if (++n > MaxRowsTotal) break;
@@ -158,9 +169,9 @@ namespace IR_Collect.Utils
                         CsvUtils.EscapeField(row.ParserNote ?? ""),
                         CsvUtils.EscapeField(row.SourceFile ?? "")));
                 }
-                detail = n + " row(s)";
-                return n;
-            }
+            });
+            detail = n + " row(s)";
+            return n;
         }
 
         private sealed class ShellBagCsvRow
