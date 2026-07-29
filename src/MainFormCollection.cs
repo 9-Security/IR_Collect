@@ -15,7 +15,12 @@ namespace IR_Collect
         private static readonly System.Threading.SemaphoreSlim _autoBuildFactStoreSemaphore = new System.Threading.SemaphoreSlim(1, 1);
         internal static bool ShouldAutoBuildFactStore(string autoBuildConfigValue, IR_Collect.Analysis.CaseData c)
         {
-            return autoBuildConfigValue == "1" && (c == null || c.FactStore == null || c.FactStore.Count == 0);
+            return autoBuildConfigValue == "1" &&
+                (c == null ||
+                 c.FactStore == null ||
+                 c.FactStore.Count == 0 ||
+                 string.Equals(c.FactStoreFreshnessStatus, "stale", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.FactStoreFreshnessStatus, "load_failed", StringComparison.OrdinalIgnoreCase));
         }
         internal static string BuildCollectionCompletionMessage(bool caseLoaded, bool loadAttempted, IR_Collect.Collector.CollectionResult collectionResult)
         {
@@ -47,6 +52,8 @@ namespace IR_Collect
                         report.FailedSteps,
                         report.SkippedSteps,
                         report.MissingSteps);
+                    if (report.SkippedByProfile != null && report.SkippedByProfile.Count > 0)
+                        collectionMessage += "\n\nSkipped by profile: " + string.Join(", ", report.SkippedByProfile.ToArray()) + ".";
                 }
                 if (caseLoaded)
                     collectionMessage += "\n\nCase loaded into platform with partial results.";
@@ -87,6 +94,8 @@ namespace IR_Collect
             if (evidenceId == "__CANCEL__") return;
 
             string profile = CollectionModeProfileHelper.GetActive(config);
+            string collectionOutputName = IR_Collect.Collector.GetCollectionOutputDirectoryName(evidenceId);
+            CollectionRunContext runContext = CollectionImpactPolicy.Create(config, collectionOutputName, false);
             if (CollectionModeProfileHelper.IsTriageFast(profile))
             {
                 MessageBox.Show(
@@ -100,20 +109,36 @@ namespace IR_Collect
             }
             if (CollectionModeProfileHelper.IsForensicStrict(profile))
             {
-                string outName = IR_Collect.Collector.GetCollectionOutputDirectoryName(evidenceId);
-                string outFull;
-                try { outFull = Path.GetFullPath(outName); }
-                catch { outFull = outName; }
-                string msg =
-                    "ForensicStrict profile — read before continuing:\n\n" +
+                var msg = new StringBuilder();
+                msg.Append(
+                    "ForensicStrict profile - read before continuing:\n\n" +
                     "- Live-response collection can change the system (timestamps, caches, defensive memory use). This is not zero-footprint and not a complete low-impact forensic suite.\n\n" +
-                    "- Output workspace on this system (before ZIP):\n" + outFull + "\n\n" +
-                    "Writing on a compromised system disk can add risk; prefer an isolated output mount when practical.\n\n" +
+                    "- Output workspace before ZIP:\n" + runContext.OutputTargetPath + "\n" +
+                    "- Output target class: " + runContext.OutputTargetClass + "\n\n");
+                if (CollectionImpactPolicy.ShouldWarnOnSystemDisk(config, runContext))
+                    msg.Append("HIGH IMPACT WARNING: output is on the Windows system disk and will write to the examined host.\n\n");
+                if (CollectionImpactPolicy.RequiresNonRemovableAcknowledgment(config, runContext))
+                    msg.Append("The output target is not confirmed as removable media. Prefer an isolated evidence volume when practical.\n\n");
+                if (runContext.RestrictedSteps.Count > 0)
+                    msg.Append("Restricted by this profile:\n- " + string.Join("\n- ", runContext.RestrictedSteps.ToArray()) + "\n\n");
+                msg.Append(
                     "- After collection, outbound ZIP upload is blocked while this profile remains selected.\n" +
                     "- In-app AI Analyze is blocked while this profile remains selected.\n\n" +
-                    "Continue Local Collect?";
-                if (MessageBox.Show(msg, "ForensicStrict — live response", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                    "Continue Local Collect?");
+                if (MessageBox.Show(msg.ToString(), "ForensicStrict - live response", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                     return;
+
+                if (CollectionImpactPolicy.RequiresSecondConfirmation(config, runContext))
+                {
+                    string second =
+                        "Second confirmation required.\n\n" +
+                        "I understand that this is live response, that the output target is " + runContext.OutputTargetClass +
+                        ", and that profile-restricted steps can reduce collection coverage.\n\n" +
+                        "Start collection now?";
+                    if (MessageBox.Show(second, "ForensicStrict - confirm collection", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                        return;
+                }
+                runContext.OperatorAcknowledgedRisks = true;
             }
 
             lblCollectStatus.Text = "Collecting... Please wait.";
@@ -128,7 +153,7 @@ namespace IR_Collect
             Action<string> onProgress = (msg) => SafeInvoke((MethodInvoker)(() => { if (lblCollectStatus != null && !lblCollectStatus.IsDisposed) lblCollectStatus.Text = msg; }));
             Action action = () => {
                 try {
-                    var collectionResult = IR_Collect.Collector.RunCollectionDetailed(evidenceId, onProgress);
+                    var collectionResult = IR_Collect.Collector.RunCollectionDetailed(evidenceId, onProgress, runContext);
                     string zipPath = collectionResult != null ? collectionResult.ZipPath : null;
                     string fullPath = null;
                     if (!string.IsNullOrEmpty(zipPath))
@@ -210,7 +235,7 @@ namespace IR_Collect
         private void BtnImport_Click(object sender, EventArgs e)
         {
             OpenFileDialog dlg = new OpenFileDialog();
-            dlg.Filter = "ZIP Cases|*.zip";
+            dlg.Filter = "Evidence Archives|*.zip;*.tar;*.tar.gz;*.tgz|ZIP Archives|*.zip|UAC TAR Archives|*.tar;*.tar.gz;*.tgz|All Files|*.*";
             dlg.Multiselect = true;
             if (dlg.ShowDialog() == DialogResult.OK)
             {
@@ -237,11 +262,14 @@ namespace IR_Collect
                 if (files == null) return;
                 foreach (string file in files)
                 {
-                    if (string.IsNullOrEmpty(file) || !file.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.IsNullOrEmpty(file)) continue;
                     string normalized;
                     try { normalized = System.IO.Path.GetFullPath(file); } catch { continue; }
                     if (normalized.IndexOf("..", StringComparison.Ordinal) >= 0) { IR_Collect.Utils.Logger.Warning("DragDrop: path contains '..' rejected: " + file); continue; }
-                    LoadCase(normalized);
+                    if (Directory.Exists(normalized))
+                        LoadCaseFolder(normalized);
+                    else if (IR_Collect.Analysis.ArchiveIntake.IsSupportedArchive(normalized))
+                        LoadCase(normalized);
                 }
             }
             catch (Exception ex) { Logger.Warning("DragDrop: " + ex.Message); }
@@ -304,7 +332,8 @@ namespace IR_Collect
                         try
                         {
                             _autoBuildFactStoreSemaphore.Wait();
-                            var store = IR_Collect.Analysis.Correlation.FactStore.BuildFromCase(c);
+                            var build = IR_Collect.Analysis.Correlation.FactStoreBuildCoordinator.BuildConfigured(c);
+                            var store = build.Store;
                             __.Result = new object[] { c, store };
                         }
                         catch (Exception ex) { Logger.Warning("Auto Build Fact Store: " + ex.Message); __.Result = null; }
@@ -344,9 +373,15 @@ namespace IR_Collect
                         }
                         caseData.FactStore = store;
                         caseData.FactStoreBuilding = false;
-                        if (config.Get("FactStoreWriteSqlite") == "1" && store.Count > 0 && !string.IsNullOrEmpty(caseData.ExtractPath))
+                        if (config.Get("FactStoreWriteSqlite") == "1" && store.Count > 0)
                         {
-                            try { IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, System.IO.Path.Combine(caseData.ExtractPath, ArtifactNames.FactStoreDb)); }
+                            try
+                            {
+                                string dbPath = IR_Collect.Analysis.CaseManager.GetAnalysisOutputPath(caseData, ArtifactNames.FactStoreDb);
+                                if (!string.IsNullOrEmpty(dbPath))
+                                    IR_Collect.Analysis.Correlation.FactStorePersistence.SaveToSqlite(store, dbPath);
+                                IR_Collect.Analysis.CaseManager.RefreshAnalysisWorkspaceManifest(caseData);
+                            }
                             catch (Exception ex) { Logger.Warning("FactStore SQLite save: " + ex.Message); }
                         }
                         IR_Collect.Analysis.CaseManager.RefreshFactStoreFreshness(caseData);

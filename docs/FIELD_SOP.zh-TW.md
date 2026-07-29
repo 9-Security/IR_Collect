@@ -1,4 +1,4 @@
-# IR_Collect 現場 SOP
+# 9SEC Evidence Workbench 現場 SOP
 
 [English](FIELD_SOP.md) | **繁體中文**
 
@@ -6,26 +6,30 @@
 
 ## 1. 現場前檢查
 
-- 優先以系統管理員執行 `IR_Collect.exe`
+- 優先以系統管理員執行 `9SEC_Evidence_Workbench.exe`
 - 優先從外接儲存裝置執行，並讓輸出寫到外接儲存裝置
 - 確認磁碟空間足夠，尤其若有啟用 Memory acquisition
 - 若案件敏感，先確認 `config.ini` 內 AI / Upload endpoint 是否符合政策
+- 若要降低擾動，在 **Advanced → Settings** 選擇 `ForensicStrict` 並保留五項 safeguard。先確認畫面顯示的輸出分類；`unknown` 不代表外接或可信任媒體。
 
 ## 2. 快速收集
 
 ### GUI
 
-1. 執行 `IR_Collect.exe`
+1. 執行 `9SEC_Evidence_Workbench.exe`
 2. 按 `Local Collect`
 3. 輸入 `Evidence ID`
 4. 等待收集完成
 5. 確認工具自動載入剛產生的 ZIP
 
+`ForensicStrict` 下先檢視輸出分類與受限步驟，再完成兩次確認。已啟用的 memory
+acquisition / analysis 預設會略過，手動 Deep Scan 會被阻擋。
+
 ### CLI
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
 ```
 
 收集完成後應看到：
@@ -38,15 +42,17 @@ IR_Collect.exe -c Case001
 收集或匯入完成後，先看 `Summary`，順序如下：
 
 1. `collection_coverage`
-2. `load warnings`
-3. `parser notes`
-4. `memory acquisition / memory analysis`
-5. `fact store freshness`
+2. profile、輸出分類、確認狀態、限制與 profile 略過
+3. `load warnings`
+4. `parser notes`
+5. `memory acquisition / memory analysis`
+6. `fact store freshness`
 
 原則：
 
 - 先確認收集是否完整，再開始推論
 - 不要把 `missing` 解讀成「沒有這個活動」
+- 把 `skipped_by_profile` 視為明確的 coverage 限制；enabled step 被 profile 略過時 overall 會是 `partial`
 - 看到 parser fallback 或 sidecar 異常時，要把不確定性寫進判讀
 
 ## 4. 單機調查最短路徑

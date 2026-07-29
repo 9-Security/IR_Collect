@@ -1,24 +1,30 @@
 # 跨來源事實關聯 — 架構設計
 
-**目標**：讓所有 LOG/跡證能互相串接，必要時把多個來源的資訊一起做關聯分析。
+**目標**：讓已正規化的 LOG／跡證以一致的實體、時間與 provenance 串接，並保留未解析來源的 raw/indexed 可見性。
 
-**狀態註記**：本文件保留為設計說明。現行執行階段以 Fact Store、Entity 索引與時間窗查詢為主，已不再內建規則引擎結論。
+**狀態註記**：Fact Store、Entity index、Timeline、Diff、shared/related entity、
+time-window correlation 與 multi-hop Investigation Graph 均已實作。第 6 節的通用 JSON
+規則格式只保留為歷史設計，不是現行執行路徑；目前可關閉的 Guided Hunt 是獨立 overlay，
+不改寫 Fact Store，也不輸出自動 verdict。
 
-**最後更新**: 2026-02-10
-
----
-
-## 1. 現況簡述
-
-- **規則引擎**：目前每條規則只針對**單一來源、單一筆紀錄**（如 `process_list.csv` 的 `CommandLine`），無法表達「MFT 檔案建立 + EventLog 4688 程序啟動 + 同一路徑」這類跨來源條件。
-- **Activity Timeline**：已把多來源（Registry、JumpList、Prefetch、Recent、Process）壓成單一 `activity_timeline.csv`，但沒有「實體連結」與「關聯規則」。
-- **時間軸關聯**：主頁「Find Timeline Correlation」是在多主機上找同一時間窗內出現的指標，尚未與規則引擎或實體索引整合。
-
-要達成「所有 LOG 都能互相串接、必要時一起做關聯分析」，需要一個**統一的事實模型 + 實體索引 + 關聯查詢層**。
+**最後更新**: 2026-07-29
 
 ---
 
-## 2. 建議架構：統一事實層 + 實體索引
+## 1. 現行架構簡述
+
+- **統一事實層**：Windows artifacts 與支援的 UAC Linux/macOS canonical sources 由 normalizer 轉成 `Fact`，保留時間信心、collection/parse provenance、來源檔與 raw reference。
+- **Entity index**：Path、Hash、User、RemoteIP、Service、Task、Share、AppId 等實體可跨來源與跨主機查詢。
+- **調查操作**：Facts、Timeline、Case Diff、Shared/Related Entities、Time-Window Correlation 與 Investigation Graph 共用 Fact Store，而不是各自解析一份資料。
+- **輸出**：`summary_v3`、`diff_v1`、`correlation_v1`、`graph_v1`、`full_log_v3` 保留工具版本與證據／provenance 脈絡。
+- **Guided Hunt**：以 ATT&CK-mapped explainable overlay 消費 facts；可關閉，不回寫 facts，也不取代分析師結論。
+
+現行核心資料流為：
+`Evidence -> Normalizer -> Fact Store / Entity Index -> Timeline / Diff / Correlation / Graph / Export`。
+
+---
+
+## 2. 現行架構：統一事實層 + 實體索引
 
 ### 2.1 核心概念
 
@@ -42,17 +48,17 @@
 │  EntityKey (path/hash/user/pid) → List<FactId, Time, Source, Action>     │
 │  查詢：「這個路徑在哪些 LOG 出現過？」「這 5 分鐘內所有來源發生了什麼？」   │
 └───────────────────────────────┬─────────────────────────────────────────┘
-                                 │ 關聯 API / 規則
+                                 │ 查詢與分析 API
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  關聯分析 (Correlation)                                                 │
-│  - 依時間窗查詢                                                          │
-│  - 依實體查詢（路徑 / Hash / User）                                       │
-│  - 跨來源規則：條件 A (來源1) AND 條件 B (來源2) AND 時間窗 ± 關聯         │
+│  分析工作流                                                              │
+│  - Facts / Timeline / Entity search                                      │
+│  - Diff / Shared / Related / Time-window correlation                     │
+│  - Investigation Graph / Guided Hunt overlay / Export                    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-所有 LOG 的「可關聯資訊」都先轉成**統一事實 (Fact)**，再透過**實體 (Entity)** 做串接與查詢；工具本身只保留觀察事實，後續判讀交由分析師或外部模型處理。
+已支援且可正規化來源的「可關聯資訊」會轉成**統一事實 (Fact)**，再透過**實體 (Entity)** 做串接與查詢；工具本身只保留觀察事實，後續判讀交由分析師或外部模型處理。
 
 ---
 
@@ -127,13 +133,14 @@
   - 依**時間窗**：給 t1～t2 → 回傳該區間所有 Fact（可再依實體過濾）。
   - **複合**：同一時間窗 + 同一 Path 的 Process Fact 與 MFT Fact → 即可做「程序啟動 + 檔案建立」關聯。
 
-這樣就達成「所有 LOG 都能互相串接」：串接鍵是**實體**（路徑、Hash、User 等），不是只有時間。
+這樣讓已正規化來源能互相串接：串接鍵是**實體**（路徑、Hash、User 等），不是只有時間。
 
 ---
 
-## 6. 關聯規則 (Correlation Rules) 擴充
+## 6. 通用關聯規則設計（歷史／未啟用）
 
-在現有「單筆紀錄規則」之外，新增**關聯規則**：一條規則可要求**多個條件來自不同來源**，並在**同一時間窗**或**同一實體**下同時成立。
+本節保留早期通用 JSON rule engine 的設計脈絡。現行程式不載入此格式；若未來重新引入，
+必須維持與 Fact Store 分層、標示為輔助判讀，並補齊 schema、timeout、provenance 與回歸測試。
 
 ### 6.1 規則結構建議（JSON）
 
@@ -183,39 +190,31 @@
    - 以時間滑動視窗掃描所有 Fact，在窗內檢查是否同時存在滿足各 condition 的 Fact（可放寬為「同主機」或「同實體」依產品需求）。
 3. 命中時產出 **CorrelationFinding**：RuleId, Severity, Score, 涉及的 FactIds / 摘要，方便在 UI 上點開看原始 LOG。
 
-這樣就能在「所有 LOG 都串接在同一事實層 + 實體索引」的基礎上，用**關聯規則**把多個來源的資訊一起做分析。
+若未來啟用此設計，可在「已正規化來源進入同一事實層 + 實體索引」的基礎上，用**關聯規則**把多個來源的資訊一起做分析。
 
 ---
 
-## 7. 實作順序建議（與現有程式共存）
+## 7. 實作狀態
 
-1. **Phase A — 事實層**
-   - 定義 `Fact`、`EntityRef` 的 C# 模型與序列化（可先放記憶體 List，或 SQLite 單表）。
-   - 實作 2～3 個 Normalizer（例如 Process、MFT、activity_timeline 或 Autorun），從現有 CSV/資料產出 `List<Fact>`，**不影響現有收集與規則**。
-   - 在「載入 Case」或「分析」時可選：是否建立 Fact Store（僅對已載入的 Case 做）。
-
-2. **Phase B — 實體索引**
-   - 從 Fact 的 EntityRefs 建立 EntityIndex（Path/Hash/User）。
-   - 提供查詢 API：ByEntity(type, value)、ByTimeRange(t1, t2)、ByEntityAndTime(entity, t1, t2)。
-   - UI 可先做「依路徑/Hash 查詢」：列出該實體在所有來源的出現紀錄（串接結果）。
-
-3. **Phase C — 外部關聯規則層（選配）**
-   - 若未來需要，可由外部規則檔或模型在 Fact Store 之上做輔助判讀。
-   - 任何規則或模型輸出應與觀察事實分離顯示，不在工具內直接當成結論。
-
-4. **Phase D — 更多來源與 EVTX**
-   - 將 EventLog 解析成 Fact（EventId → Action、欄位 → EntityRefs），納入 Fact Store 與實體索引。
-   - 其餘來源（JumpList、Prefetch、Recent 等）逐步加 Normalizer，使「所有 LOG」都進入同一套串接架構；USN 已納入同一條 facts-only 路徑。
+1. [x] **Fact / EntityRef 模型與記憶體 Fact Store**
+2. [x] **Entity index 與 ByEntity / ByTimeRange 查詢**
+3. [x] **Windows EventLog、execution、persistence、file、identity、network normalizers**
+4. [x] **UAC evidence index 與支援的 Linux/macOS canonical normalizers**
+5. [x] **Facts、Timeline、Diff、Correlation、Graph 與 JSON export**
+6. [x] **選用 SQLite schema v3 與預設關閉的持久化 build cache**
+7. [x] **獨立 Guided Hunt overlay**
+8. [ ] **通用外部 JSON rule engine**：未啟用，非目前產品邊界
 
 ---
 
 ## 8. 小結
 
-- **統一事實層**：所有 LOG 經 Normalizer 轉成同一種 Fact 結構（Time, Source, Action, EntityRefs, Details），是「互相串接」的基礎。
+- **統一事實層**：已支援來源經 Normalizer 轉成同一種 Fact 結構（Time, Source, Action, EntityRefs, Details），是「互相串接」的基礎。
 - **實體索引**：用 Path/Hash/User 等當鍵，查「同一實體在哪些來源、什麼時間出現」，實現跨 LOG 串接與查詢。
 - **外部關聯層**：若有需要，可在事實層 + 實體索引之上，由外部規則或模型做多條件、多來源、可選時間窗、可選 link_by 實體的輔助分析。
 
-此架構可讓**所有 LOG 都能互相串接**，並在**需要時**（依實體、依時間，或由外部規則/模型輔助）把多個來源的資訊一起做關聯分析；工具本身則維持以觀察事實為核心。
+此架構讓已支援的 artifacts 能依實體、時間與 provenance 串接；未正規化來源仍保留為
+raw/indexed evidence，不能宣稱已參與語意關聯。工具本身維持以觀察事實為核心。
 
 ---
 
@@ -237,7 +236,7 @@
 - **選項 A**：不另建表，查詢時用 SQL 的 `WHERE json_extract(Details, '$.Path') = ?`（需 SQLite JSON1）或對 EntityKey 欄位查詢。若已拆出 EntityKey 欄並建索引，單表即可。
 - **選項 B**：另建 **EntityIndex 表**（EntityKey, FactId, Time, Source），寫入 Fact 時同時寫入此表；依實體查詢時只查這張小表，再依 FactId 回查 Fact。適合「依實體找 Fact」很頻繁的場景。
 
-依目前 IR_Collect 的規模，**單表 + 拆出 EntityKey/Time/Source 並建索引**通常就夠；真的變大再考慮 B。
+依目前 9SEC Evidence Workbench 的規模，**單表 + 拆出 EntityKey/Time/Source 並建索引**通常就夠；真的變大再考慮 B。
 
 ### 9.3 查詢效能
 

@@ -1,30 +1,54 @@
-# IR Collector (IR_Collect)
+# 9SEC Evidence Workbench
 
 [English](README.md) | **中文（繁體）**
 
-**Windows 現場快蒐 + 事實關聯分析底座。** 單一可攜執行檔，GUI／CLI 雙用；**不是**零足跡鑑識映像平台，也**不是**內建完整的記憶體鑑識套件。
+**Windows 現場快蒐 + Windows/Linux/macOS 證據分析。** 單一 Windows 可攜執行檔，GUI／CLI 雙用，可直接吃 UAC 證據並共用 facts-based 關聯管線；**不是**零足跡鑑識映像平台，也**不是**內建完整的記憶體鑑識套件。
 
 ## 下載
 
-**[最新發行版（ZIP）](https://github.com/9-Security/IR_Collect/releases/latest)** — 僅含 **`IR_Collect.exe`**，解壓後執行。
+**[最新發行版（ZIP）](https://github.com/9-Security/IR_Collect/releases/latest)** — 僅含 **`9SEC_Evidence_Workbench.exe`**，解壓後執行。
+
+本 README 對齊目前 source tree，包含 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 的
+**Unreleased** 項目；已發布版本可能尚未包含全部能力，請以 `-version` 與 release notes
+確認實際執行檔版本。
 
 - **執行環境：** .NET Framework 4.5+（一般 Win7 以上已具備）。
-- **圖形介面：** 連點 `IR_Collect.exe`。
-- **CLI 收集：** `IR_Collect.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
+- **圖形介面：** 連點 `9SEC_Evidence_Workbench.exe`。
+- **CLI 收集：** `9SEC_Evidence_Workbench.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
 - 建議將**輸出寫在外接媒體**，降低對受查主機的變動。
 
 ### 離線分析與關聯（不碰 live 主機、不開 GUI）
 
-IR_Collect 也能分析**任何人**已採集好的 artifact —— 指向一個資料夾,即可跑與載入 case 完全相同的 facts-only 關聯管線:
+9SEC Evidence Workbench 也能分析**任何人**已採集好的 artifact —— 指向資料夾或證據封裝，即可跑與載入 case 完全相同的 facts-only 關聯管線：
 
-- `IR_Collect.exe -analyze <資料夾> [out.json]` —— 吃一個已採集資料夾（他牌 triage 輸出或解壓的 case;原始 `$MFT`／hive／`SRUDB.dat`／`.evtx` 自動解析）→ `summary_v3` JSON。
-- `IR_Collect.exe -correlate <out.json> <資料夾A> <資料夾B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
-- `IR_Collect.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <資料夾...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
-- `IR_Collect.exe -version` —— 工具名稱 + 版本。
+- `9SEC_Evidence_Workbench.exe -analyze <資料夾或封裝> [out.json]` —— 支援 folder、ZIP、TAR、TAR.GZ/TGZ；UAC 證據會自動辨識、索引並正規化可支援來源 → `summary_v3` JSON。
+- `9SEC_Evidence_Workbench.exe -diff <基線> <目標> [out.json]` —— 透過正規化 facts 比較兩個資料夾或證據封裝 → `diff_v1` Added/Modified/Removed JSON。
+- `9SEC_Evidence_Workbench.exe -correlate <out.json> <路徑A> <路徑B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
+- `9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
+- `9SEC_Evidence_Workbench.exe -version` —— 工具名稱 + 版本。
 
-每份分析輸出都記錄**工具版本**與**逐檔 SHA-256 證據 manifest**（`evidence_digest`），把報告綁回它實際消耗的證據（見 `docs/SBOM.md`）。Prefetch（`.pf`）已解析為執行證據 facts（對 PECmd 驗證）；Guided Hunt 會標出 ATT&CK 對應的線索,例如 DLL side-loading 與從使用者可寫路徑執行。
+GUI 的 **Diff** 分頁會把目前選取的 target，與另一個已載入且 Fact Store ready 的 case 比較。
+結果可依類別、變更型態與來源篩選，並跳回對應 Facts 或 Timeline 驗證。Added/Removed 只表示
+某一側有觀察到，若兩案收集覆蓋率不同，不能據此證明存在或不存在。
 
-**5 分鐘試玩** —— [`docs/sample-case/`](docs/sample-case/) 附了一個合成的雙主機案卷；導覽 [`docs/DEMO.zh-TW.md`](docs/DEMO.zh-TW.md)（[English](docs/DEMO.md)）帶你把 `-analyze`／`-correlate`／`-graph` 完整跑過一遍（不含真實證據、免提權）。
+Folder 與 archive intake 會將證據根目錄維持唯讀。Canonical CSV、重建 Event Log CSV、
+ShellBags、Fact Store cache 與 CLI 預設報告都寫入獨立分析工作區；`analysis_workspace_v1.json`
+保存每個衍生檔的 SHA-256、工具版本與來源 evidence digest。UAC 證據中預先存在的 9SEC
+canonical 同名檔仍會列入 raw evidence index，但不會取代本次 parser 重新產生的結果。
+分析師 workflow notes 則保存於目前使用者的 Local Application Data，不寫回證據根目錄。
+
+正規化 Fact Store 的持久化快取為選用功能，且**預設關閉**。可在
+**Advanced → Settings** 啟用，快取會寫入目前使用者的 Local Application Data。所有輸入
+SHA-256 完全相符時標示 `Reused`；只有 filtered Event Log CSV 變更時標示 `Incremental`
+並只重跑受影響 normalizer；其他輸入變更、metadata 不相容或快取損毀時會回退 `Full`，
+原因會顯示於 Summary 與 CLI。快取不取代來源證據，且可能包含敏感的 normalized facts；
+Settings 亦提供 **Clear persistent Fact Store cache**。
+
+每份分析輸出都記錄**工具版本**與**逐檔 SHA-256 證據 manifest**（`evidence_digest`）；archive intake 另記錄 `source_evidence_sha256`。UAC 的帳號、套件清單、Apache/nginx Web 日誌、shell history、持久化設定、journal metadata／boot range、登入歷程（`last`／`lastb`／`lastlog`／`utmpdump`）、Linux auditd、Linux/macOS 系統文字日誌、process、bodyfile、auth 與 network 來源會進入 Fact Store，尚未支援解析的原始檔仍以 `indexed-raw` 顯示。Web-log intake 支援有界限的 plain/gzip Common/Combined access log 與 Apache/nginx 預設 error envelope；缺 offset 的 error time 保留 raw，client/proxy 欄位不視為可信身分。套件 intake 支援有界限的 dpkg、RPM、DNF/YUM、pacman、apk、Flatpak、Snap 與 macOS Homebrew command output；套件存在是狀態觀察，不代表惡意或近期安裝。一般系統日誌可有界限地解析 plain/gzip RFC 3164、RFC 5424 與 ISO timestamp；缺少年份或 offset 時只保留原始時間，不虛構 UTC。Audit records 依相同 `audit(epoch:serial)` 合併，不在缺少可靠 architecture mapping 時猜測 syscall 名稱；登入時間只有在來源提供可靠 numeric offset 時才會產生 UTC。
+
+UAC `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,sha256}` 會正規化為 `uac_file_hashes.csv` 及 untimed `UacFileHash` facts，供 IOC、Diff、跨主機 Correlation 與 Graph pivot；路徑／digest observation 本身不證明執行或惡意性。
+
+**5 分鐘試玩** —— [`docs/sample-case/`](docs/sample-case/) 附了一個合成的雙主機案卷；導覽 [`docs/DEMO.zh-TW.md`](docs/DEMO.zh-TW.md)（[English](docs/DEMO.md)）帶你把 `-analyze`／`-diff`／`-correlate`／`-graph` 完整跑過一遍（不含真實證據、免提權）。
 
 ## 定位（事件前—中期）
 
@@ -40,6 +64,7 @@ IR_Collect 也能分析**任何人**已採集好的 artifact —— 指向一個
 ## 實戰上能帶來的幫助
 
 - **單機現場很快帶回資料：** 單一 EXE、GUI／CLI，適合 Windows 上第一時間 **live response**。
+- **跨平台證據分析：** 可匯入 Linux/macOS 的 UAC 資料夾或封裝；支援來源會進入同一套 Fact Store、Timeline、Diff、Correlation 與 Graph 流程。
 - **蒐證面廣：** 程序、持久化、Event Logs，以及 MFT、USN、Registry、Prefetch、Jump List、Amcache、ShimCache、SRUM 等，對**可疑執行**、**持久化**、**使用者活動**特別有用。
 - **不只有 raw：** 會做 **facts 正規化**（Fact Store），可用 **時間軸**、**實體搜尋**、**調查圖**先縮小範圍，再回頭對原始跡證做驗證。
 - **橫向移動與帳號濫用：** 規格與文件涵蓋 RDP、SMB、Kerberos、登入、服務／排程等，並支援**跨主機 Investigation Graph**。
@@ -65,7 +90,7 @@ IR_Collect 也能分析**任何人**已採集好的 artifact —— 指向一個
 
 ## 治理（v0.22+）
 
-**AI** 與 **ZIP 上傳** 各有 endpoint **allowlist**；**AI Analyze** 可選 **redaction profile**，**僅**作用於即將送出的 JSON，**不**改寫已匯出之 Summary 檔或 ZIP 內文。**Collection mode profile**（`Standard`／`TriageFast`／`ForensicStrict`）在 **Advanced → Settings**，會寫入 `collection_coverage.json`；`ForensicStrict` 會阻擋收集後的 ZIP 上傳與程式內 **AI Analyze**，但**仍非**零足跡承諾。詳見 `docs/SECURITY.md`、`docs/USER_MANUAL.md`。
+**AI** 與 **ZIP 上傳** 各有 endpoint **allowlist**；**AI Analyze** 可選 **redaction profile**，**僅**作用於即將送出的 JSON，**不**改寫已匯出之 Summary 檔或 ZIP 內文。**Collection mode profile**（`Standard`／`TriageFast`／`ForensicStrict`）在 **Advanced → Settings**，會寫入 `collection_coverage.json`。`ForensicStrict` 會分類預定輸出位置、要求明確風險確認（預設再做第二次確認）、強烈警示系統碟輸出，並預設略過已啟用的外部記憶體採集／分析 handoff、阻擋手動 **Deep Scan**、收集後 ZIP 上傳與程式內 **AI Analyze**；限制與 profile 略過項目都會寫入 coverage 與分析匯出。此模式**仍非**零足跡承諾。詳見 `docs/SECURITY.md`、`docs/USER_MANUAL.md`。
 
 ## 一句話結論
 

@@ -26,6 +26,7 @@ config.ini
 
 # ---- Assistant working notes (kept under ~/.claude, never in the repo) ----
 /memory/
+/.claude/
 
 # ---- IDE / OS cruft ----
 .vs/

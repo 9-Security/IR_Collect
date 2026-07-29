@@ -1,8 +1,13 @@
-# IR_Collect v0.22.0 規格優化工程文件
+# 9SEC Evidence Workbench v0.22.0 歷史工程規格
+
+> **歷史文件（2026-07-29 標記）**：本文件保留 `v0.22.0` 當時的需求拆分與決策脈絡，
+> 不再代表目前待辦。已完成／後續深化狀態以 [SPEC.md](SPEC.md) 與
+> [V0_25_ENGINEERING_SPEC.md](V0_25_ENGINEERING_SPEC.md) 為準；其中原 WP-E
+> `CollectionModeProfile` 已由 v0.25 WP-C 的輸出分類、確認與 restricted-step policy 補完。
 
 ## 1. 目的
 
-本文件將 [SPEC.md](SPEC.md) §5.1 的 `v0.22.0 draft` 候選更新項目，從「方向清單」收斂成可執行的工程規格。
+本文件當時將 `SPEC.md` §5.1 的 `v0.22.0 draft` 候選更新項目，從「方向清單」收斂成可執行的工程規格；目前該節已更新為完成狀態。
 
 重點不是再擴寫願景，而是回答以下問題：
 
@@ -19,7 +24,7 @@
 
 本文件依據：
 
-1. [SPEC.md](SPEC.md) §5.1 `v0.22.0 draft`
+1. 當時的 `SPEC.md` §5.1 `v0.22.0 draft`
 2. 目前程式骨架：
    - `Collector -> Artifact -> Normalizer -> Fact Store -> Timeline / Correlation / Export`
 3. 目前已存在的模組：

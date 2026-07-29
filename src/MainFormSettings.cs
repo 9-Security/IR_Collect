@@ -21,7 +21,7 @@ namespace IR_Collect
             catch { }
 
             Form dlg = new Form();
-            dlg.Text = "About IR Analysis Platform";
+            dlg.Text = "About " + IR_Collect.BuildInfo.ToolName;
             dlg.Size = new Size(480, 340);
             dlg.StartPosition = FormStartPosition.CenterParent;
             dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -32,7 +32,7 @@ namespace IR_Collect
             // ── 標題區 ──────────────────────────────────────────────────────────
             var lblProduct = new Label
             {
-                Text = "IR Analysis Platform",
+                Text = IR_Collect.BuildInfo.ToolName,
                 Font = new Font("Segoe UI", 15F, FontStyle.Bold),
                 ForeColor = Color.White,
                 Left = 20, Top = 20, Width = 430, Height = 30,
@@ -146,13 +146,26 @@ namespace IR_Collect
             y += 28;
             Label lProfNote = new Label()
             {
-                Text = "ForensicStrict adds stronger warnings and blocks outbound case ZIP upload and AI Analyze. It is not zero-footprint and not a complete low-impact forensic suite by itself.",
+                Text = "ForensicStrict applies the safeguards below and blocks outbound ZIP upload and AI Analyze. It is not zero-footprint or a complete low-impact forensic suite.",
                 Left = 20,
                 Top = y,
                 Width = 460,
                 Height = 48
             };
             y += 52;
+            Label lStrictPolicy = new Label()
+            {
+                Text = "ForensicStrict collection safeguards:",
+                Left = 20,
+                Top = y,
+                Width = 460
+            };
+            y += 22;
+            CheckBox chkWarnSystemDisk = new CheckBox() { Text = "Warn when output workspace is on the Windows system disk", Left = 20, Top = y, Width = 460, Checked = config.Get("WarnOnSystemDiskOutput") != "0" }; y += 26;
+            CheckBox chkRequireRemovable = new CheckBox() { Text = "Require acknowledgment when output is not removable media", Left = 20, Top = y, Width = 460, Checked = config.Get("RequireRemovableMediaConfirmation") != "0" }; y += 26;
+            CheckBox chkStrictSkipMemory = new CheckBox() { Text = "Skip external memory acquisition and analysis handoff", Left = 20, Top = y, Width = 460, Checked = config.Get("ForensicStrictSkipMemoryHandoff") != "0" }; y += 26;
+            CheckBox chkStrictSkipDeepScan = new CheckBox() { Text = "Block manual Deep Scan of local System32", Left = 20, Top = y, Width = 460, Checked = config.Get("ForensicStrictSkipDeepScan") != "0" }; y += 26;
+            CheckBox chkStrictSecondConfirm = new CheckBox() { Text = "Require a second explicit confirmation before Local Collect", Left = 20, Top = y, Width = 460, Checked = config.Get("ForensicStrictRequireSecondConfirmation") != "0" }; y += 32;
 
             Label l1 = new Label() { Text = "VirusTotal API Key (for future API use; Query VT opens browser):", Left = 20, Top = y, Width = 460 }; y += 22;
             TextBox t1 = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("VirusTotalApiKey"), UseSystemPasswordChar = true }; y += 28;
@@ -215,6 +228,26 @@ namespace IR_Collect
             CheckBox chkDeleteOutput = new CheckBox() { Text = "Delete output directory after creating ZIP", Left = 20, Top = y, Width = 460, Checked = config.Get("DeleteOutputDirAfterZip") != "0" }; y += 26;
             CheckBox chkSqlite = new CheckBox() { Text = "Write Fact Store to SQLite when building (Phase B3)", Left = 20, Top = y, Width = 460, Checked = config.Get("FactStoreWriteSqlite") == "1" }; y += 24;
             CheckBox chkAutoBuild = new CheckBox() { Text = "Auto Build Fact Store when case is loaded", Left = 20, Top = y, Width = 460, Checked = config.Get("FactStoreAutoBuild") == "1" }; y += 24;
+            CheckBox chkIncrementalCache = new CheckBox() { Text = "Persist Fact Store cache in Local AppData (reuse / incremental rebuild)", Left = 20, Top = y, Width = 460, Checked = config.Get("FactStoreIncrementalCache") == "1" }; y += 26;
+            Button btnClearFactCache = new Button() { Text = "Clear persistent Fact Store cache", Left = 20, Top = y, Width = 250, Height = 26 }; y += 32;
+            btnClearFactCache.Click += (s, e) =>
+            {
+                if (MessageBox.Show(
+                    "Delete all persistent normalized Fact Store caches for the current user?",
+                    "Clear Fact Store Cache",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning) != DialogResult.Yes)
+                    return;
+                try
+                {
+                    int count = IR_Collect.Analysis.Correlation.FactStoreBuildCoordinator.ClearPersistentCache();
+                    MessageBox.Show("Deleted " + count.ToString("N0") + " cached file(s).", "Fact Store Cache", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Cache cleanup failed: " + ex.Message, "Fact Store Cache", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
             CheckBox chkShowComplete = new CheckBox() { Text = "Show \"Collection Complete\" message when Local Collect finishes", Left = 20, Top = y, Width = 460, Checked = config.Get("ShowCollectionCompleteMessage") != "0" }; y += 28;
 
             Label lMemHdr = new Label() { Text = "Memory acquisition (external tool only; collection orchestration, no in-app analysis):", Left = 20, Top = y, Width = 460, Height = 32 }; y += 34;
@@ -289,6 +322,11 @@ namespace IR_Collect
             btnSave.DialogResult = DialogResult.OK;
             btnSave.Click += (s, e) => {
                 config.Set("CollectionModeProfile", cbProfile.SelectedItem != null ? cbProfile.SelectedItem.ToString() : CollectionModeProfileHelper.Standard);
+                config.Set("WarnOnSystemDiskOutput", chkWarnSystemDisk.Checked ? "1" : "0");
+                config.Set("RequireRemovableMediaConfirmation", chkRequireRemovable.Checked ? "1" : "0");
+                config.Set("ForensicStrictSkipMemoryHandoff", chkStrictSkipMemory.Checked ? "1" : "0");
+                config.Set("ForensicStrictSkipDeepScan", chkStrictSkipDeepScan.Checked ? "1" : "0");
+                config.Set("ForensicStrictRequireSecondConfirmation", chkStrictSecondConfirm.Checked ? "1" : "0");
                 config.Set("VirusTotalApiKey", t1.Text.Trim());
                 config.Set("AiApiEndpoint", t2Endpoint.Text.Trim());
                 config.Set("AiApiKey", t2.Text.Trim());
@@ -317,6 +355,7 @@ namespace IR_Collect
                 config.Set("DeleteOutputDirAfterZip", chkDeleteOutput.Checked ? "1" : "0");
                 config.Set("FactStoreWriteSqlite", chkSqlite.Checked ? "1" : "0");
                 config.Set("FactStoreAutoBuild", chkAutoBuild.Checked ? "1" : "0");
+                config.Set("FactStoreIncrementalCache", chkIncrementalCache.Checked ? "1" : "0");
                 config.Set("ShowCollectionCompleteMessage", chkShowComplete.Checked ? "1" : "0");
                 config.Set("MemoryAcquireEnabled", chkMemEn.Checked ? "1" : "0");
                 config.Set("MemoryAcquireToolPath", tMemTool.Text.Trim());
@@ -364,6 +403,12 @@ namespace IR_Collect
             };
 
             f.Controls.Add(lProf); f.Controls.Add(cbProfile); f.Controls.Add(lProfNote);
+            f.Controls.Add(lStrictPolicy);
+            f.Controls.Add(chkWarnSystemDisk);
+            f.Controls.Add(chkRequireRemovable);
+            f.Controls.Add(chkStrictSkipMemory);
+            f.Controls.Add(chkStrictSkipDeepScan);
+            f.Controls.Add(chkStrictSecondConfirm);
             f.Controls.Add(l1); f.Controls.Add(t1);
             f.Controls.Add(l2); f.Controls.Add(t2Endpoint); f.Controls.Add(l2b); f.Controls.Add(t2);
             f.Controls.Add(l2c); f.Controls.Add(tAiAllow); f.Controls.Add(l2d); f.Controls.Add(cbAiRedact);
@@ -376,6 +421,8 @@ namespace IR_Collect
             f.Controls.Add(chkDeleteOutput);
             f.Controls.Add(chkSqlite);
             f.Controls.Add(chkAutoBuild);
+            f.Controls.Add(chkIncrementalCache);
+            f.Controls.Add(btnClearFactCache);
             f.Controls.Add(chkShowComplete);
             f.Controls.Add(lMemHdr);
             f.Controls.Add(chkMemEn);

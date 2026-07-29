@@ -166,6 +166,7 @@ namespace IR_Collect.Analysis.Correlation
                 case "prefetch":
                 case "jumplist":
                 case "jump_list":
+                case "bodyfile":
                 case "userassist":
                     return hasTime ? MetadataTimeKind : UnknownTimeKind;
                 case "recentfiles":
@@ -197,6 +198,7 @@ namespace IR_Collect.Analysis.Correlation
                 case "prefetch":
                 case "jumplist":
                 case "jump_list":
+                case "bodyfile":
                 case "userassist":
                     return MediumConfidence;
                 case "recentfiles":

@@ -3,8 +3,8 @@ setlocal
 cd /d "%~dp0"
 
 set "CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-set "RELEASE_STAGE_EXE=IR_Collect_release_candidate.exe"
-set "RELEASE_EXE=IR_Collect.exe"
+set "RELEASE_STAGE_EXE=9SEC_Evidence_Workbench_release_candidate.exe"
+set "RELEASE_EXE=9SEC_Evidence_Workbench.exe"
 
 if not exist "%CSC%" (
     echo [!] csc.exe not found at %CSC%
@@ -39,7 +39,7 @@ echo [+] Release build: %RELEASE_EXE%
 exit /b 0
 
 :SignFile
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\SignLocalBuild.ps1" -TargetPath "%~1" -Label "%~2"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\SignLocalBuild.ps1" -TargetPath "%~1" -Label "%~2" -RequireSignature -RequireTimestamp
 if errorlevel 1 (
     echo [!] Signing failed for %~2.
     exit /b 1

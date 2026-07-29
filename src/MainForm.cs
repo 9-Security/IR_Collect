@@ -113,7 +113,7 @@ namespace IR_Collect
 
         private void InitializeComponent()
         {
-            this.Text = "IR Analysis Platform";
+            this.Text = BuildInfo.ToolName;
             this.Size = new Size(1300, 850);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = uiFont; // Apply base font
@@ -151,7 +151,8 @@ namespace IR_Collect
             menuAdv.DropDownItems.Add("Settings...", null, (s,e) => ShowSettingsDialog());
             menuAdv.DropDownItems.Add("-");
             menuAdv.DropDownItems.Add("Rebuild Selected Host Event Logs", null, (s, e) => RunRebuildSelectedEventLogs());
-            menuAdv.DropDownItems.Add("Rebuild Selected Host Fact Store", null, (s, e) => RunRebuildSelectedFactStore());
+            menuAdv.DropDownItems.Add("Rebuild Selected Host Fact Store (full)", null, (s, e) => RunRebuildSelectedFactStore(false));
+            menuAdv.DropDownItems.Add("Rebuild Selected Host Fact Store (changed artifacts only)", null, (s, e) => RunRebuildSelectedFactStore(true));
             menuAdv.DropDownItems.Add("-");
             menuAdv.DropDownItems.Add("Import Settings...", null, (s,e) => {
                 OpenFileDialog ofd = new OpenFileDialog(); if(ofd.ShowDialog()==DialogResult.OK) { config.Import(ofd.FileName); MessageBox.Show("Settings Imported"); }
@@ -203,7 +204,8 @@ namespace IR_Collect
             });
             this.ctxHostMenu.Items.Add("-");
             this.ctxHostMenu.Items.Add("Rebuild Event Logs", null, (s, e) => RunRebuildSelectedEventLogs());
-            this.ctxHostMenu.Items.Add("Rebuild Fact Store", null, (s, e) => RunRebuildSelectedFactStore());
+            this.ctxHostMenu.Items.Add("Rebuild Fact Store (full)", null, (s, e) => RunRebuildSelectedFactStore(false));
+            this.ctxHostMenu.Items.Add("Rebuild Fact Store (changed artifacts only)", null, (s, e) => RunRebuildSelectedFactStore(true));
             this.ctxHostMenu.Items.Add("-");
             this.ctxHostMenu.Items.Add("Clear Host Data", null, (s,e) => {
                 if (treeHosts.SelectedNode != null) {
@@ -283,7 +285,7 @@ namespace IR_Collect
             }
 
             this.lblTitle = new Label();
-            this.lblTitle.Text = "IR COLLECTOR & ANALYZER";
+            this.lblTitle.Text = BuildInfo.ToolName.ToUpperInvariant();
             this.lblTitle.ForeColor = Color.White;
             this.lblTitle.Font = new Font("Segoe UI", 14F, FontStyle.Bold);
             this.lblTitle.Location = new Point(60, 20); // Moved right for toggle
@@ -708,7 +710,7 @@ namespace IR_Collect
             this.comboEntityType.Location = new Point(130, entityRowY);
             this.comboEntityType.Size = new Size(90, 24);
             this.comboEntityType.Font = new Font("Segoe UI", 10F);
-            this.comboEntityType.Items.AddRange(new object[] { "Path", "FileName", "Hash", "User", "Sid", "SubjectUser", "TargetUser", "RegistryKey", "Provider", "EventId", "RemoteIP", "RemotePort", "RemoteName", "ServiceName", "TaskName", "ShareName", "ShareLocalPath", "Workstation", "TargetServer", "CredentialTarget", "LogonType", "LogonProcess", "AuthenticationPackage", "ProcessId", "ThreatName", "CommandLine", "Computer", "BitsJob", "WmiFilter", "WmiConsumer", "Query", "AppId", "Interface", "Publisher", "ProductName", "ProgramName", "ProgramId" });
+            this.comboEntityType.Items.AddRange(new object[] { "Path", "FileName", "Hash", "User", "UserId", "AuditUserId", "EffectiveUserId", "Group", "GroupId", "HomeDirectory", "LoginShell", "Sid", "SubjectUser", "TargetUser", "Terminal", "SessionId", "SessionRecordId", "RegistryKey", "Provider", "EventId", "AuditEventId", "LocalAddress", "LocalPort", "RemoteIP", "RemotePort", "RemoteName", "ServiceName", "TaskName", "PersistenceName", "PersistenceMechanism", "MachineId", "BootId", "JournalFileId", "ShareName", "ShareLocalPath", "Workstation", "TargetServer", "CredentialTarget", "LogonType", "LogonProcess", "AuthenticationPackage", "ProcessId", "ParentProcessId", "ThreatName", "CommandLine", "ArtifactCategory", "Computer", "BitsJob", "WmiFilter", "WmiConsumer", "Query", "AppId", "Interface", "Publisher", "ProductName", "ProductVersion", "PackageManager", "Architecture", "VirtualHost", "HttpMethod", "RequestTarget", "HttpProtocol", "HttpStatus", "Referrer", "UserAgent", "WebServer", "ProgramName", "ProgramId" });
             this.comboEntityType.SelectedIndex = 0;
 
             this.txtEntityValue = new TextBox();
@@ -725,7 +727,7 @@ namespace IR_Collect
             this.btnSearchEntity.FlatStyle = FlatStyle.Flat;
             this.btnSearchEntity.Font = new Font("Segoe UI", 10F);
             this.btnSearchEntity.Click += (s, e) => RunEntitySearch();
-            if (this.toolTipMain != null) this.toolTipMain.SetToolTip(this.btnSearchEntity, "依 Path / FileName / Hash / User / SubjectUser / TargetUser / RegistryKey / Provider / EventId / RemoteIP / RemotePort / RemoteName / ServiceName / TaskName / ShareName / ShareLocalPath / Workstation / TargetServer / LogonType / LogonProcess / AuthenticationPackage / ProcessId / ThreatName / CommandLine / Computer / BitsJob / WmiFilter / WmiConsumer / Query / AppId / Interface / Publisher / ProductName / ProgramName / ProgramId 搜尋 Fact Store（含 Phase 3 lateral movement 實體）。");
+            if (this.toolTipMain != null) this.toolTipMain.SetToolTip(this.btnSearchEntity, "依 Path / FileName / Hash / User / RegistryKey / Provider / EventId / RemoteIP / RemotePort / RemoteName / ServiceName / TaskName / ShareName / Workstation / TargetServer / ProcessId / CommandLine / Computer / Publisher / ProductName / PackageManager / VirtualHost / HttpMethod / RequestTarget / HttpStatus / UserAgent / WebServer 等實體搜尋 Fact Store。");
 
             var lblFilterSource = new Label();
             lblFilterSource.Text = "Source:";
@@ -738,7 +740,7 @@ namespace IR_Collect
             this.comboCorrelationSource.Location = new Point(92, filterRowY);
             this.comboCorrelationSource.Size = new Size(110, 24);
             this.comboCorrelationSource.Font = new Font("Segoe UI", 10F);
-            this.comboCorrelationSource.Items.AddRange(new object[] { "(All)", "Process", "EventLog", "MFT", "ActivityTimeline", "Autorun", "Service", "ScheduledTask", "StoredCredential", "KerberosTicketCache", "USN", "BAM", "DAM", "BITS", "JumpList", "WmiPersistence", "Amcache", "ShimCache", "ShellBags", "SRUMNetwork", "SRUMApp" });
+            this.comboCorrelationSource.Items.AddRange(new object[] { "(All)", "Process", "EventLog", "MFT", "ActivityTimeline", "Autorun", "Service", "ScheduledTask", "StoredCredential", "KerberosTicketCache", "USN", "BAM", "DAM", "BITS", "JumpList", "WmiPersistence", "Amcache", "ShimCache", "ShellBags", "SRUMNetwork", "SRUMApp", "UacEvidence", "UacAccount", "UacPackage", "UacWebServer", "UacShellHistory", "UacPersistence", "UacJournalFile", "UacBootSession", "UacLoginEvent", "UacAudit", "UacSystemLog", "UacAuth", "UacNetworkConnection" });
             this.comboCorrelationSource.SelectedIndex = 0;
 
             var lblFilterConfidence = new Label();
@@ -1080,9 +1082,23 @@ namespace IR_Collect
             var factsTab = CreateFactsTab(c);
             if (factsTab != null) hostTabs.TabPages.Add(factsTab);
 
+            // Facts-only baseline comparison against another loaded, ready case.
+            var diffTab = CreateDiffTab(c);
+            if (diffTab != null) hostTabs.TabPages.Add(diffTab);
+
             // 0. Timeline Analysis (Unified: Process + MFT + EventLog + Activity)
             bool hasTimelineData = (c.MftEntries != null && c.MftEntries.Count > 0) ||
                 ResolveArtifactPathFlexible(c, ArtifactNames.ProcessListCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacAuthEventsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacNetworkConnectionsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacShellHistoryCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacPersistenceCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacBootSessionsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacLoginEventsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacAuditEventsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacSystemLogEventsCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacPackagesCsv) != null ||
+                ResolveArtifactPathFlexible(c, ArtifactNames.UacWebServerEventsCsv) != null ||
                 ResolveArtifactPathFlexible(c, ArtifactNames.LogonSessionsCsv) != null ||
                 ResolveArtifactPathFlexible(c, ArtifactNames.NetworkResourcesCsv) != null ||
                 ResolveArtifactPathFlexible(c, ArtifactNames.ServerConnectionsCsv) != null ||
@@ -1108,6 +1124,9 @@ namespace IR_Collect
             TabControl subBasic = CreateSubTabControl();
             AddTabIfExists(subBasic, CreateSystemInfoTab(c));
             AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.ProcessListCsv) != null ? CreateDeferredTab("Processes", () => LoadCsvDataForTab(c, "Processes", ArtifactNames.ProcessListCsv), data => BuildCsvTabFromData("Processes", data as CsvTabData)) : null);
+            AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.UacNetworkConnectionsCsv) != null ? CreateDeferredTab("UAC Network Connections", () => LoadCsvDataForTab(c, "UAC Network Connections", ArtifactNames.UacNetworkConnectionsCsv), data => BuildCsvTabFromData("UAC Network Connections", data as CsvTabData)) : null);
+            AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.UacAccountsCsv) != null ? CreateDeferredTab("UAC Accounts", () => LoadCsvDataForTab(c, "UAC Accounts", ArtifactNames.UacAccountsCsv), data => BuildCsvTabFromData("UAC Accounts", data as CsvTabData)) : null);
+            AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.UacPackagesCsv) != null ? CreateDeferredTab("UAC Packages", () => LoadCsvDataForTab(c, "UAC Packages", ArtifactNames.UacPackagesCsv), data => BuildCsvTabFromData("UAC Packages", data as CsvTabData)) : null);
             AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.LogonSessionsCsv) != null ? CreateDeferredTab("Logon Sessions", () => LoadCsvDataForTab(c, "Logon Sessions", ArtifactNames.LogonSessionsCsv), data => BuildCsvTabFromData("Logon Sessions", data as CsvTabData)) : null);
             AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.NetworkResourcesCsv) != null ? CreateDeferredTab("Network Resources", () => LoadCsvDataForTab(c, "Network Resources", ArtifactNames.NetworkResourcesCsv), data => BuildCsvTabFromData("Network Resources", data as CsvTabData)) : null);
             AddTabIfExists(subBasic, ResolveArtifactPathFlexible(c, ArtifactNames.ServerConnectionsCsv) != null ? CreateDeferredTab("Server Connections", () => LoadCsvDataForTab(c, "Server Connections", ArtifactNames.ServerConnectionsCsv), data => BuildCsvTabFromData("Server Connections", data as CsvTabData)) : null);
@@ -1122,6 +1141,7 @@ namespace IR_Collect
             // 2. Persistence
             TabPage pagePersist = new TabPage("Persistence");
             TabControl subPersist = CreateSubTabControl();
+            AddTabIfExists(subPersist, ResolveArtifactPathFlexible(c, ArtifactNames.UacPersistenceCsv) != null ? CreateDeferredTab("UAC Persistence", () => LoadCsvDataForTab(c, "UAC Persistence", ArtifactNames.UacPersistenceCsv), data => BuildCsvTabFromData("UAC Persistence", data as CsvTabData)) : null);
             AddTabIfExists(subPersist, ResolveArtifactPathFlexible(c, ArtifactNames.ServicesCsv) != null ? CreateDeferredTab("Services", () => LoadCsvDataForTab(c, "Services", ArtifactNames.ServicesCsv), data => BuildCsvTabFromData("Services", data as CsvTabData)) : null);
             AddTabIfExists(subPersist, ResolveArtifactPathFlexible(c, ArtifactNames.AutorunsRegistryCsv) != null ? CreateDeferredTab("Autoruns", () => LoadCsvDataForTab(c, "Autoruns", ArtifactNames.AutorunsRegistryCsv), data => BuildCsvTabFromData("Autoruns", data as CsvTabData)) : null);
             AddTabIfExists(subPersist, ResolveArtifactPathFlexible(c, ArtifactNames.BamDamCsv) != null ? CreateDeferredTab("BAM / DAM", () => LoadCsvDataForTab(c, "BAM / DAM", ArtifactNames.BamDamCsv), data => BuildCsvTabFromData("BAM / DAM", data as CsvTabData)) : null);
@@ -1139,6 +1159,17 @@ namespace IR_Collect
             var evtTab = CreateEventLogTab(c);
             if (evtTab != null) subLogs.TabPages.Add(evtTab);
             AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UsnJournalCsv) != null ? CreateDeferredTab("USN Journal", () => LoadCsvDataForTab(c, "USN Journal", ArtifactNames.UsnJournalCsv), data => BuildCsvTabFromData("USN Journal", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacAuthEventsCsv) != null ? CreateDeferredTab("UAC Auth Events", () => LoadCsvDataForTab(c, "UAC Auth Events", ArtifactNames.UacAuthEventsCsv), data => BuildCsvTabFromData("UAC Auth Events", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacShellHistoryCsv) != null ? CreateDeferredTab("UAC Shell History", () => LoadCsvDataForTab(c, "UAC Shell History", ArtifactNames.UacShellHistoryCsv), data => BuildCsvTabFromData("UAC Shell History", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacJournalFilesCsv) != null ? CreateDeferredTab("UAC Journal Files", () => LoadCsvDataForTab(c, "UAC Journal Files", ArtifactNames.UacJournalFilesCsv), data => BuildCsvTabFromData("UAC Journal Files", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacBootSessionsCsv) != null ? CreateDeferredTab("UAC Boot Sessions", () => LoadCsvDataForTab(c, "UAC Boot Sessions", ArtifactNames.UacBootSessionsCsv), data => BuildCsvTabFromData("UAC Boot Sessions", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacLoginEventsCsv) != null ? CreateDeferredTab("UAC Login Events", () => LoadCsvDataForTab(c, "UAC Login Events", ArtifactNames.UacLoginEventsCsv), data => BuildCsvTabFromData("UAC Login Events", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacAuditEventsCsv) != null ? CreateDeferredTab("UAC Audit Events", () => LoadCsvDataForTab(c, "UAC Audit Events", ArtifactNames.UacAuditEventsCsv), data => BuildCsvTabFromData("UAC Audit Events", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacSystemLogEventsCsv) != null ? CreateDeferredTab("UAC System Log Events", () => LoadCsvDataForTab(c, "UAC System Log Events", ArtifactNames.UacSystemLogEventsCsv), data => BuildCsvTabFromData("UAC System Log Events", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacWebServerEventsCsv) != null ? CreateDeferredTab("UAC Web Server Events", () => LoadCsvDataForTab(c, "UAC Web Server Events", ArtifactNames.UacWebServerEventsCsv), data => BuildCsvTabFromData("UAC Web Server Events", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacEvidenceIndexCsv) != null ? CreateDeferredTab("UAC Evidence Index", () => LoadCsvDataForTab(c, "UAC Evidence Index", ArtifactNames.UacEvidenceIndexCsv), data => BuildCsvTabFromData("UAC Evidence Index", data as CsvTabData)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.AnalysisWorkspaceManifestJson) != null ? CreateDeferredTab("Analysis Workspace Manifest", () => CreateTextTab(c, "Analysis Workspace Manifest", ArtifactNames.AnalysisWorkspaceManifestJson)) : null);
+            AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.UacArchiveEntriesCsv) != null ? CreateDeferredTab("Archive Entry Map", () => LoadCsvDataForTab(c, "Archive Entry Map", ArtifactNames.UacArchiveEntriesCsv), data => BuildCsvTabFromData("Archive Entry Map", data as CsvTabData)) : null);
             AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.ShellBagsCsv) != null ? CreateDeferredTab("ShellBags (parsed)", () => LoadCsvDataForTab(c, "ShellBags (parsed)", ArtifactNames.ShellBagsCsv), data => BuildCsvTabFromData("ShellBags (parsed)", data as CsvTabData)) : null);
             AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.ShimCacheCsv) != null ? CreateDeferredTab("ShimCache", () => LoadCsvDataForTab(c, "ShimCache", ArtifactNames.ShimCacheCsv), data => BuildCsvTabFromData("ShimCache", data as CsvTabData)) : null);
             AddTabIfExists(subLogs, ResolveArtifactPathFlexible(c, ArtifactNames.ShimCacheEntriesCsv) != null ? CreateDeferredTab("ShimCache Entries", () => LoadCsvDataForTab(c, "ShimCache Entries", ArtifactNames.ShimCacheEntriesCsv), data => BuildCsvTabFromData("ShimCache Entries", data as CsvTabData)) : null);
@@ -1513,6 +1544,18 @@ namespace IR_Collect
 
             // CSV counts
             AppendCount(sb, "Processes", CountCsvRows(GetArtifactPath(c, ArtifactNames.ProcessListCsv)));
+            AppendCount(sb, "UAC Network Connections", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacNetworkConnectionsCsv)));
+            AppendCount(sb, "UAC Accounts", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAccountsCsv)));
+            AppendCount(sb, "UAC Packages", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPackagesCsv)));
+            AppendCount(sb, "UAC Shell History", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacShellHistoryCsv)));
+            AppendCount(sb, "UAC Persistence", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPersistenceCsv)));
+            AppendCount(sb, "UAC Journal Files", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacJournalFilesCsv)));
+            AppendCount(sb, "UAC Boot Sessions", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacBootSessionsCsv)));
+            AppendCount(sb, "UAC Login Events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacLoginEventsCsv)));
+            AppendCount(sb, "UAC Audit Events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuditEventsCsv)));
+            AppendCount(sb, "UAC System Log Events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacSystemLogEventsCsv)));
+            AppendCount(sb, "UAC Web Server Events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacWebServerEventsCsv)));
+            AppendCount(sb, "UAC Evidence Index", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv)));
             AppendCount(sb, "Logon Sessions", CountCsvRows(GetArtifactPath(c, ArtifactNames.LogonSessionsCsv)));
             AppendCount(sb, "Network Resources", CountCsvRows(GetArtifactPath(c, ArtifactNames.NetworkResourcesCsv)));
             AppendCount(sb, "Server Connections", CountCsvRows(GetArtifactPath(c, ArtifactNames.ServerConnectionsCsv)));
@@ -1531,7 +1574,26 @@ namespace IR_Collect
             AppendCount(sb, "Recent Files", CountCsvRows(GetArtifactPath(c, ArtifactNames.RecentFilesCsv)));
             AppendCount(sb, "Registry Activity", CountCsvRows(GetArtifactPath(c, ArtifactNames.ActivityTimelineCsv)));
             AppendCount(sb, "USN Journal", CountCsvRows(GetArtifactPath(c, ArtifactNames.UsnJournalCsv)));
+            AppendCount(sb, "UAC Auth Events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuthEventsCsv)));
             AppendCount(sb, "ShellBags (parsed)", CountCsvRows(GetArtifactPath(c, ArtifactNames.ShellBagsCsv)));
+
+            if (c.UacEvidence != null && c.UacEvidence.IsUac)
+            {
+                sb.AppendLine();
+                sb.AppendLine("UAC Intake:");
+                sb.AppendLine("- Source format: " + (c.UacEvidence.SourceFormat ?? ""));
+                sb.AppendLine("- UAC version: " + (string.IsNullOrWhiteSpace(c.UacEvidence.Version) ? "(not recorded)" : c.UacEvidence.Version));
+                sb.AppendLine("- Platform: " + (c.UacEvidence.OperatingSystem ?? "") + " " + (c.UacEvidence.Architecture ?? ""));
+                sb.AppendLine("- Profile: " + (string.IsNullOrWhiteSpace(c.UacEvidence.Profile) ? "(not recorded)" : c.UacEvidence.Profile));
+                sb.AppendLine("- Original files: " + c.UacEvidence.EvidenceFileCount.ToString("N0") +
+                    "; normalized/metadata sources: " + c.UacEvidence.NormalizedSourceCount.ToString("N0") +
+                    "; parser-eligible: " + c.UacEvidence.ParserEligibleCount.ToString("N0") +
+                    "; indexed raw-only: " + c.UacEvidence.RawOnlyCount.ToString("N0"));
+                if (!string.IsNullOrWhiteSpace(c.SourceEvidenceSha256))
+                    sb.AppendLine("- Source archive SHA-256: " + c.SourceEvidenceSha256);
+                if (!string.IsNullOrWhiteSpace(c.EvidenceDigest))
+                    sb.AppendLine("- Extracted evidence rollup: " + c.EvidenceDigest);
+            }
 
             // Scheduled Tasks (XML)
             AppendCount(sb, "Scheduled Tasks", CountXmlTasks(GetArtifactPath(c, ArtifactNames.ScheduledTasksXml)));
@@ -1550,6 +1612,12 @@ namespace IR_Collect
             {
                 if (!string.IsNullOrWhiteSpace(c.CollectionCoverage.CollectionModeProfile))
                     sb.AppendLine("- Collection mode profile: " + CollectionModeProfileHelper.Normalize(c.CollectionCoverage.CollectionModeProfile));
+                sb.AppendLine("- Output target class: " + (string.IsNullOrWhiteSpace(c.CollectionCoverage.OutputTargetClass) ? "unknown" : c.CollectionCoverage.OutputTargetClass));
+                sb.AppendLine("- Operator acknowledged live-response risks: " + (c.CollectionCoverage.OperatorAcknowledgedRisks ? "yes" : "no"));
+                if (c.CollectionCoverage.RestrictedSteps != null && c.CollectionCoverage.RestrictedSteps.Count > 0)
+                    sb.AppendLine("- Restricted steps: " + string.Join(", ", c.CollectionCoverage.RestrictedSteps.ToArray()));
+                if (c.CollectionCoverage.SkippedByProfile != null && c.CollectionCoverage.SkippedByProfile.Count > 0)
+                    sb.AppendLine("- Skipped by profile: " + string.Join(", ", c.CollectionCoverage.SkippedByProfile.ToArray()));
                 sb.AppendLine("- Overall: " + FormatCollectionCoverageStatus(c.CollectionCoverage));
                 sb.AppendLine("- Collector: " + FormatCollectionRuntime(c.CollectionCoverage));
                 foreach (var line in BuildCollectionCoverageSummaryLines(c.CollectionCoverage, c.CollectionCoverage.Steps.Count))
@@ -1583,8 +1651,11 @@ namespace IR_Collect
             sb.AppendLine("Fact Store Cache:");
             sb.AppendLine("- Status: " + GetFactStoreStatus(c));
             sb.AppendLine("- Freshness: " + FormatFactStoreFreshnessStatus(c));
+            sb.AppendLine("- Build mode: " + (string.IsNullOrWhiteSpace(c.FactStoreBuildMode) ? "unknown" : c.FactStoreBuildMode));
             if (!string.IsNullOrWhiteSpace(c.FactStoreFreshnessDetail))
                 sb.AppendLine("- Detail: " + c.FactStoreFreshnessDetail);
+            if (!string.IsNullOrWhiteSpace(c.FactStoreBuildDetail))
+                sb.AppendLine("- Build detail: " + c.FactStoreBuildDetail);
 
             sb.AppendLine();
             sb.AppendLine("Analyst Workflow:");
@@ -1767,7 +1838,8 @@ namespace IR_Collect
                 workflow.Notes = txtNotes.Text ?? "";
                 c.AnalystWorkflow = workflow;
                 if (string.IsNullOrWhiteSpace(c.AnalystWorkflowPath))
-                    c.AnalystWorkflowPath = IR_Collect.Analysis.AnalystWorkflowStore.ResolvePath(c.SourceZip, c.ExtractPath);
+                    c.AnalystWorkflowPath = IR_Collect.Analysis.AnalystWorkflowStore.ResolveReadOnlyCasePath(
+                        c.SourceEvidenceSha256, c.EvidenceDigest, c.CaseID);
 
                 string error;
                 if (!IR_Collect.Analysis.AnalystWorkflowStore.SaveToFile(workflow, c.AnalystWorkflowPath, out error))
@@ -1775,6 +1847,7 @@ namespace IR_Collect
                     MessageBox.Show("Workflow save failed: " + error, "Analyst Workflow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                IR_Collect.Analysis.CaseManager.RefreshAnalysisWorkspaceManifest(c);
 
                 BuildHostTabs(c);
                 SelectTopLevelHostTab("Summary");
@@ -2134,15 +2207,27 @@ namespace IR_Collect
         private string BuildHtmlReport(IR_Collect.Analysis.CaseData c)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>IR Report - " + EscapeHtml(c.Hostname ?? "Case") + "</title>");
+            sb.AppendLine("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>" + EscapeHtml(BuildInfo.ToolName) + " Report - " + EscapeHtml(c.Hostname ?? "Case") + "</title>");
             sb.AppendLine("<style>body{font-family:Segoe UI,sans-serif;margin:24px;background:#f8f9fa;} h1{color:#333;} h2{margin-top:24px;color:#555;} table{border-collapse:collapse;margin:8px 0;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;} th{background:#e0e0e0;} .high{color:#c00;} .medium{color:#a60;} .low{color:#666;} ul{margin:4px 0;}</style></head><body>");
-            sb.AppendLine("<h1>IR Collect Report</h1>");
+            sb.AppendLine("<h1>" + EscapeHtml(BuildInfo.ToolName) + " Report</h1>");
             sb.AppendLine("<p><b>Host:</b> " + EscapeHtml(c.Hostname ?? "") + " &nbsp;|&nbsp; <b>Case ID:</b> " + EscapeHtml(c.CaseID ?? "") + " &nbsp;|&nbsp; <b>Generated:</b> " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "</p>");
 
             sb.AppendLine("<h2>Artifact counts</h2><table><tr><th>Artifact</th><th>Count</th></tr>");
             sb.AppendLine("<tr><td>Artifacts (files)</td><td>" + GetExtractedArtifactFileCount(c) + "</td></tr>");
             sb.AppendLine("<tr><td>MFT records</td><td>" + ((c.MftEntries != null) ? c.MftEntries.Count.ToString("N0") : "0") + "</td></tr>");
             AppendHtmlCountRow(sb, "Processes", CountCsvRows(GetArtifactPath(c, ArtifactNames.ProcessListCsv)));
+            AppendHtmlCountRow(sb, "UAC network connections", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacNetworkConnectionsCsv)));
+            AppendHtmlCountRow(sb, "UAC accounts", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAccountsCsv)));
+            AppendHtmlCountRow(sb, "UAC packages", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPackagesCsv)));
+            AppendHtmlCountRow(sb, "UAC shell history", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacShellHistoryCsv)));
+            AppendHtmlCountRow(sb, "UAC persistence", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPersistenceCsv)));
+            AppendHtmlCountRow(sb, "UAC journal files", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacJournalFilesCsv)));
+            AppendHtmlCountRow(sb, "UAC boot sessions", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacBootSessionsCsv)));
+            AppendHtmlCountRow(sb, "UAC login events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacLoginEventsCsv)));
+            AppendHtmlCountRow(sb, "UAC audit events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuditEventsCsv)));
+            AppendHtmlCountRow(sb, "UAC system log events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacSystemLogEventsCsv)));
+            AppendHtmlCountRow(sb, "UAC web server events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacWebServerEventsCsv)));
+            AppendHtmlCountRow(sb, "UAC evidence index", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv)));
             AppendHtmlCountRow(sb, "Logon sessions", CountCsvRows(GetArtifactPath(c, ArtifactNames.LogonSessionsCsv)));
             AppendHtmlCountRow(sb, "Network resources", CountCsvRows(GetArtifactPath(c, ArtifactNames.NetworkResourcesCsv)));
             AppendHtmlCountRow(sb, "Server connections", CountCsvRows(GetArtifactPath(c, ArtifactNames.ServerConnectionsCsv)));
@@ -2158,6 +2243,7 @@ namespace IR_Collect
             AppendHtmlCountRow(sb, "SRUM app usage", CountCsvRows(GetArtifactPath(c, ArtifactNames.SrumAppUsageCsv)));
             AppendHtmlCountRow(sb, "Scheduled tasks", CountXmlTasks(GetArtifactPath(c, ArtifactNames.ScheduledTasksXml)));
             AppendHtmlCountRow(sb, "USN journal", CountCsvRows(GetArtifactPath(c, ArtifactNames.UsnJournalCsv)));
+            AppendHtmlCountRow(sb, "UAC auth events", CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuthEventsCsv)));
             AppendHtmlCountRow(sb, "ShellBags (parsed)", CountCsvRows(GetArtifactPath(c, ArtifactNames.ShellBagsCsv)));
             sb.AppendLine("<tr><td>Event logs</td><td>" + CountAvailableEventLogs(c) + "</td></tr>");
             sb.AppendLine("</table>");
@@ -2171,6 +2257,12 @@ namespace IR_Collect
             {
                 if (!string.IsNullOrWhiteSpace(c.CollectionCoverage.CollectionModeProfile))
                     sb.AppendLine("<p><b>Collection mode profile:</b> " + EscapeHtml(CollectionModeProfileHelper.Normalize(c.CollectionCoverage.CollectionModeProfile)) + "</p>");
+                sb.AppendLine("<p><b>Output target class:</b> " + EscapeHtml(string.IsNullOrWhiteSpace(c.CollectionCoverage.OutputTargetClass) ? "unknown" : c.CollectionCoverage.OutputTargetClass) + "</p>");
+                sb.AppendLine("<p><b>Operator acknowledged live-response risks:</b> " + (c.CollectionCoverage.OperatorAcknowledgedRisks ? "yes" : "no") + "</p>");
+                if (c.CollectionCoverage.RestrictedSteps != null && c.CollectionCoverage.RestrictedSteps.Count > 0)
+                    sb.AppendLine("<p><b>Restricted steps:</b> " + EscapeHtml(string.Join(", ", c.CollectionCoverage.RestrictedSteps.ToArray())) + "</p>");
+                if (c.CollectionCoverage.SkippedByProfile != null && c.CollectionCoverage.SkippedByProfile.Count > 0)
+                    sb.AppendLine("<p><b>Skipped by profile:</b> " + EscapeHtml(string.Join(", ", c.CollectionCoverage.SkippedByProfile.ToArray())) + "</p>");
                 sb.AppendLine("<p><b>Overall:</b> " + EscapeHtml(FormatCollectionCoverageStatus(c.CollectionCoverage)) + "</p>");
                 sb.AppendLine("<p><b>Collector:</b> " + EscapeHtml(FormatCollectionRuntime(c.CollectionCoverage)) + "</p>");
                 sb.AppendLine("<table><tr><th>Step</th><th>Status</th><th>Detail</th><th>Present</th><th>Missing</th></tr>");
@@ -2224,9 +2316,11 @@ namespace IR_Collect
                 sb.AppendLine("<p><em>" + EscapeHtml(MemoryHandoffHelper.CoverageVsSidecarGuidance) + "</em></p>");
 
             sb.AppendLine("<h2>Fact Store cache</h2>");
-            sb.AppendLine("<p><b>Status:</b> " + EscapeHtml(GetFactStoreStatus(c)) + " &nbsp;|&nbsp; <b>Freshness:</b> " + EscapeHtml(FormatFactStoreFreshnessStatus(c)) + "</p>");
+            sb.AppendLine("<p><b>Status:</b> " + EscapeHtml(GetFactStoreStatus(c)) + " &nbsp;|&nbsp; <b>Freshness:</b> " + EscapeHtml(FormatFactStoreFreshnessStatus(c)) + " &nbsp;|&nbsp; <b>Build mode:</b> " + EscapeHtml(string.IsNullOrWhiteSpace(c.FactStoreBuildMode) ? "unknown" : c.FactStoreBuildMode) + "</p>");
             if (!string.IsNullOrWhiteSpace(c.FactStoreFreshnessDetail))
                 sb.AppendLine("<p>" + EscapeHtml(c.FactStoreFreshnessDetail) + "</p>");
+            if (!string.IsNullOrWhiteSpace(c.FactStoreBuildDetail))
+                sb.AppendLine("<p>" + EscapeHtml(c.FactStoreBuildDetail) + "</p>");
 
             sb.AppendLine("<h2>Analyst workflow</h2><ul>");
             foreach (var line in BuildAnalystWorkflowSummaryLines(c)) sb.AppendLine("<li>" + EscapeHtml(line) + "</li>");
@@ -2331,6 +2425,18 @@ namespace IR_Collect
 
             payload.Counts = new Dictionary<string, int>();
             payload.Counts["processes"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.ProcessListCsv)));
+            payload.Counts["uac_network_connections"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacNetworkConnectionsCsv)));
+            payload.Counts["uac_accounts"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAccountsCsv)));
+            payload.Counts["uac_packages"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPackagesCsv)));
+            payload.Counts["uac_shell_history"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacShellHistoryCsv)));
+            payload.Counts["uac_persistence"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacPersistenceCsv)));
+            payload.Counts["uac_journal_files"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacJournalFilesCsv)));
+            payload.Counts["uac_boot_sessions"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacBootSessionsCsv)));
+            payload.Counts["uac_login_events"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacLoginEventsCsv)));
+            payload.Counts["uac_audit_events"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuditEventsCsv)));
+            payload.Counts["uac_system_log_events"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacSystemLogEventsCsv)));
+            payload.Counts["uac_web_server_events"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacWebServerEventsCsv)));
+            payload.Counts["uac_evidence_index"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv)));
             payload.Counts["logon_sessions"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.LogonSessionsCsv)));
             payload.Counts["network_resources"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.NetworkResourcesCsv)));
             payload.Counts["server_connections"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.ServerConnectionsCsv)));
@@ -2348,6 +2454,7 @@ namespace IR_Collect
             payload.Counts["installed_software"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.InstalledSoftwareCsv)));
             payload.Counts["recent_files"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.RecentFilesCsv)));
             payload.Counts["usn_journal"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UsnJournalCsv)));
+            payload.Counts["uac_auth_events"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.UacAuthEventsCsv)));
             payload.Counts["shellbags"] = NormalizeArtifactCountForExport(CountCsvRows(GetArtifactPath(c, ArtifactNames.ShellBagsCsv)));
             payload.Counts["scheduled_tasks"] = NormalizeArtifactCountForExport(CountXmlTasks(GetArtifactPath(c, ArtifactNames.ScheduledTasksXml)));
             payload.Counts["event_logs"] = CountAvailableEventLogs(c);
@@ -2359,11 +2466,22 @@ namespace IR_Collect
             payload.FactStoreStatus = GetFactStoreStatus(c);
             payload.FactStoreFreshnessStatus = c.FactStoreFreshnessStatus ?? "";
             payload.FactStoreFreshnessDetail = c.FactStoreFreshnessDetail ?? "";
+            payload.FactStoreBuildMode = c.FactStoreBuildMode ?? "";
+            payload.FactStoreBuildGeneratedAt = c.FactStoreBuildGeneratedAt ?? "";
+            payload.FactStoreBuildDetail = c.FactStoreBuildDetail ?? "";
+            payload.FactStoreBuildInputs = c.FactStoreBuildInputs != null
+                ? new List<IR_Collect.Analysis.Correlation.FactStoreInputFingerprint>(c.FactStoreBuildInputs)
+                : new List<IR_Collect.Analysis.Correlation.FactStoreInputFingerprint>();
             payload.FactCount = c.FactStore != null ? c.FactStore.Count : 0;
             payload.FactSourceCounts = BuildFactSourceCounts(c);
             payload.EntityTypeCounts = BuildEntityTypeCounts(c);
             payload.ParserNotes = BuildSummaryParserNotes(c);
             payload.FactSamples = GetFactSamples(c, 100);
+            payload.EvidenceDigest = c.EvidenceDigest;
+            payload.Evidence = c.EvidenceFiles;
+            payload.SourceFormat = c.SourceFormat;
+            payload.SourceEvidenceSha256 = c.SourceEvidenceSha256;
+            payload.Uac = c.UacEvidence;
             payload.AnalystWorkflow = c.AnalystWorkflow ?? new IR_Collect.Analysis.AnalystWorkflowState();
             payload.GuidedHunt = GetGuidedHuntResult(c);
             payload.MemoryAcquisition = c.MemoryAcquisitionMeta;
@@ -4254,6 +4372,18 @@ namespace IR_Collect
 
             // Button Logic
             btnScan.Click += (s, e) => {
+                if (CollectionImpactPolicy.IsDeepScanRestricted(config))
+                {
+                    MessageBox.Show(
+                        "Deep Scan is blocked by the current ForensicStrict policy.\n\n" +
+                        "This is a manual live-system action and is not part of the imported case evidence. " +
+                        "Change the profile or disable \"Block manual Deep Scan of local System32\" in Advanced -> Settings to run it.",
+                        "Deep Scan blocked",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
                 var confirm = MessageBox.Show(
                     "This will scan ALL .exe and .dll files in C:\\Windows\\System32 on THIS machine.\n" +
                     "It may take a few minutes.\n\nContinue?", 
@@ -4261,6 +4391,16 @@ namespace IR_Collect
 
                 if (confirm == DialogResult.Yes)
                 {
+                    CollectionRunContext actionContext = CollectionImpactPolicy.Create(config, Environment.SystemDirectory, false);
+                    if (CollectionImpactPolicy.RequiresSecondConfirmation(config, actionContext) &&
+                        MessageBox.Show(
+                            "ForensicStrict second confirmation:\n\nDeep Scan reads and hashes the live System32 directory. Continue?",
+                            "Deep Scan - confirm live action",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Warning,
+                            MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                        return;
+
                     btnScan.Enabled = false;
                     btnScan.Text = "Scanning...";
                     scanGrid.Rows.Clear(); 

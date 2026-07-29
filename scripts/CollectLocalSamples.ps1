@@ -3,9 +3,9 @@
     Extract real artifact samples from THIS host for Phase 2.2 differential validation.
 
 .DESCRIPTION
-    Read-only acquisition of the artifacts needed to diff IR_Collect's parsers against the
+    Read-only acquisition of the artifacts needed to diff 9SEC Evidence Workbench parsers against the
     Eric Zimmerman tools on identical inputs:
-      - $MFT            via IR_Collect_review.exe -dump-mft (raw volume read)
+      - $MFT            via 9SEC_Evidence_Workbench_review.exe -dump-mft (raw volume read)
       - Amcache.hve     via a temporary Volume Shadow Copy (file is locked while Windows runs)
       - SYSTEM hive     (for AppCompatCache / ShimCache) via the same shadow copy
       - SRUDB.dat       (for SRUM) via the same shadow copy
@@ -15,7 +15,7 @@
 
     Output goes to .\samples\ which is .gitignored - these are REAL evidence from your machine and
     are never committed or transmitted. They are read locally by MFTECmd/AmcacheParser/etc. and by
-    IR_Collect's own parsers, and only normalized fields are compared.
+    9SEC Evidence Workbench parsers, and only normalized fields are compared.
 
 .EXAMPLE
     # From an elevated PowerShell at the repo root:
@@ -44,9 +44,9 @@ if (-not (Test-Admin)) {
     exit 1
 }
 
-$review = Join-Path $repoRoot "IR_Collect_review.exe"
+$review = Join-Path $repoRoot "9SEC_Evidence_Workbench_review.exe"
 if (-not (Test-Path $review)) {
-    Write-Host "[!] IR_Collect_review.exe not found - build it first (build_review.bat)." -ForegroundColor Red
+    Write-Host "[!] 9SEC_Evidence_Workbench_review.exe not found - build it first (build_review.bat)." -ForegroundColor Red
     exit 1
 }
 
@@ -54,7 +54,7 @@ New-Item -ItemType Directory -Force (Join-Path $OutDir "mft") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutDir "hives") | Out-Null
 
 # ---- 1) $MFT via our raw dumper ----
-Write-Host "[*] Dumping `$MFT via IR_Collect_review.exe -dump-mft ..." -ForegroundColor Cyan
+Write-Host "[*] Dumping `$MFT via 9SEC_Evidence_Workbench_review.exe -dump-mft ..." -ForegroundColor Cyan
 & $review -dump-mft $Drive (Join-Path $OutDir "mft") | Out-Null
 $mft = Get-ChildItem (Join-Path $OutDir "mft") -File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
 if ($mft) { Write-Host ("    [+] " + $mft.FullName + "  (" + [math]::Round($mft.Length/1MB,1) + " MB)") -ForegroundColor Green }

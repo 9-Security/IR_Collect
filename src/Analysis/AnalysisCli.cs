@@ -4,20 +4,21 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using IR_Collect.Analysis.Correlation;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Analysis
 {
     /// <summary>
-    /// Phase 3.1 - the "analysis layer" front door. Ingests a folder of already-collected artifacts
-    /// (another tool's triage output, or an unzipped IR_Collect case), runs the SAME facts-only
-    /// correlation pipeline a loaded case uses (FactStore.BuildFromCase + GuidedHunt), and emits a
+    /// Phase 3.1 - the "analysis layer" front door. Ingests a folder or supported evidence archive
+    /// (another tool's triage output, a UAC archive, or an unzipped native case), runs the SAME facts-only
+    /// correlation pipeline a loaded case uses (FactStoreBuildCoordinator + GuidedHunt), and emits a
     /// summary_v3 JSON. No live host, no GUI. This is what turns IR_Collect from "a collector that also
     /// analyzes" into "an analyzer you can point at anyone's collection".
     /// </summary>
     public static class AnalysisCli
     {
-        /// <param name="folderArg">A folder path, or "-" to read the folder path from stdin.</param>
-        /// <param name="outFile">Optional output JSON path; defaults to &lt;folder&gt;\ir_analysis.json.</param>
+        /// <param name="folderArg">A folder/archive path, or "-" to read the path from stdin.</param>
+        /// <param name="outFile">Optional output JSON path.</param>
         public static int Run(string folderArg, string outFile, TextWriter console)
         {
             string folder = folderArg;
@@ -28,22 +29,24 @@ namespace IR_Collect.Analysis
             }
             if (string.IsNullOrWhiteSpace(folder))
             {
-                console.WriteLine("[!] -analyze needs a folder path (or '-' to read it from stdin).");
+                console.WriteLine("[!] -analyze needs an evidence folder/archive path (or '-' to read it from stdin).");
                 return 2;
             }
 
             CaseData c;
-            try { c = CaseManager.LoadCaseFromFolder(folder); }
+            try { c = CaseManager.LoadCaseFromPath(folder); }
             catch (Exception ex)
             {
-                console.WriteLine("[!] Could not load folder: " + ex.Message);
+                console.WriteLine("[!] Could not load evidence: " + ex.Message);
                 return 1;
             }
 
             try
             {
-                FactStore store = FactStore.BuildFromCase(c);
-                c.FactStore = store;
+                FactStoreBuildResult build = FactStoreBuildCoordinator.BuildConfigured(c);
+                c.FactStore = build.Store;
+                console.WriteLine("[+] Fact Store build mode: " + build.BuildMode +
+                    (string.IsNullOrWhiteSpace(build.Detail) ? "." : " - " + build.Detail));
             }
             catch (Exception ex)
             {
@@ -56,10 +59,11 @@ namespace IR_Collect.Analysis
 
             string outPath = outFile;
             if (string.IsNullOrEmpty(outPath))
-                outPath = Path.Combine(c.ExtractPath ?? folder, "ir_analysis.json");
+                outPath = CaseManager.GetAnalysisOutputPath(c, "ir_analysis.json");
             try
             {
-                File.WriteAllText(outPath, json, new UTF8Encoding(false));
+                AtomicFile.WriteAllText(outPath, json, new UTF8Encoding(false));
+                CaseManager.RefreshAnalysisWorkspaceManifest(c);
             }
             catch (Exception ex)
             {
@@ -119,8 +123,20 @@ namespace IR_Collect.Analysis
             p.FactSamples = facts.Take(100).ToList();
             p.EvidenceDigest = c.EvidenceDigest;
             p.Evidence = c.EvidenceFiles;
+            p.SourceFormat = c.SourceFormat;
+            p.SourceEvidenceSha256 = c.SourceEvidenceSha256;
+            p.Uac = c.UacEvidence;
             p.LoadWarnings = c.LoadWarnings != null ? new List<string>(c.LoadWarnings) : new List<string>();
             p.CollectionCoverage = c.CollectionCoverage;
+            p.FactStoreStatus = c.FactStore != null ? (c.FactStore.Count > 0 ? "ready" : "empty") : "not built";
+            p.FactStoreFreshnessStatus = c.FactStoreFreshnessStatus ?? "";
+            p.FactStoreFreshnessDetail = c.FactStoreFreshnessDetail ?? "";
+            p.FactStoreBuildMode = c.FactStoreBuildMode ?? "";
+            p.FactStoreBuildGeneratedAt = c.FactStoreBuildGeneratedAt ?? "";
+            p.FactStoreBuildDetail = c.FactStoreBuildDetail ?? "";
+            p.FactStoreBuildInputs = c.FactStoreBuildInputs != null
+                ? new List<FactStoreInputFingerprint>(c.FactStoreBuildInputs)
+                : new List<FactStoreInputFingerprint>();
             p.MemoryAcquisition = c.MemoryAcquisitionMeta;
             p.MemoryAnalysis = c.MemoryAnalysisMeta;
             p.AnalystWorkflow = c.AnalystWorkflow ?? new AnalystWorkflowState();

@@ -2,10 +2,10 @@
 setlocal
 cd /d "%~dp0"
 
-REM Phase 2.2 differential-validation gate: IR_Collect parsers vs Eric Zimmerman tools.
+REM Phase 2.2 differential-validation gate: 9SEC Evidence Workbench parsers vs Eric Zimmerman tools.
 REM Exit 0 = agreed (or cleanly skipped because the EZ tools are absent); nonzero = real disagreement.
 
-if not exist "IR_Collect_review.exe" (
+if not exist "9SEC_Evidence_Workbench_review.exe" (
     echo [+] Building review exe first...
     call build_review.bat
     if errorlevel 1 exit /b 1

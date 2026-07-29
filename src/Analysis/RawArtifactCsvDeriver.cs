@@ -9,9 +9,9 @@ namespace IR_Collect.Analysis
     /// <summary>
     /// Phase 3.1b: when an ingested folder contains RAW hive/ESE files (Amcache.hve / SYSTEM / SRUDB.dat)
     /// but not the derived CSVs the normalizers read, parse them offline with IR_Collect's own validated
-    /// parsers and write the canonical collector CSVs alongside (via the shared ExecutionArtifactCsvWriter,
-    /// so the format cannot drift). This is what lets `-analyze` produce Amcache/ShimCache/SRUM facts from
-    /// a foreign triage package. Existing CSVs are never overwritten. Best-effort: a parser that falls back
+    /// parsers and write canonical collector CSVs to the requested analysis output root (via the shared
+    /// ExecutionArtifactCsvWriter, so the format cannot drift). This is what lets `-analyze` produce
+    /// Amcache/ShimCache/SRUM facts from a foreign triage package. Existing output CSVs are never overwritten. Best-effort: a parser that falls back
     /// (Amcache/ShimCache need 'reg load' = admin) writes nothing and records a warning so the caller can
     /// re-run elevated. SRUM uses the native ESE reader and needs no elevation.
     /// </summary>
@@ -19,18 +19,25 @@ namespace IR_Collect.Analysis
     {
         public static void DeriveInto(string folder, List<string> warnings)
         {
-            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return;
-            try { DeriveSrum(folder, warnings); } catch (Exception ex) { Warn(warnings, "SRUM derive failed: " + ex.Message); }
-            try { DeriveAmcache(folder, warnings); } catch (Exception ex) { Warn(warnings, "Amcache derive failed: " + ex.Message); }
-            try { DeriveShimCache(folder, warnings); } catch (Exception ex) { Warn(warnings, "ShimCache derive failed: " + ex.Message); }
+            DeriveInto(folder, folder, warnings);
         }
 
-        private static void DeriveSrum(string folder, List<string> warnings)
+        public static void DeriveInto(string sourceRoot, string outputRoot, List<string> warnings)
         {
-            string appCsv = Path.Combine(folder, ArtifactNames.SrumAppUsageCsv);
-            string netCsv = Path.Combine(folder, ArtifactNames.SrumNetworkUsageCsv);
+            if (string.IsNullOrEmpty(sourceRoot) || !Directory.Exists(sourceRoot)) return;
+            if (string.IsNullOrEmpty(outputRoot)) return;
+            Directory.CreateDirectory(outputRoot);
+            try { DeriveSrum(sourceRoot, outputRoot, warnings); } catch (Exception ex) { Warn(warnings, "SRUM derive failed: " + ex.Message); }
+            try { DeriveAmcache(sourceRoot, outputRoot, warnings); } catch (Exception ex) { Warn(warnings, "Amcache derive failed: " + ex.Message); }
+            try { DeriveShimCache(sourceRoot, outputRoot, warnings); } catch (Exception ex) { Warn(warnings, "ShimCache derive failed: " + ex.Message); }
+        }
+
+        private static void DeriveSrum(string sourceRoot, string outputRoot, List<string> warnings)
+        {
+            string appCsv = Path.Combine(outputRoot, ArtifactNames.SrumAppUsageCsv);
+            string netCsv = Path.Combine(outputRoot, ArtifactNames.SrumNetworkUsageCsv);
             if (File.Exists(appCsv) || File.Exists(netCsv)) return; // collector CSVs already present
-            string db = FindFirst(folder, "SRUDB.dat");
+            string db = FindFirst(sourceRoot, "SRUDB.dat");
             if (db == null) return;
             SrumExportResult export = SrumExporter.Export(db);
             if (export == null || (export.AppRows.Count == 0 && export.NetworkRows.Count == 0))
@@ -41,12 +48,12 @@ namespace IR_Collect.Analysis
             ExecutionArtifactCsvWriter.WriteSrumCsvs(export, netCsv, appCsv);
         }
 
-        private static void DeriveAmcache(string folder, List<string> warnings)
+        private static void DeriveAmcache(string sourceRoot, string outputRoot, List<string> warnings)
         {
-            string progCsv = Path.Combine(folder, ArtifactNames.AmcacheProgramsCsv);
-            string fileCsv = Path.Combine(folder, ArtifactNames.AmcacheFilesCsv);
+            string progCsv = Path.Combine(outputRoot, ArtifactNames.AmcacheProgramsCsv);
+            string fileCsv = Path.Combine(outputRoot, ArtifactNames.AmcacheFilesCsv);
             if (File.Exists(progCsv) || File.Exists(fileCsv)) return;
-            string hive = FindFirst(folder, "Amcache.hve");
+            string hive = FindFirst(sourceRoot, "Amcache.hve");
             if (hive == null) return;
             AmcacheParseResult parsed = AmcacheParser.ParseHive(hive);
             if (parsed == null || (parsed.Files.Count == 0 && parsed.Programs.Count == 0))
@@ -57,11 +64,11 @@ namespace IR_Collect.Analysis
             ExecutionArtifactCsvWriter.WriteAmcacheCsvs(parsed, progCsv, fileCsv);
         }
 
-        private static void DeriveShimCache(string folder, List<string> warnings)
+        private static void DeriveShimCache(string sourceRoot, string outputRoot, List<string> warnings)
         {
-            string entriesCsv = Path.Combine(folder, ArtifactNames.ShimCacheEntriesCsv);
+            string entriesCsv = Path.Combine(outputRoot, ArtifactNames.ShimCacheEntriesCsv);
             if (File.Exists(entriesCsv)) return;
-            string sys = FindFirst(folder, "SYSTEM");
+            string sys = FindFirst(sourceRoot, "SYSTEM");
             if (sys == null) return;
             ShimCacheParseResult parsed = ShimCacheParser.ParseFromHiveFile(sys);
             if (parsed == null || parsed.Entries.Count == 0)

@@ -68,6 +68,34 @@ namespace IR_Collect.Analysis
                 p.LoadWarnings = new List<string>(p.LoadWarnings);
             if (p.ParserNotes != null)
                 p.ParserNotes = new List<string>(p.ParserNotes);
+            if (p.Evidence != null)
+            {
+                var evidence = new List<EvidenceFile>();
+                foreach (EvidenceFile source in p.Evidence)
+                {
+                    if (source == null) continue;
+                    evidence.Add(new EvidenceFile { RelPath = source.RelPath, SizeBytes = source.SizeBytes, Sha256 = source.Sha256 });
+                }
+                p.Evidence = evidence;
+            }
+            if (p.FactStoreBuildInputs != null)
+            {
+                var inputs = new List<FactStoreInputFingerprint>();
+                foreach (FactStoreInputFingerprint source in p.FactStoreBuildInputs)
+                {
+                    if (source == null) continue;
+                    inputs.Add(new FactStoreInputFingerprint
+                    {
+                        RelativePath = source.RelativePath,
+                        Size = source.Size,
+                        MtimeUtc = source.MtimeUtc,
+                        Sha256 = source.Sha256,
+                        NormalizerName = source.NormalizerName
+                    });
+                }
+                p.FactStoreBuildInputs = inputs;
+            }
+            p.Uac = CloneUac(p.Uac);
             p.CollectionCoverage = CloneCoverageReport(p.CollectionCoverage);
             if (p.AnalystWorkflow != null)
             {
@@ -89,6 +117,28 @@ namespace IR_Collect.Analysis
                 p.MemoryAnalysis = CloneMemoryAnalysis(p.MemoryAnalysis);
         }
 
+        private static UacEvidenceMetadata CloneUac(UacEvidenceMetadata src)
+        {
+            if (src == null) return null;
+            return new UacEvidenceMetadata
+            {
+                IsUac = src.IsUac,
+                Version = src.Version,
+                OperatingSystem = src.OperatingSystem,
+                Architecture = src.Architecture,
+                Hostname = src.Hostname,
+                Profile = src.Profile,
+                CollectionStarted = src.CollectionStarted,
+                CollectionCompleted = src.CollectionCompleted,
+                SourceFormat = src.SourceFormat,
+                EvidenceFileCount = src.EvidenceFileCount,
+                EvidenceBytes = src.EvidenceBytes,
+                NormalizedSourceCount = src.NormalizedSourceCount,
+                ParserEligibleCount = src.ParserEligibleCount,
+                RawOnlyCount = src.RawOnlyCount
+            };
+        }
+
         private static CollectionCoverageReport CloneCoverageReport(CollectionCoverageReport src)
         {
             if (src == null) return null;
@@ -107,6 +157,11 @@ namespace IR_Collect.Analysis
             d.FailedSteps = src.FailedSteps;
             d.SkippedSteps = src.SkippedSteps;
             d.MissingSteps = src.MissingSteps;
+            d.CollectionModeProfile = src.CollectionModeProfile;
+            d.OperatorAcknowledgedRisks = src.OperatorAcknowledgedRisks;
+            d.OutputTargetClass = src.OutputTargetClass;
+            d.RestrictedSteps = src.RestrictedSteps != null ? new List<string>(src.RestrictedSteps) : new List<string>();
+            d.SkippedByProfile = src.SkippedByProfile != null ? new List<string>(src.SkippedByProfile) : new List<string>();
             d.Steps = new List<CollectionCoverageStep>();
             if (src.Steps != null)
             {
@@ -250,6 +305,12 @@ namespace IR_Collect.Analysis
                 p.CaseId = "[redacted]";
 
             p.FactStoreFreshnessDetail = MaskPathLikeAfterLiterals(p.FactStoreFreshnessDetail);
+            p.FactStoreBuildDetail = MaskPathLikeAfterLiterals(p.FactStoreBuildDetail);
+            if (p.FactStoreBuildInputs != null)
+            {
+                foreach (FactStoreInputFingerprint input in p.FactStoreBuildInputs)
+                    if (input != null) input.RelativePath = BasenameOnly(input.RelativePath);
+            }
 
             if (p.EventHighlights != null)
             {
@@ -265,6 +326,23 @@ namespace IR_Collect.Analysis
             {
                 for (int i = 0; i < p.ParserNotes.Count; i++)
                     p.ParserNotes[i] = MaskPathLikeAfterLiterals(p.ParserNotes[i]);
+            }
+
+            if (p.Evidence != null)
+            {
+                foreach (EvidenceFile evidence in p.Evidence)
+                    if (evidence != null) evidence.RelPath = BasenameOnly(evidence.RelPath);
+                if (p.Evidence.Count > 200)
+                {
+                    p.Evidence = p.Evidence.GetRange(0, 200);
+                    if (p.ParserNotes == null) p.ParserNotes = new List<string>();
+                    p.ParserNotes.Add("Basic AI redaction: evidence manifest entries were limited to 200; aggregate counts and evidence digests remain available.");
+                }
+            }
+            if (p.Uac != null)
+            {
+                if (!string.IsNullOrEmpty(p.Uac.Hostname)) p.Uac.Hostname = "[redacted]";
+                p.Uac.Profile = MaskPathLikeAfterLiterals(p.Uac.Profile);
             }
 
             RedactGuidedHuntBasic(p.GuidedHunt);
@@ -300,6 +378,8 @@ namespace IR_Collect.Analysis
             p.Host = "[redacted]";
             p.CaseId = "[redacted]";
             p.FactStoreFreshnessDetail = "";
+            p.FactStoreBuildDetail = "";
+            p.FactStoreBuildInputs = new List<FactStoreInputFingerprint>();
             p.EventHighlights = new List<string>();
             p.LoadWarnings = new List<string>();
             p.ParserNotes = new List<string>
@@ -311,6 +391,10 @@ namespace IR_Collect.Analysis
             p.GuidedHunt = null;
             p.MemoryAcquisition = null;
             p.MemoryAnalysis = null;
+            p.Evidence = new List<EvidenceFile>();
+            p.EvidenceDigest = "";
+            p.SourceEvidenceSha256 = "";
+            p.Uac = null;
 
             if (p.AnalystWorkflow != null)
             {

@@ -1,4 +1,4 @@
-# IR_Collect — User manual
+# 9SEC Evidence Workbench — User manual
 
 **English** | [繁體中文](USER_MANUAL.zh-TW.md)
 
@@ -6,17 +6,18 @@ This manual is for operators and incident analysts. It explains **how** to colle
 
 ## 1. What the tool is
 
-`IR_Collect` is a Windows incident-response tool that supports:
+`9SEC Evidence Workbench` is a portable Windows incident-response and evidence-analysis tool that supports:
 
-- On-host evidence collection
-- Import of existing case bundles
+- Windows on-host evidence collection
+- Import of Windows case bundles and UAC Linux/macOS folders or archives
 - GUI and CLI operation
 - Multi-host case management
 - Fact Store, entity search, timeline, and Investigation Graph analysis
 - Summary JSON, full LOG JSON, and HTML report export
 - Optional external memory acquisition and external memory analysis handoff
 
-It is a **live-response** tool, not a full offline disk-imaging forensics platform.
+Its Local Collect path is **live response**. Folder/archive analysis is offline and keeps the evidence
+root read-only, but the tool is not a full disk-imaging forensics platform.
 
 ## 2. Before you start
 
@@ -54,13 +55,13 @@ Recommendations:
 - Do not point AI / Upload endpoints at untrusted services.
 - Configure **Advanced → Settings** allowlists: each outbound channel (AI vs Upload) must list allowed `http(s)://host:port/path-prefix` entries. An **empty** allowlist **blocks** POSTs for that channel until you add at least one prefix that matches your configured endpoint.
 - **AI Analyze** applies the selected **redaction profile** to the JSON being posted. **Export Summary JSON** and **ZIP upload** are not rewritten by the profile (upload is allow/deny only).
-- **Collection mode profile** adds operator-facing posture labels recorded in `collection_coverage.json` and analyst exports (`summary.json`, `full_log_v3` host summaries, Summary/HTML/parser notes when present). **TriageFast** is mainly labeling plus an informational pre-collect reminder. **ForensicStrict** adds stronger pre-collect warnings (including the planned output folder path), blocks **AI Analyze** entirely while active, and blocks automatic **ZIP upload** after **Local Collect** even if an upload endpoint and allowlist are configured. It does **not** claim zero-footprint, forensic disk imaging, or a complete low-touch forensic program by itself.
+- **Collection mode profile** is recorded in `collection_coverage.json` and analyst exports (`summary.json`, `full_log_v3` host summaries, Summary/HTML/parser notes when present). **TriageFast** is mainly labeling plus an informational pre-collect reminder. **ForensicStrict** classifies the planned output target, strongly warns for system-disk output, requires explicit risk acknowledgement and, by default, a second confirmation. It skips enabled external memory acquisition/analysis handoff by default and blocks manual **Deep Scan**, **AI Analyze**, and automatic **ZIP upload**. Restrictions and profile skips remain visible in coverage and exports. It does **not** claim zero-footprint, forensic disk imaging, or a complete low-touch forensic program by itself.
 
 ## 3. Five-minute quick start
 
 ### 3.1 GUI
 
-1. Run `IR_Collect.exe`
+1. Run `9SEC_Evidence_Workbench.exe`
 2. Accept UAC; prefer **Run as administrator**
 3. On the Dashboard click `Local Collect`
 4. Enter an `Evidence ID`
@@ -73,15 +74,16 @@ Recommendations:
 ### 3.2 CLI
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
-IR_Collect.exe --help
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
+9SEC_Evidence_Workbench.exe --help
 ```
 
 Notes:
 
 - `-c` with no argument auto-generates an Evidence ID
 - `-c <ID>` uses your ID
+- Under `ForensicStrict`, enter `YES` at the risk prompt and, by default, `FORENSIC-STRICT` at the second prompt. Any rejection exits with code `3` before the collector creates its output directory.
 - After collection you get a ZIP and matching `.sha256`
 
 ## 4. GUI tour
@@ -128,6 +130,10 @@ After import (defaults):
 - Host appears in Hosts List
 
 If `Auto Build Fact Store when case is loaded` is off, Fact Store is not built automatically.
+
+For UAC evidence, supported executable and running-process checksum lists are shown as
+`uac_file_hashes.csv` and `UacFileHash` facts. Treat these as untimed path/digest observations:
+they support IOC and cross-host pivots but do not prove execution or maliciousness.
 
 ### 4.4 Dashboard highlights
 
@@ -199,7 +205,23 @@ Each fact may include:
 - ParseLevel / FallbackUsed / ParserNote
 - SourceFile / RawRef
 
-### 4.8 Event Logs
+### 4.8 Diff
+
+Load at least two cases and wait until both Fact Stores are ready. On the target host's **Diff** tab:
+
+1. Select the other case as **Baseline**
+2. Select `All`, `Process`, `Persistence`, `File`, `Identity`, `Network`, or `Fact`
+3. Filter by `Added`, `Modified`, `Removed`, and optional source text
+4. Double-click a row or use `Open Facts`; use `Open Timeline` to check timing
+5. Use `Export JSON` to write a `diff_v1` report
+
+`Added` and `Modified` navigate to the target case. `Removed` navigates to the baseline case. Each
+change retains fact references and provenance from both sides where available.
+
+Treat these as observed-state differences. A missing fact may reflect different collection coverage,
+parser support, collection time, or retention—not proof that an artifact was absent.
+
+### 4.9 Event Logs
 
 View:
 
@@ -212,7 +234,7 @@ Detail panes:
 
 If only `.evtx` exists, the tool tries to rebuild analysis CSVs on import.
 
-### 4.9 Investigation Graph
+### 4.10 Investigation Graph
 
 Good for:
 
@@ -229,12 +251,13 @@ Suggested flow:
 3. Expand stepwise with `Expand From Selected Edge`
 4. Use `Open Timeline` to validate timing
 
-### 4.10 Rebuild Selected Host Event Logs / Fact Store
+### 4.11 Rebuild Selected Host Event Logs / Fact Store
 
-Rebuilds:
+Commands:
 
-- That host’s `*_filtered.csv`
-- That host’s Fact Store
+- `Rebuild Selected Host Event Logs`: rebuilds that host's `*_filtered.csv`
+- `Rebuild Selected Host Fact Store (full)`: reruns every normalizer
+- `Rebuild Selected Host Fact Store (changed artifacts only)`: uses the persistent cache; exact matches are reused and filtered Event Log-only changes are rebuilt incrementally
 
 When:
 
@@ -243,7 +266,11 @@ When:
 - Summary shows stale `fact_store.db`
 - You want one host refreshed without clearing all cases
 
-### 4.11 Clear all hosts
+Changed-artifacts-only requires **Persist Fact Store cache in Local AppData** in Settings. A changed
+non-EventLog input, incompatible cache, or unreadable cache automatically falls back to a full
+rebuild and shows the reason. This fallback preserves correctness; it is not a partial-success state.
+
+### 4.12 Clear all hosts
 
 `File -> Clear all hosts`:
 
@@ -258,9 +285,13 @@ This removes **all** loaded data, not just “analysis cache.”
 ### 5.1 Commands
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
-IR_Collect.exe --help
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
+9SEC_Evidence_Workbench.exe -analyze <folder-or-archive> [out.json]
+9SEC_Evidence_Workbench.exe -diff <baseline> <target> [out.json]
+9SEC_Evidence_Workbench.exe -correlate <out.json> <pathA> <pathB> [...]
+9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>
+9SEC_Evidence_Workbench.exe --help
 ```
 
 ### 5.2 Typical uses
@@ -268,6 +299,18 @@ IR_Collect.exe --help
 - Quick collection after RDP to a host
 - Batch invocation from another toolchain
 - Collect-only on scene without immediate GUI review
+- Read-only folder/archive analysis and baseline comparison without opening the GUI
+
+For `-diff`, baseline and target may each be a folder, ZIP, TAR, TAR.GZ, or TGZ. If the output path is
+omitted, the report is atomically published as `ir_diff.json` in the current directory.
+
+Analysis commands print the Fact Store build mode (`Full`, `Incremental`, or `Reused`) and the
+fallback/reuse detail. Persistent reuse occurs only when the cache option is enabled for the current
+user; the default remains a full in-memory build.
+
+For `-c` under `ForensicStrict`, the CLI prints the output target class and restricted steps before
+collection. Type `YES`, then `FORENSIC-STRICT` when the second confirmation setting is enabled.
+Cancellation returns exit code `3` before collection output is created.
 
 ### 5.3 Outputs
 
@@ -288,7 +331,7 @@ Partial failures:
 
 - `*.zip` case bundle
 - `*.zip.sha256`
-- `collection_coverage.json`
+- `collection_coverage.json` (step coverage plus profile, risk acknowledgement, restrictions, profile skips, and output target class)
 - `logs/ir_collect.log`
 
 ### 6.2 Common artifact filenames
@@ -339,10 +382,14 @@ Per major step:
 Workflow:
 
 1. `overall_status`
-2. Any step not `complete`
-3. `artifacts_missing`, `detail`, and `logs/ir_collect.log`
+2. `collection_mode_profile`, `output_target_class`, and `operator_acknowledged_risks`
+3. `restricted_steps` and `skipped_by_profile`
+4. Any step not `complete`
+5. `artifacts_missing`, `detail`, and `logs/ir_collect.log`
 
 **Do not** equate `missing` with “activity never occurred.”
+An enabled step in `skipped_by_profile` deliberately makes overall coverage `partial`; it is not a
+collector failure, but it is still an evidence-coverage limitation.
 
 ## 8. Suggested investigation flows
 
@@ -388,17 +435,55 @@ Writes `fact_store.db` under each host ExtractPath—useful for large cases or r
 
 Requires `System.Data.SQLite.dll` beside the EXE for SQLite writes; GUI still works without it (in-memory path only).
 
-### 9.3 Memory acquisition
+### 9.3 Persist Fact Store cache in Local AppData
+
+Default **off**. When enabled, normalized facts and their input fingerprint manifest are stored under:
+
+```text
+%LOCALAPPDATA%\9SEC Evidence Workbench\FactStoreCache\
+```
+
+Build behavior:
+
+- `Reused`: all input SHA-256 fingerprints match
+- `Incremental`: only filtered Event Log CSV inputs changed
+- `Full`: no cache, forced rebuild, other input changes, incompatible metadata, or unreadable cache
+
+The cache is atomically published and its ACL is restricted to the current user on a best-effort
+basis. It can contain account names, paths, command lines, network endpoints, and other normalized
+evidence. Use **Clear persistent Fact Store cache** when the cache is no longer needed or before
+handoff. Clearing it does not delete source evidence, analysis workspaces, or `fact_store.db`.
+
+Current limitation: source-level partial rebuild is implemented only for filtered Event Log CSVs.
+Any other changed source deliberately triggers a full rebuild.
+
+### 9.4 ForensicStrict safeguards
+
+All five options are visible in **Advanced → Settings** and persist through `ConfigManager`:
+
+- Require confirmation when output is not classified as removable media
+- Warn when output is on the Windows system disk
+- Skip external memory acquisition and analysis handoff
+- Block manual Deep Scan
+- Require a second `ForensicStrict` confirmation
+
+Output target classes are `system_disk`, `removable`, `network`, and `unknown`. A normal local
+non-system fixed drive remains `unknown`; the tool does not assume it is trusted removable media.
+The collector recomputes policy from the actual output path and refuses an unacknowledged strict run
+before creating the output directory. These controls reduce avoidable activity but do not make live
+response zero-footprint.
+
+### 9.5 Memory acquisition
 
 Calls **your** external acquisition tool; records timing, paths, exit codes, hashes, privilege context. **No** built-in dumper or dump parser; may need large disk.
 
-**Settings**: use **Arguments preset** for common layouts (quoted output path only, WinPMEM-style `-o`, or fully **Custom** template). For **non-Custom** presets, `MemoryAcquireToolArgs` is **appended after** the preset core (extra switches only, or placeholders if needed). **Coverage** rows in `collection_coverage.json` reconcile disk artifacts against `memory_acquisition.json`; if they disagree, the detail includes `[Coverage]`. Before saving the sidecar, the collector may append `[Reconciled]` if the dump path had no file at finalize. Summary / HTML / `summary.json` / `full_log_v3` share one note explaining `[Coverage]` vs `[Reconciled]`.
+**Settings**: use **Arguments preset** for common layouts (quoted output path only, WinPMEM-style `-o`, or fully **Custom** template). For **non-Custom** presets, `MemoryAcquireToolArgs` is **appended after** the preset core (extra switches only, or placeholders if needed). **Coverage** rows in `collection_coverage.json` reconcile disk artifacts against `memory_acquisition.json`; if they disagree, the detail includes `[Coverage]`. Before saving the sidecar, the collector may append `[Reconciled]` if the dump path had no file at finalize. Summary / HTML / `summary.json` / `full_log_v3` share one note explaining `[Coverage]` vs `[Reconciled]`. Under the default `ForensicStrict` policy, an enabled acquisition writes a `skipped` sidecar without launching the external tool and is reported in `skipped_by_profile`.
 
-### 9.4 Memory analysis handoff
+### 9.6 Memory analysis handoff
 
 Feeds dumps to **your** external analyzer and ingests outputs. Tool **orchestrates only**—do not treat sidecar status alone as a forensic conclusion.
 
-**Settings**: **Arguments preset** chooses the default dual-quoted `{InputPath}` + `{OutputDir}` layout or a **Custom** template. **Coverage** reconciles listed outputs against disk; sidecar may be downgraded with `[Reconciled]` if listed files are missing at finalize even though accounting claimed success.
+**Settings**: **Arguments preset** chooses the default dual-quoted `{InputPath}` + `{OutputDir}` layout or a **Custom** template. **Coverage** reconciles listed outputs against disk; sidecar may be downgraded with `[Reconciled]` if listed files are missing at finalize even though accounting claimed success. The default `ForensicStrict` policy likewise writes a `skipped` sidecar without launching the analyzer.
 
 ## 10. Troubleshooting
 

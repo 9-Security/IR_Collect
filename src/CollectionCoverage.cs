@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using IR_Collect.Utils;
 
 namespace IR_Collect
 {
@@ -78,8 +79,27 @@ namespace IR_Collect
         [DataMember(Name = "collection_mode_profile")]
         public string CollectionModeProfile { get; set; }
 
+        [DataMember(Name = "operator_acknowledged_risks")]
+        public bool OperatorAcknowledgedRisks { get; set; }
+
+        [DataMember(Name = "restricted_steps")]
+        public List<string> RestrictedSteps { get; set; }
+
+        [DataMember(Name = "skipped_by_profile")]
+        public List<string> SkippedByProfile { get; set; }
+
+        [DataMember(Name = "output_target_class")]
+        public string OutputTargetClass { get; set; }
+
         [DataMember(Name = "steps")]
         public List<CollectionCoverageStep> Steps { get; set; }
+
+        public CollectionCoverageReport()
+        {
+            RestrictedSteps = new List<string>();
+            SkippedByProfile = new List<string>();
+            Steps = new List<CollectionCoverageStep>();
+        }
     }
 
     public static class CollectionCoverageSerializer
@@ -97,7 +117,7 @@ namespace IR_Collect
         public static void SaveToFile(CollectionCoverageReport report, string path)
         {
             if (report == null || string.IsNullOrEmpty(path)) return;
-            File.WriteAllText(path, Serialize(report), new UTF8Encoding(false));
+            AtomicFile.WriteAllText(path, Serialize(report), new UTF8Encoding(false));
         }
 
         public static CollectionCoverageReport LoadFromFile(string path)

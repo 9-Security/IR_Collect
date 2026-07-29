@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/graph_v1.schema.json",
-  "title": "IR_Collect graph_v1",
-  "description": "Output of `IR_Collect.exe -graph` — multi-hop investigation graph expanded from a seed entity.",
+  "title": "9SEC Evidence Workbench graph_v1",
+  "description": "Output of `9SEC_Evidence_Workbench.exe -graph` — multi-hop investigation graph expanded from a seed entity.",
   "type": "object",
   "required": ["export_schema", "generated_at", "tool_name", "tool_version", "seed_type", "seed_value", "max_depth", "host_count", "node_count", "edge_count", "nodes", "edges"],
   "properties": {
@@ -25,7 +25,12 @@
         "properties": {
           "host": { "type": "string" },
           "case_id": { "type": "string" },
-          "fact_count": { "type": "integer" }
+          "fact_count": { "type": "integer" },
+          "evidence_digest": { "type": "string" },
+          "evidence_file_count": { "type": "integer" },
+          "source_format": { "type": "string" },
+          "source_evidence_sha256": { "type": "string" },
+          "uac": { "type": ["object", "null"] }
         }
       }
     },

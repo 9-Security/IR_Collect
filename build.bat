@@ -3,14 +3,14 @@ setlocal
 cd /d "%~dp0"
 
 set "CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-set "TARGET_EXE=IR_Collect.exe"
+set "TARGET_EXE=9SEC_Evidence_Workbench.exe"
 
 if not exist "%CSC%" (
     echo [!] csc.exe not found at %CSC%
     exit /b 1
 )
 
-echo [+] Compiling IR_Collect...
+echo [+] Compiling 9SEC Evidence Workbench...
 "%CSC%" /out:%TARGET_EXE% @build_common.rsp
 if errorlevel 1 (
     echo [!] Build failed.

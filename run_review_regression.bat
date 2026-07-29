@@ -8,17 +8,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "IR_Collect_review.exe" (
-    echo [!] IR_Collect_review.exe not found after build.
+if not exist "9SEC_Evidence_Workbench_review.exe" (
+    echo [!] 9SEC_Evidence_Workbench_review.exe not found after build.
     exit /b 1
 )
 
 echo [+] Running built-in regression self-tests...
-IR_Collect_review.exe -test
+9SEC_Evidence_Workbench_review.exe -test
 set "RC=%ERRORLEVEL%"
 
-if exist "%TEMP%\IR_Collect_TestResult.txt" (
-    echo [+] Result file: %TEMP%\IR_Collect_TestResult.txt
+if exist "%TEMP%\9SEC_Evidence_Workbench_TestResult.txt" (
+    echo [+] Result file: %TEMP%\9SEC_Evidence_Workbench_TestResult.txt
 )
 
 if not "%RC%"=="0" (

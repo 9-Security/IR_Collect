@@ -44,6 +44,106 @@ namespace IR_Collect
                 catch (Exception ex) { IR_Collect.Utils.Logger.Warning("Timeline process list parse: " + ex.Message); }
             }
 
+            string uacAuthPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacAuthEventsCsv);
+            if (!string.IsNullOrEmpty(uacAuthPath) && File.Exists(uacAuthPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacAuthEventNormalizer.ToFacts(uacAuthPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacAuth: " + (ex.Message ?? "")); }
+            }
+
+            string uacNetworkPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacNetworkConnectionsCsv);
+            if (!string.IsNullOrEmpty(uacNetworkPath) && File.Exists(uacNetworkPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacNetworkConnectionNormalizer.ToFacts(uacNetworkPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacNetworkConnection: " + (ex.Message ?? "")); }
+            }
+
+            string uacShellHistoryPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacShellHistoryCsv);
+            if (!string.IsNullOrEmpty(uacShellHistoryPath) && File.Exists(uacShellHistoryPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacShellHistoryNormalizer.ToFacts(uacShellHistoryPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacShellHistory: " + (ex.Message ?? "")); }
+            }
+
+            string uacPersistencePath = ResolveArtifactPathFlexible(c, ArtifactNames.UacPersistenceCsv);
+            if (!string.IsNullOrEmpty(uacPersistencePath) && File.Exists(uacPersistencePath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacPersistenceNormalizer.ToFacts(uacPersistencePath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacPersistence: " + (ex.Message ?? "")); }
+            }
+
+            string uacBootSessionsPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacBootSessionsCsv);
+            if (!string.IsNullOrEmpty(uacBootSessionsPath) && File.Exists(uacBootSessionsPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacBootSessionNormalizer.ToFacts(uacBootSessionsPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacBootSession: " + (ex.Message ?? "")); }
+            }
+
+            string uacLoginEventsPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacLoginEventsCsv);
+            if (!string.IsNullOrEmpty(uacLoginEventsPath) && File.Exists(uacLoginEventsPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacLoginEventNormalizer.ToFacts(uacLoginEventsPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacLoginEvent: " + (ex.Message ?? "")); }
+            }
+
+            string uacAuditEventsPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacAuditEventsCsv);
+            if (!string.IsNullOrEmpty(uacAuditEventsPath) && File.Exists(uacAuditEventsPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacAuditEventNormalizer.ToFacts(uacAuditEventsPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacAudit: " + (ex.Message ?? "")); }
+            }
+
+            string uacSystemLogEventsPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacSystemLogEventsCsv);
+            if (!string.IsNullOrEmpty(uacSystemLogEventsPath) && File.Exists(uacSystemLogEventsPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacSystemLogNormalizer.ToFacts(uacSystemLogEventsPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacSystemLog: " + (ex.Message ?? "")); }
+            }
+
+            string uacPackagesPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacPackagesCsv);
+            if (!string.IsNullOrEmpty(uacPackagesPath) && File.Exists(uacPackagesPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacPackageNormalizer.ToFacts(uacPackagesPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacPackage: " + (ex.Message ?? "")); }
+            }
+
+            string uacWebServerEventsPath = ResolveArtifactPathFlexible(c, ArtifactNames.UacWebServerEventsCsv);
+            if (!string.IsNullOrEmpty(uacWebServerEventsPath) && File.Exists(uacWebServerEventsPath))
+            {
+                try
+                {
+                    AddTimelineEventsFromFacts(events, UacWebServerEventNormalizer.ToFacts(uacWebServerEventsPath), 450);
+                }
+                catch (Exception ex) { Utils.Logger.Warning("BuildTimelineEvents.UacWebServer: " + (ex.Message ?? "")); }
+            }
+
             // 1b. Live-observed logon sessions
             string logonSessionsPath = ResolveArtifactPathFlexible(c, ArtifactNames.LogonSessionsCsv);
             if (!string.IsNullOrEmpty(logonSessionsPath) && File.Exists(logonSessionsPath))

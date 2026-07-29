@@ -15,7 +15,7 @@ namespace IR_Collect.Collectors
     {
         public static void WriteShimCacheEntriesCsv(ShimCacheParseResult parsed, string outFile)
         {
-            using (var sw = new StreamWriter(outFile, false, new UTF8Encoding(false)))
+            AtomicFile.WriteText(outFile, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("RegistryPath,ValueName,EntryIndex,Path,FileName,LastModifiedTime,DataHashPrefix,ParserNote");
                 foreach (ShimCacheEntryRecord row in parsed.Entries)
@@ -46,12 +46,12 @@ namespace IR_Collect.Collectors
                         CsvUtils.EscapeField(note)
                     }));
                 }
-            }
+            });
         }
 
         public static void WriteAmcacheCsvs(AmcacheParseResult parsed, string programsCsv, string filesCsv)
         {
-            using (var sw = new StreamWriter(programsCsv, false, new UTF8Encoding(false)))
+            AtomicFile.WriteText(programsCsv, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("RegistryKey,ProgramName,Publisher,Version,ProductName,InstallDate,UninstallString,ProgramId,ParserNote");
                 foreach (AmcacheProgramRecord row in parsed.Programs)
@@ -78,9 +78,9 @@ namespace IR_Collect.Collectors
                         CsvUtils.EscapeField(""), CsvUtils.EscapeField(""), CsvUtils.EscapeField(note)
                     }));
                 }
-            }
+            });
 
-            using (var sw = new StreamWriter(filesCsv, false, new UTF8Encoding(false)))
+            AtomicFile.WriteText(filesCsv, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("RegistryKey,Path,FileName,Hash,ProductName,Publisher,ProgramId,FirstObservedTime,ExecutedTime,ParserNote");
                 foreach (AmcacheFileRecord row in parsed.Files)
@@ -99,12 +99,12 @@ namespace IR_Collect.Collectors
                         CsvUtils.EscapeField(row.ParserNote)
                     }));
                 }
-            }
+            });
         }
 
         public static void WriteSrumCsvs(SrumExportResult export, string networkCsv, string appCsv)
         {
-            using (var sw = new StreamWriter(networkCsv, false, new UTF8Encoding(false)))
+            AtomicFile.WriteText(networkCsv, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("Timestamp,AppId,Path,User,RemoteIP,Interface,BytesSent,BytesReceived,ParserNote");
                 foreach (SrumNetworkRecord row in export.NetworkRows)
@@ -131,9 +131,9 @@ namespace IR_Collect.Collectors
                         CsvUtils.EscapeField(""), CsvUtils.EscapeField(""), CsvUtils.EscapeField(note)
                     }));
                 }
-            }
+            });
 
-            using (var sw = new StreamWriter(appCsv, false, new UTF8Encoding(false)))
+            AtomicFile.WriteText(appCsv, new UTF8Encoding(false), delegate(StreamWriter sw)
             {
                 sw.WriteLine("Timestamp,AppId,Path,User,ForegroundCycleTime,BackgroundCycleTime,ParserNote");
                 foreach (SrumAppRecord row in export.AppRows)
@@ -158,7 +158,7 @@ namespace IR_Collect.Collectors
                         CsvUtils.EscapeField(note)
                     }));
                 }
-            }
+            });
         }
     }
 }

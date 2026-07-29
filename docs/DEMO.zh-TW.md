@@ -1,8 +1,8 @@
-# 導覽示範 —— 用一個合成案卷做分析、關聯與獵捕
+# 導覽示範 —— 用一個合成案卷做分析、差異、關聯與獵捕
 
 *(English: [DEMO.md](DEMO.md))*
 
-這是一段約 5 分鐘的導覽，用一個小型、**完全合成**的雙主機案卷帶你走過 IR_Collect 的
+這是一段約 5 分鐘的導覽，用一個小型、**完全合成**的雙主機案卷帶你走過 9SEC Evidence Workbench 的
 **離線分析層**。案卷放在 [`docs/sample-case/`](sample-case/)，**不含任何真實證據**、
 不接觸實機、不需系統管理員權限、也不需先做採集 —— 直接把分析器指向一個「已採集好
 的成品資料夾」，讀輸出即可。
@@ -11,8 +11,8 @@
 
 ## 0. 先取得執行檔
 
-自行建置或下載 `IR_Collect.exe`（見主 [README](../README.md)）。下列指令皆為唯讀、
-免提權。在 PowerShell 中請把 `IR_Collect.exe` 換成 `.\IR_Collect.exe`。
+自行建置或下載 `9SEC_Evidence_Workbench.exe`（見主 [README](../README.md)）。下列指令皆為唯讀、
+免提權。在 PowerShell 中請把 `9SEC_Evidence_Workbench.exe` 換成 `.\9SEC_Evidence_Workbench.exe`。
 
 ## 1. 一段話說完這個案子
 
@@ -25,7 +25,7 @@
 ## 2. 分析單一主機
 
 ```
-IR_Collect.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
+9SEC_Evidence_Workbench.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
 ```
 
 它會唯讀地讀入資料夾、建立 fact store、跑 Guided Hunt 規則，並寫出一份 `summary_v3`
@@ -48,16 +48,31 @@ JSON（schema 見 [`schemas/summary_v3.schema.json`](schemas/summary_v3.schema.j
 也分析一下伺服器：
 
 ```
-IR_Collect.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
+9SEC_Evidence_Workbench.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
 ```
 
 → **2** 條：`GH-EXEC-SUSPATH-001`（同一支檔案從 `C:\ProgramData\` 執行，Amcache 與
 ShimCache 都看得到）與 `GH-LOGCLEAR-001`。
 
-## 3. 關聯兩台主機
+## 3. 比較觀察狀態
+
+以工作站作 baseline、伺服器作 target：
 
 ```
-IR_Collect.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_Evidence_Workbench.exe -diff docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01 diff.json
+```
+
+工具會寫出 `diff_v1` JSON，共 **12** 筆觀察差異：4 筆 Added、8 筆 Removed。
+例如 target 的 `C:\ProgramData\Updater\invoice_update.exe` 與 `Administrator` 觀察會是
+Added；工作站的 Run 機碼、`\\FILE-SRV01\C$` 與 Temp 落地檔則會是 target 視角的 Removed。
+
+這裡刻意示範 host-to-host 比較，不表示任一台是正常基線。Added/Removed 只代表某側沒有
+產生同一筆正規化 fact；主機角色或收集覆蓋率不同，都可能造成合理差異。
+
+## 4. 關聯兩台主機
+
+```
+9SEC_Evidence_Workbench.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 它會跨兩台主機比對共享實體（預設 Path／Hash／User／IP／AppId），寫出 `correlation_v1`
@@ -69,12 +84,12 @@ JSON。`shared_entities` 有 **2** 個命中：
 
 這個共享 hash，就是兩個原本各自獨立的 triage 資料夾合併成「同一起事件」的關鍵瞬間。
 
-## 4. 展開調查圖
+## 5. 展開調查圖
 
 以那個共享 hash 為種子，展開多跳圖：
 
 ```
-IR_Collect.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_Evidence_Workbench.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 → 一份 `graph_v1` JSON，橫跨 **2 台主機**共 **18 個節點／34 條邊**。從種子往外讀：
@@ -86,7 +101,7 @@ IR_Collect.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json
 - **depth 2** —— WKSTN-07 上完整的執行脈絡，包含
   `ParentPath C:\…\Office16\OUTLOOK.EXE` —— 這張圖從一個 hash 一路走回釣魚源頭。
 
-## 5. 接下來看哪裡
+## 6. 接下來看哪裡
 
 - 規則清單與各自的觸發條件：[`../src/Analysis/GuidedHunt.cs`](../src/Analysis/GuidedHunt.cs)
 - 輸出契約（可呈堂／互通）：[`schemas/`](schemas/)

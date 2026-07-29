@@ -19,6 +19,14 @@ namespace IR_Collect.Analysis.Correlation
         public string Host { get; set; }
         [DataMember(Name = "case_id")]
         public string CaseId { get; set; }
+        [DataMember(Name = "source_format")]
+        public string SourceFormat { get; set; }
+        [DataMember(Name = "source_evidence_sha256")]
+        public string SourceEvidenceSha256 { get; set; }
+        [DataMember(Name = "evidence_digest")]
+        public string EvidenceDigest { get; set; }
+        [DataMember(Name = "uac")]
+        public UacEvidenceMetadata Uac { get; set; }
         [DataMember(Name = "collection_mode_profile")]
         public string CollectionModeProfile { get; set; }
         [DataMember(Name = "fact_count")]
@@ -29,10 +37,26 @@ namespace IR_Collect.Analysis.Correlation
         public List<string> LoadWarnings { get; set; }
         [DataMember(Name = "collection_coverage_status")]
         public string CollectionCoverageStatus { get; set; }
+        [DataMember(Name = "operator_acknowledged_risks")]
+        public bool OperatorAcknowledgedRisks { get; set; }
+        [DataMember(Name = "restricted_steps")]
+        public List<string> RestrictedSteps { get; set; }
+        [DataMember(Name = "skipped_by_profile")]
+        public List<string> SkippedByProfile { get; set; }
+        [DataMember(Name = "output_target_class")]
+        public string OutputTargetClass { get; set; }
         [DataMember(Name = "fact_store_freshness_status")]
         public string FactStoreFreshnessStatus { get; set; }
         [DataMember(Name = "fact_store_freshness_detail")]
         public string FactStoreFreshnessDetail { get; set; }
+        [DataMember(Name = "fact_store_build_mode")]
+        public string FactStoreBuildMode { get; set; }
+        [DataMember(Name = "fact_store_build_generated_at")]
+        public string FactStoreBuildGeneratedAt { get; set; }
+        [DataMember(Name = "fact_store_build_detail")]
+        public string FactStoreBuildDetail { get; set; }
+        [DataMember(Name = "fact_store_build_inputs")]
+        public List<FactStoreInputFingerprint> FactStoreBuildInputs { get; set; }
         [DataMember(Name = "analyst_workflow")]
         public AnalystWorkflowState AnalystWorkflow { get; set; }
         [DataMember(Name = "guided_hunt")]
@@ -92,16 +116,18 @@ namespace IR_Collect.Analysis.Correlation
         public static bool SaveToSqlite(FactStore store, string dbPath)
         {
             if (store == null || store.Facts == null || string.IsNullOrEmpty(dbPath)) return false;
+            string temp = null;
             try
             {
                 string dir = Path.GetDirectoryName(dbPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                object conn = CreateSqliteConnection(dbPath);
+                temp = AtomicFile.CreateTempPath(dbPath);
+                object conn = CreateSqliteConnection(temp);
                 if (conn == null) return false;
                 try
                 {
-                    CreateTable(conn, dbPath);
-                    object trans = BeginTransaction(conn, dbPath);
+                    CreateTable(conn, temp);
+                    object trans = BeginTransaction(conn, temp);
                     if (trans == null) return false;
                     try
                     {
@@ -112,22 +138,31 @@ namespace IR_Collect.Analysis.Correlation
                             string entityKey = GetPrimaryEntityKey(f);
                             string timeStr = f.Time.ToString("o");
                             string json = SerializeFactToJson(f, serializer);
-                            InsertRow(conn, dbPath, f.Id ?? "", timeStr, f.Source ?? "", entityKey ?? "", json);
+                            InsertRow(conn, temp, f.Id ?? "", timeStr, f.Source ?? "", entityKey ?? "", json);
                         }
-                        CommitTransaction(trans, dbPath);
+                        CommitTransaction(trans, temp);
                     }
                     finally { var tr = trans as IDisposable; if (tr != null) tr.Dispose(); }
                 }
                 finally
                 {
-                    CloseConnection(conn, dbPath);
+                    CloseConnection(conn, temp);
                 }
+                AtomicFile.Commit(temp, dbPath);
+                temp = null;
                 return true;
             }
             catch (Exception ex)
             {
                 Logger.Warning("FactStorePersistence.SaveToSqlite: " + ex.Message);
                 return false;
+            }
+            finally
+            {
+                AtomicFile.TryDelete(temp);
+                AtomicFile.TryDelete(string.IsNullOrEmpty(temp) ? null : temp + "-journal");
+                AtomicFile.TryDelete(string.IsNullOrEmpty(temp) ? null : temp + "-wal");
+                AtomicFile.TryDelete(string.IsNullOrEmpty(temp) ? null : temp + "-shm");
             }
         }
 
@@ -381,12 +416,25 @@ namespace IR_Collect.Analysis.Correlation
                 {
                     Host = store.Hostname ?? "",
                     CaseId = store.CaseId ?? "",
+                    SourceFormat = "",
+                    SourceEvidenceSha256 = "",
+                    EvidenceDigest = "",
+                    Uac = null,
+                    CollectionModeProfile = "",
                     FactCount = store.Facts != null ? store.Facts.Count : 0,
                     FactSourceCounts = BuildFactSourceCounts(store.Facts),
                     LoadWarnings = new List<string>(),
                     CollectionCoverageStatus = "",
+                    OperatorAcknowledgedRisks = false,
+                    RestrictedSteps = new List<string>(),
+                    SkippedByProfile = new List<string>(),
+                    OutputTargetClass = "",
                     FactStoreFreshnessStatus = "",
                     FactStoreFreshnessDetail = "",
+                    FactStoreBuildMode = "",
+                    FactStoreBuildGeneratedAt = "",
+                    FactStoreBuildDetail = "",
+                    FactStoreBuildInputs = new List<FactStoreInputFingerprint>(),
                     AnalystWorkflow = new AnalystWorkflowState(),
                     GuidedHunt = null
                 });
@@ -407,15 +455,33 @@ namespace IR_Collect.Analysis.Correlation
                 {
                     Host = c.Hostname ?? "",
                     CaseId = c.CaseID ?? "",
+                    SourceFormat = c.SourceFormat ?? "",
+                    SourceEvidenceSha256 = c.SourceEvidenceSha256 ?? "",
+                    EvidenceDigest = c.EvidenceDigest ?? "",
+                    Uac = c.UacEvidence,
                     FactCount = c.FactStore != null ? c.FactStore.Count : 0,
                     FactSourceCounts = BuildFactSourceCounts(c.FactStore != null ? c.FactStore.Facts : null),
                     LoadWarnings = c.LoadWarnings != null ? new List<string>(c.LoadWarnings) : new List<string>(),
                     CollectionCoverageStatus = c.CollectionCoverage != null ? (c.CollectionCoverage.OverallStatus ?? "") : "",
+                    OperatorAcknowledgedRisks = c.CollectionCoverage != null && c.CollectionCoverage.OperatorAcknowledgedRisks,
+                    RestrictedSteps = c.CollectionCoverage != null && c.CollectionCoverage.RestrictedSteps != null
+                        ? new List<string>(c.CollectionCoverage.RestrictedSteps)
+                        : new List<string>(),
+                    SkippedByProfile = c.CollectionCoverage != null && c.CollectionCoverage.SkippedByProfile != null
+                        ? new List<string>(c.CollectionCoverage.SkippedByProfile)
+                        : new List<string>(),
+                    OutputTargetClass = c.CollectionCoverage != null ? (c.CollectionCoverage.OutputTargetClass ?? "") : "",
                     CollectionModeProfile = c.CollectionCoverage != null && !string.IsNullOrWhiteSpace(c.CollectionCoverage.CollectionModeProfile)
                         ? CollectionModeProfileHelper.Normalize(c.CollectionCoverage.CollectionModeProfile)
                         : "",
                     FactStoreFreshnessStatus = c.FactStoreFreshnessStatus ?? "",
                     FactStoreFreshnessDetail = c.FactStoreFreshnessDetail ?? "",
+                    FactStoreBuildMode = c.FactStoreBuildMode ?? "",
+                    FactStoreBuildGeneratedAt = c.FactStoreBuildGeneratedAt ?? "",
+                    FactStoreBuildDetail = c.FactStoreBuildDetail ?? "",
+                    FactStoreBuildInputs = c.FactStoreBuildInputs != null
+                        ? new List<FactStoreInputFingerprint>(c.FactStoreBuildInputs)
+                        : new List<FactStoreInputFingerprint>(),
                     AnalystWorkflow = c.AnalystWorkflow ?? new AnalystWorkflowState(),
                     GuidedHunt = GuidedHuntPack.Evaluate(c),
                     MemoryAcquisition = c.MemoryAcquisitionMeta,

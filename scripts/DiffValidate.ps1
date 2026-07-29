@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Phase 2.2 - differential validation of IR_Collect's parsers against the Eric Zimmerman tools.
+    Phase 2.2 - differential validation of 9SEC Evidence Workbench parsers against the Eric Zimmerman tools.
 
 .DESCRIPTION
-    Runs IR_Collect's REAL production parser (via IR_Collect_review.exe -parse) and the matching
+    Runs 9SEC Evidence Workbench's real production parser (via 9SEC_Evidence_Workbench_review.exe -parse) and the matching
     Eric Zimmerman reference tool (LECmd / JLECmd) on the same input artifacts, then diffs the
     extracted paths. Disagreements where the reference tool found a LinkInfo LocalBasePath that we
     did NOT reproduce are treated as failures (the gate); cases the reference resolves only from a
@@ -21,7 +21,7 @@
     Directory containing the EZ tool exes. Default: tools\EZ\net9
 
 .PARAMETER ReviewExe
-    Path to IR_Collect_review.exe (built with INCLUDE_TESTS). Default: .\IR_Collect_review.exe
+    Path to 9SEC_Evidence_Workbench_review.exe (built with INCLUDE_TESTS). Default: .\9SEC_Evidence_Workbench_review.exe
 
 .PARAMETER Kind
     Which parser(s) to validate: lnk, jumplist, or all. Default: all
@@ -41,7 +41,7 @@
 [CmdletBinding()]
 param(
     [string]$ToolsDir = "tools\EZ\net9",
-    [string]$ReviewExe = ".\IR_Collect_review.exe",
+    [string]$ReviewExe = ".\9SEC_Evidence_Workbench_review.exe",
     [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "shimcache", "prefetch", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
@@ -116,7 +116,7 @@ function Get-LnkInputs {
 }
 
 function Validate-Lnk {
-    Write-Section "LNK  (IR_Collect LocalBasePath reader  vs  LECmd)"
+    Write-Section "LNK  (9SEC Evidence Workbench LocalBasePath reader  vs  LECmd)"
     $exe = Resolve-Tool "LECmd"
     if (-not $exe) {
         Write-Host ("SKIP: LECmd.exe not found under " + $ToolsDir + " - LNK validation skipped.") -ForegroundColor Yellow
@@ -189,7 +189,7 @@ function Validate-Lnk {
 }
 
 function Validate-JumpList {
-    Write-Section "JUMPLIST  (IR_Collect path scan  vs  JLECmd)  [informational]"
+    Write-Section "JUMPLIST  (9SEC Evidence Workbench path scan  vs  JLECmd)  [informational]"
     $exe = Resolve-Tool "JLECmd"
     if (-not $exe) {
         Write-Host ("SKIP: JLECmd.exe not found under " + $ToolsDir + " - jump list validation skipped.") -ForegroundColor Yellow
@@ -262,7 +262,7 @@ function Normalize-MftTime($s) {
 }
 
 function Validate-Mft {
-    Write-Section "MFT  (IR_Collect MftParser  vs  MFTECmd)"
+    Write-Section "MFT  (9SEC Evidence Workbench MftParser  vs  MFTECmd)"
     $exe = Resolve-Tool "MFTECmd"
     if (-not $exe) {
         Write-Host ("SKIP: MFTECmd.exe not found under " + $ToolsDir + " - MFT validation skipped.") -ForegroundColor Yellow
@@ -299,7 +299,7 @@ function Validate-Mft {
     $obj = $json | ConvertFrom-Json
     if ($obj.ok -ne $true) { Write-Host ("FAIL: -parse mft error: " + $obj.error) -ForegroundColor Red; $script:failures++; return }
     $ours = @($obj.entries)
-    Write-Host ("IR_Collect records emitted (limit " + $obj.limit + "): " + $ours.Count)
+    Write-Host ("9SEC Evidence Workbench records emitted (limit " + $obj.limit + "): " + $ours.Count)
 
     # Set of EntryNumbers we emitted, so we only keep the matching MFTECmd rows. A full $MFT can hold
     # millions of records; loading them all into a hashtable is what OOM'd the first run. By filtering
@@ -396,7 +396,7 @@ function Get-OurObj($kindArg, $file) {
 }
 
 function Validate-Srum {
-    Write-Section "SRUM  (IR_Collect SrumExporter  vs  SrumECmd)  [informational]"
+    Write-Section "SRUM  (9SEC Evidence Workbench SrumExporter  vs  SrumECmd)  [informational]"
     $exe = Resolve-Tool "SrumECmd"
     if (-not $exe) { Write-Host ("SKIP: SrumECmd.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
     $db = if ($InputDir) { Join-Path $InputDir "SRUDB.dat" } else { "samples\hives\SRUDB.dat" }
@@ -405,7 +405,7 @@ function Validate-Srum {
     $our = Get-OurObj "srum" $db
     if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse srum produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
     if ($our.fallback -eq $true) {
-        Write-Host ("SKIP: IR_Collect SRUM parser fell back (no rows). Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host ("SKIP: 9SEC Evidence Workbench SRUM parser fell back (no rows). Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
         Write-Host "      ROOT CAUSE: SRUDB.dat is an ESE (esent/JET Blue) database; OLE DB ACE/Jet" -ForegroundColor DarkGray
         Write-Host "      providers only read Access (JET Red) and cannot open ESE. Installing ACE does" -ForegroundColor DarkGray
         Write-Host "      not help. Fix = read SRUDB.dat via a native ESE reader (esent.dll). Phase 2.3." -ForegroundColor DarkGray
@@ -434,7 +434,7 @@ function Validate-Srum {
 }
 
 function Validate-Amcache {
-    Write-Section "AMCACHE  (IR_Collect AmcacheParser  vs  AmcacheParser.exe)  [informational]"
+    Write-Section "AMCACHE  (9SEC Evidence Workbench AmcacheParser  vs  AmcacheParser.exe)  [informational]"
     $exe = Resolve-Tool "AmcacheParser"
     if (-not $exe) { Write-Host ("SKIP: AmcacheParser.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
     $hive = if ($InputDir) { Join-Path $InputDir "Amcache.hve" } else { "samples\hives\Amcache.hve" }
@@ -443,7 +443,7 @@ function Validate-Amcache {
     $our = Get-OurObj "amcache" $hive
     if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse amcache produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
     if ($our.fallback -eq $true) {
-        Write-Host ("SKIP: IR_Collect Amcache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host ("SKIP: 9SEC Evidence Workbench Amcache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
         Write-Host "      (Our ParseHive uses 'reg load' which needs admin - run this diff elevated.)" -ForegroundColor DarkGray
         $script:skipped = $true; return
     }
@@ -471,7 +471,7 @@ function Validate-Amcache {
 }
 
 function Validate-ShimCache {
-    Write-Section "SHIMCACHE  (IR_Collect ShimCacheParser  vs  AppCompatCacheParser)  [informational]"
+    Write-Section "SHIMCACHE  (9SEC Evidence Workbench ShimCacheParser  vs  AppCompatCacheParser)  [informational]"
     $exe = Resolve-Tool "AppCompatCacheParser"
     if (-not $exe) { Write-Host ("SKIP: AppCompatCacheParser.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
     $hive = if ($InputDir) { Join-Path $InputDir "SYSTEM" } else { "samples\hives\SYSTEM" }
@@ -480,7 +480,7 @@ function Validate-ShimCache {
     $our = Get-OurObj "shimcache" $hive
     if ($null -eq $our -or $our.ok -ne $true) { Write-Host "SKIP: our -parse shimcache produced no result." -ForegroundColor Yellow; $script:skipped = $true; return }
     if ($our.fallback -eq $true) {
-        Write-Host ("SKIP: IR_Collect ShimCache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
+        Write-Host ("SKIP: 9SEC Evidence Workbench ShimCache parser fell back. Note: " + ($our.notes -join '; ')) -ForegroundColor Yellow
         Write-Host "      (Our hive mode uses 'reg load' which needs admin - run this diff elevated.)" -ForegroundColor DarkGray
         $script:skipped = $true; return
     }
@@ -511,7 +511,7 @@ function Validate-ShimCache {
 }
 
 function Validate-Prefetch {
-    Write-Section "PREFETCH  (IR_Collect PrefetchParser  vs  PECmd)  [gate: exe + runCount + lastRun + refCount]"
+    Write-Section "PREFETCH  (9SEC Evidence Workbench PrefetchParser  vs  PECmd)  [gate: exe + runCount + lastRun + refCount]"
     $exe = Resolve-Tool "PECmd"
     if (-not $exe) { Write-Host ("SKIP: PECmd.exe not found under " + $ToolsDir + ".") -ForegroundColor Yellow; $script:skipped = $true; return }
     $pfDir = if ($InputDir) { Join-Path $InputDir "Prefetch" } else { "samples\Prefetch" }
@@ -548,7 +548,7 @@ function Validate-Prefetch {
 }
 
 # --- main ---
-Write-Host "IR_Collect - Phase 2.2 differential validation" -ForegroundColor White
+Write-Host "9SEC Evidence Workbench - Phase 2.2 differential validation" -ForegroundColor White
 if (-not (Test-Path $ReviewExe)) {
     Write-Host ("ERROR: review exe not found at " + $ReviewExe + " - build it with build_review.bat first.") -ForegroundColor Red
     exit 1
@@ -576,5 +576,5 @@ if ($script:skipped) {
     Write-Host "PASS (with skips): no disagreements; some checks were skipped (see SKIP lines above)." -ForegroundColor Yellow
     exit 0
 }
-Write-Host "PASS: IR_Collect parser output agrees with the Eric Zimmerman reference tools." -ForegroundColor Green
+Write-Host "PASS: 9SEC Evidence Workbench parser output agrees with the Eric Zimmerman reference tools." -ForegroundColor Green
 exit 0

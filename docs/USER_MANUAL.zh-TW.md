@@ -1,4 +1,4 @@
-# IR_Collect 使用手冊
+# 9SEC Evidence Workbench 使用手冊
 
 [English](USER_MANUAL.md) | **繁體中文**
 
@@ -6,17 +6,18 @@
 
 ## 1. 工具定位
 
-`IR_Collect` 是一個 Windows Incident Response 工具，支援：
+`9SEC Evidence Workbench` 是一個在 Windows 執行的事件回應與證據分析工具，支援：
 
-- 本機證據收集
-- 既有案卷匯入
+- Windows 本機證據收集
+- Windows 案卷與 UAC Linux/macOS folder/archive 匯入
 - GUI / CLI 雙模式操作
 - 多主機案件管理
 - Fact Store、Entity search、Timeline、Investigation Graph 關聯分析
 - Summary JSON、完整 LOG JSON、HTML 報告匯出
 - 選用的外部記憶體採集與外部記憶體分析 handoff
 
-本工具是 **Live Response** 工具，不是完整的離線鑑識映像平台。
+Local Collect 屬於 **Live Response**；folder/archive 分析會維持 evidence root 唯讀，但本工具
+仍不是完整的離線磁碟映像鑑識平台。
 
 ## 2. 使用前準備
 
@@ -54,13 +55,13 @@
 - 不要把 AI / Upload endpoint 指向未受控的外部服務
 - 於 **Advanced → Settings** 設定 **AI** 與 **Upload** 各自允許的 `http(s)://主機:埠/路徑前綴`；**allowlist 為空時，該管道預設不允許 POST**，直到至少加入一筆與設定之 endpoint 相符的前綴
 - **AI Analyze** 會依 **redaction profile** 處理「即將送出」的 JSON；**匯出 Summary JSON** 與 **ZIP 上傳**不會被 profile 改寫內容（上傳僅做允許／拒絕目的地）
-- **Collection mode profile**：`collection_coverage.json` 與 analyst 匯出（`summary.json`、`full_log_v3` 的 host 摘要、以及 Summary／HTML／parser notes 於有案卷紀錄時）會帶入本次模式。**TriageFast** 以標記與收集前提示為主。**ForensicStrict** 會加強收集前警示（含預定輸出資料夾路徑）、在該 profile 作用下**禁止** **AI Analyze**，且在 **Local Collect** 完成後**禁止**自動 **ZIP 上傳**（即使已設定 Upload endpoint 與 allowlist）。此模式**不**主張 zero-footprint、鑑識映像或單靠本工具即構成完整低擾動鑑識方案。
+- **Collection mode profile**：`collection_coverage.json` 與 analyst 匯出（`summary.json`、`full_log_v3` 的 host 摘要、以及 Summary／HTML／parser notes 於有案卷紀錄時）會帶入本次模式。**TriageFast** 以標記與收集前提示為主。**ForensicStrict** 會分類預定輸出位置、強烈警示系統碟輸出、要求明確風險確認，且預設再做第二次確認；同時預設略過已啟用的外部記憶體採集／分析 handoff，並禁止手動 **Deep Scan**、**AI Analyze** 與 Local Collect 後自動 **ZIP 上傳**。限制與 profile 略過項目會保留於 coverage 和匯出。此模式**不**主張 zero-footprint、鑑識映像或單靠本工具即構成完整低擾動鑑識方案。
 
 ## 3. 五分鐘快速上手
 
 ### 3.1 GUI 快速流程
 
-1. 執行 `IR_Collect.exe`
+1. 執行 `9SEC_Evidence_Workbench.exe`
 2. 建議接受 UAC 並以系統管理員身分執行
 3. 在 Dashboard 按 `Local Collect`
 4. 輸入 `Evidence ID`
@@ -73,15 +74,16 @@
 ### 3.2 CLI 快速流程
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
-IR_Collect.exe --help
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
+9SEC_Evidence_Workbench.exe --help
 ```
 
 說明：
 
 - `-c` 不帶參數時會自動產生 `Evidence ID`
 - `-c <ID>` 會使用指定的證物編號
+- `ForensicStrict` 下需先輸入 `YES`，預設再輸入 `FORENSIC-STRICT`；任一確認取消會以 exit code `3` 結束，且 Collector 尚未建立輸出目錄
 - 收集完成後會產生 ZIP 與對應的 `.sha256`
 
 ## 4. GUI 操作說明
@@ -130,6 +132,10 @@ IR_Collect.exe --help
 - 在 Hosts List 中新增主機
 
 若已關閉 `Auto Build Fact Store when case is loaded`，則匯入後不會自動建立 Fact Store。
+
+UAC 證據中的 executable 與 running-process checksum lists 會顯示為
+`uac_file_hashes.csv` 及 `UacFileHash` facts。這些是 untimed 的路徑／digest observation，
+可供 IOC 與跨主機 pivot，但不證明檔案已執行或具有惡意性。
 
 ### 4.4 Dashboard 常用功能
 
@@ -216,7 +222,23 @@ ShellBags 列於時間軸時，若 CSV 帶有時間戳，屬 **ObservedTime** �
 - ParseLevel / FallbackUsed / ParserNote
 - SourceFile / RawRef
 
-### 4.8 Event Logs
+### 4.8 Diff
+
+先載入至少兩個案卷，並等兩側 Fact Store 都 ready。在 target host 的 **Diff** 分頁：
+
+1. 選另一個案卷作為 **Baseline**
+2. 選 `All`、`Process`、`Persistence`、`File`、`Identity`、`Network` 或 `Fact`
+3. 依 `Added`、`Modified`、`Removed` 與可選 source 文字篩選
+4. 雙擊結果或按 `Open Facts`；需要確認時間關係時按 `Open Timeline`
+5. 用 `Export JSON` 匯出 `diff_v1`
+
+`Added`、`Modified` 會導向 target；`Removed` 會導向 baseline。若雙側都有對應觀察，
+change 會保留兩側 fact reference 與 provenance。
+
+這些結果是觀察狀態差異。某側缺少 fact 可能來自收集覆蓋率、parser 支援、收集時間或
+保留週期不同，不能直接當成 artifact 不存在的證明。
+
+### 4.9 Event Logs
 
 Event Logs 分頁可檢視：
 
@@ -231,7 +253,7 @@ Event Logs 分頁可檢視：
 
 若案卷只有 `.evtx` 而沒有 `*_filtered.csv`，工具會在匯入時嘗試離線重建分析用 CSV。
 
-### 4.9 Investigation Graph
+### 4.10 Investigation Graph
 
 適合用來追：
 
@@ -257,12 +279,13 @@ Event Logs 分頁可檢視：
 3. 用 `Expand From Selected Edge` 逐步展開
 4. 適時用 `Open Timeline` 回到時間軸驗證
 
-### 4.10 Rebuild Selected Host Event Logs / Fact Store
+### 4.11 Rebuild Selected Host Event Logs / Fact Store
 
-用途：
+功能項目：
 
-- 重建某一台主機的 `*_filtered.csv`
-- 重建某一台主機的 Fact Store
+- `Rebuild Selected Host Event Logs`：重建該主機的 `*_filtered.csv`
+- `Rebuild Selected Host Fact Store (full)`：重跑所有 normalizer
+- `Rebuild Selected Host Fact Store (changed artifacts only)`：使用持久化 cache；exact match 直接重用，只有 filtered Event Log 變更時局部重建
 
 適用情境：
 
@@ -271,7 +294,11 @@ Event Logs 分頁可檢視：
 - Summary 提示 `fact_store.db` 已 stale
 - 想重新整理單一主機分析資料，而不是清掉所有案卷
 
-### 4.11 Clear all hosts
+Changed-artifacts-only 必須先在 Settings 啟用 **Persist Fact Store cache in Local AppData**。
+若變更的是非 Event Log input、cache metadata 不相容或 cache 無法讀取，系統會自動回退
+Full rebuild 並顯示原因。這是為了維持正確性，不是 partial-success。
+
+### 4.12 Clear all hosts
 
 `File -> Clear all hosts` 會：
 
@@ -286,9 +313,13 @@ Event Logs 分頁可檢視：
 ### 5.1 基本命令
 
 ```cmd
-IR_Collect.exe -c
-IR_Collect.exe -c Case001
-IR_Collect.exe --help
+9SEC_Evidence_Workbench.exe -c
+9SEC_Evidence_Workbench.exe -c Case001
+9SEC_Evidence_Workbench.exe -analyze <資料夾或封裝> [out.json]
+9SEC_Evidence_Workbench.exe -diff <基線> <目標> [out.json]
+9SEC_Evidence_Workbench.exe -correlate <out.json> <路徑A> <路徑B> [...]
+9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>
+9SEC_Evidence_Workbench.exe --help
 ```
 
 ### 5.2 CLI 典型用途
@@ -296,6 +327,16 @@ IR_Collect.exe --help
 - 遠端桌面到主機後快速落地收集
 - 用既有工具鏈批次呼叫
 - 現場只想要案卷，不需要馬上進 GUI 分析
+- 不開 GUI，直接對 folder/archive 做唯讀分析與 baseline 比較
+
+`-diff` 的 baseline 與 target 都可使用 folder、ZIP、TAR、TAR.GZ 或 TGZ。省略輸出路徑時，
+工具會在目前目錄把完整報告原子發布為 `ir_diff.json`。
+
+分析 CLI 會顯示 Fact Store build mode（`Full`、`Incremental` 或 `Reused`）及重用／回退原因。
+只有目前使用者啟用持久化 cache 時才可能重用；預設仍是完整的記憶體內建置。
+
+`-c` 在 `ForensicStrict` 下會先列出輸出分類與受限步驟。需輸入 `YES`，若啟用第二次
+確認則再輸入 `FORENSIC-STRICT`；取消會以 exit code `3` 在收集輸出建立前結束。
 
 ### 5.3 CLI 產出
 
@@ -316,7 +357,7 @@ IR_Collect.exe --help
 
 - `*.zip`：證據包
 - `*.zip.sha256`：ZIP SHA256
-- `collection_coverage.json`：各步驟收集狀態
+- `collection_coverage.json`：各步驟收集狀態，以及 profile、風險確認、受限步驟、profile 略過與輸出分類
 - `logs/ir_collect.log`：執行紀錄
 
 ### 6.2 常見 artifact 類型
@@ -389,10 +430,14 @@ IR_Collect.exe --help
 建議判讀原則：
 
 - 先看 `overall_status`
+- 再看 `collection_mode_profile`、`output_target_class`、`operator_acknowledged_risks`
+- 檢查 `restricted_steps` 與 `skipped_by_profile`
 - 再看哪一個 step 不是 `complete`
 - 最後對照 `artifacts_missing`、`detail` 與 `logs/ir_collect.log`
 
 對調查最重要的是，不要把 `missing` 解讀成「該活動不存在」。
+若 enabled step 因 profile 略過，overall 會刻意標為 `partial`；這不是 collector failure，
+但仍是必須納入判讀的證據覆蓋限制。
 
 ## 8. 建議調查流程
 
@@ -463,7 +508,44 @@ IR_Collect.exe --help
 - 若未提供 `System.Data.SQLite.dll`，SQLite 寫入可能會被略過
 - GUI 仍可運作，但會少一層持久化
 
-### 9.3 Memory acquisition
+### 9.3 Persist Fact Store cache in Local AppData
+
+預設**關閉**。啟用後，normalized facts 與 input fingerprint manifest 會寫入：
+
+```text
+%LOCALAPPDATA%\9SEC Evidence Workbench\FactStoreCache\
+```
+
+建置模式：
+
+- `Reused`：所有 input SHA-256 fingerprints 完全相符
+- `Incremental`：只有 filtered Event Log CSV inputs 改變
+- `Full`：無 cache、強制重建、其他 input 改變、metadata 不相容或 cache 無法讀取
+
+Cache 採原子發布，並以 best effort 將 ACL 限制為目前使用者。內容可能包含帳號、路徑、
+命令列、網路端點及其他 normalized evidence。案件結束或交接前，可使用
+**Clear persistent Fact Store cache** 清除；此操作不會刪除來源證據、analysis workspace
+或 `fact_store.db`。
+
+目前限制：source-level partial rebuild 只支援 filtered Event Log CSV。其他來源一旦改變，
+會刻意回退完整重建。
+
+### 9.4 ForensicStrict 保護措施
+
+下列五項都可在 **Advanced → Settings** 看見並由 `ConfigManager` 保存：
+
+- 輸出不是 removable media 時要求確認
+- 輸出位於 Windows 系統碟時警示
+- 略過外部 memory acquisition 與 analysis handoff
+- 阻擋手動 Deep Scan
+- 要求第二次 `ForensicStrict` 確認
+
+輸出分類為 `system_disk`、`removable`、`network`、`unknown`。一般非系統本機固定磁碟
+仍分類為 `unknown`，工具不會假設它是可信任的外接媒體。Collector 會依實際輸出路徑
+重新計算 policy，Strict 未確認時會在建立輸出目錄前拒絕執行。這些措施用來降低可避免
+的現場活動，但不會讓 live response 成為 zero-footprint。
+
+### 9.5 Memory acquisition
 
 用途：
 
@@ -475,6 +557,7 @@ IR_Collect.exe --help
 - **Arguments preset**：`custom` 時下方欄位為**完整**引數模板；**非** `custom` 時下方欄位為接在 preset 核心之後的**額外**參數（仍可做 `{OutputPath}` / `{OutputDir}` 展開）
 - `collection_coverage.json` 的 **Coverage** 會以磁碟為準與 `memory_acquisition.json` 交叉檢查；不一致時 Detail 會含 `[Coverage]`
 - 寫入 sidecar 前若預期 dump 仍不存在，可能另註記 `[Reconciled]`（與 `[Coverage]` 的說明並列於 Summary / HTML / `summary.json` / `full_log_v3` 的共用提示）
+- 預設 `ForensicStrict` policy 會在不啟動外部工具的情況下寫出 `skipped` sidecar，並列入 `skipped_by_profile`
 
 限制：
 
@@ -482,7 +565,7 @@ IR_Collect.exe --help
 - 不解析 dump
 - 可能需要大量磁碟空間
 
-### 9.4 Memory analysis handoff
+### 9.6 Memory analysis handoff
 
 用途：
 
@@ -493,6 +576,7 @@ IR_Collect.exe --help
 
 - **Arguments preset** 可選預設雙引號（輸入檔 + 分析輸出目錄）或 **Custom** 模板
 - **Coverage** 會核對 sidecar 列舉的輸出檔與磁碟；若列了檔案但磁碟為空，寫入前可能降級並加上 `[Reconciled]`
+- 預設 `ForensicStrict` policy 同樣會寫出 `skipped` sidecar，而不啟動外部分析器
 
 限制：
 

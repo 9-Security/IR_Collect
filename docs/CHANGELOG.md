@@ -1,10 +1,29 @@
-# Changelog — IR_Collect
+# Changelog — 9SEC Evidence Workbench
 
 所有版本變更依日期倒序排列。格式參考 [Keep a Changelog](https://keepachangelog.com/)。
+歷史項目中的 `IR_Collect` 是舊產品／執行檔名稱或現存程式 namespace，內容不回溯改寫。
 
 ---
 
 ## [Unreleased]
+
+## [0.25.0] — 2026-07-29
+
+> 本版主題：**跨平台 UAC 證據收容、Case Diff、Fact Store 快取與 Forensic Strict 工作流程強化**。
+
+### Added
+- **UAC evidence intake**：GUI 與 `-analyze` / `-diff` / `-correlate` / `-graph` 可直接收容 folder、ZIP、TAR、TAR.GZ/TGZ。證據根目錄維持唯讀，archive/source digest、entry mapping、逐檔 SHA-256 evidence index 與 analysis workspace manifest 可稽核；支援的 Linux/macOS process、bodyfile、auth、auditd、system log、web log、package、network、account、shell history、persistence、journal/boot 與 login 來源會形成 bounded canonical CSV 及 facts，其他檔案維持 `indexed-raw`。
+- **UAC executable hash facts**：新增 `uac_file_hashes.csv` 與 `UacFileHash` normalizer，收容 UAC `hash_executables` / `hash_running_processes` 的 MD5、SHA-1、SHA-256 checksum-path 與 named-digest 格式；保留 path、source kind、原始檔／行號及 parser envelope，並以 untimed 低信心 facts 支援 IOC、Diff、Correlation 與 Graph pivot，不形成執行或惡意 verdict。
+- **Case Diff / Baseline Diff**：新增 GUI Diff 分頁與 CLI `-diff <baseline> <target> [out.json]`，輸出 `diff_v1` Added / Modified / Removed、雙側 provenance、coverage/freshness caveat 與有界截斷資訊。
+- **Persistent Fact Store build cache**：Advanced Settings 可選啟用目前使用者 Local Application Data cache（預設關閉）；支援 exact `Reused`、filtered EventLog-only `Incremental`，其他變更或 cache 異常 fail-safe 回退 `Full`。
+- **Low Impact / ForensicStrict 完整化**：新增輸出分類、系統碟警示、風險確認與預設二次確認；預設略過 enabled memory acquisition/analysis handoff、阻擋 Deep Scan／ZIP upload／AI Analyze，並將限制與 profile skips 寫入 coverage、Summary、HTML、`summary_v3`、`full_log_v3`。
+
+### Changed
+- **Read-only analysis workspace / atomic outputs**：folder/archive evidence root 不再承載 canonical、cache 或預設 CLI 報告；衍生資料寫入獨立 workspace 並以同目錄 temporary file 原子發布。
+- **文件來源對齊**：現行文件統一使用 `9SEC Evidence Workbench`，明確區分 Windows live collection 與 UAC Linux/macOS evidence analysis；v0.22 舊規格標示為歷史文件，v0.25 WP-A/B/C 顯示實作狀態。
+
+### Fixed
+- **本機簽章憑證選擇**：跨 PowerShell 版本判讀 code-signing EKU，且只重用 RSA 私鑰實際可開啟的憑證，避免 `HasPrivateKey=true` 但 provider 已失效時產生 `NotSigned`。
 
 ## [0.24.2] — 2026-07-20
 

@@ -14,6 +14,11 @@ namespace IR_Collect.Collectors
     {
         public static void Collect(string outputDir)
         {
+            Collect(outputDir, false);
+        }
+
+        internal static void Collect(string outputDir, bool skippedByRunPolicy)
+        {
             if (string.IsNullOrEmpty(outputDir) || !Directory.Exists(outputDir))
                 return;
 
@@ -40,6 +45,15 @@ namespace IR_Collect.Collectors
                 rec.CollectorUser = "";
                 rec.CollectorWasAdmin = false;
                 Logger.Warning("MemoryAcquisition privilege probe: " + ex.Message);
+            }
+
+            if (skippedByRunPolicy || CollectionImpactPolicy.ShouldSkipMemoryAcquisition(cfg))
+            {
+                rec.Status = "skipped";
+                rec.Detail = "Skipped by ForensicStrict profile: external memory acquisition is restricted by ForensicStrictSkipMemoryHandoff.";
+                MemoryHandoffHelper.ApplyAcquisitionDiagnostics(rec);
+                FinishRecord(rec, jsonPath);
+                return;
             }
 
             if (cfg.Get("MemoryAcquireEnabled") != "1")

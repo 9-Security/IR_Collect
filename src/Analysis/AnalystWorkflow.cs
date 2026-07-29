@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using IR_Collect.Utils;
 
 namespace IR_Collect.Analysis
 {
@@ -49,6 +50,27 @@ namespace IR_Collect.Analysis
             return null;
         }
 
+        public static string ResolveReadOnlyCasePath(string sourceEvidenceSha256, string evidenceDigest, string caseId)
+        {
+            string identity = !string.IsNullOrWhiteSpace(sourceEvidenceSha256)
+                ? sourceEvidenceSha256
+                : (!string.IsNullOrWhiteSpace(evidenceDigest) ? evidenceDigest : caseId);
+            if (string.IsNullOrWhiteSpace(identity))
+                return null;
+
+            var safe = new StringBuilder();
+            for (int i = 0; i < identity.Length && safe.Length < 128; i++)
+            {
+                char c = identity[i];
+                safe.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_');
+            }
+            string root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "9SEC Evidence Workbench",
+                "Workflows");
+            return Path.Combine(root, safe.ToString() + ArtifactNames.AnalystWorkflowJsonSuffix);
+        }
+
         public static AnalystWorkflowState LoadFromFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -90,7 +112,7 @@ namespace IR_Collect.Analysis
                 using (var ms = new MemoryStream())
                 {
                     serializer.WriteObject(ms, state);
-                    File.WriteAllText(path, Encoding.UTF8.GetString(ms.ToArray()), new UTF8Encoding(false));
+                    AtomicFile.WriteAllText(path, Encoding.UTF8.GetString(ms.ToArray()), new UTF8Encoding(false));
                 }
                 return true;
             }

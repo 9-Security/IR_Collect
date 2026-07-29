@@ -14,6 +14,12 @@ namespace IR_Collect.Analysis
         public string Hostname { get; set; }
         public string CaseID { get; set; }
         public string SourceZip { get; set; }
+        public string SourceFormat { get; set; }
+        public string SourceEvidenceSha256 { get; set; }
+        /// <summary>Immutable evidence root. Analysis must not write below this path.</summary>
+        public string EvidencePath { get; set; }
+        /// <summary>Writable workspace for canonical derivatives, caches, workflow, and analysis output.</summary>
+        public string AnalysisPath { get; set; }
         public string ExtractPath { get; set; }
         public string CachePath { get; set; }
         public Dictionary<string, string> Artifacts { get; set; }
@@ -26,6 +32,10 @@ namespace IR_Collect.Analysis
         public CollectionCoverageReport CollectionCoverage { get; set; }
         public string FactStoreFreshnessStatus { get; set; }
         public string FactStoreFreshnessDetail { get; set; }
+        public string FactStoreBuildMode { get; set; }
+        public string FactStoreBuildGeneratedAt { get; set; }
+        public string FactStoreBuildDetail { get; set; }
+        public List<IR_Collect.Analysis.Correlation.FactStoreInputFingerprint> FactStoreBuildInputs { get; set; }
         public AnalystWorkflowState AnalystWorkflow { get; set; }
         public string AnalystWorkflowPath { get; set; }
         /// <summary>External memory acquisition sidecar (collection-only; no dump parsing).</summary>
@@ -36,6 +46,7 @@ namespace IR_Collect.Analysis
         public List<EvidenceFile> EvidenceFiles { get; set; }
         /// <summary>Phase 5.2: rollup digest over the evidence manifest (one hash for the whole input set).</summary>
         public string EvidenceDigest { get; set; }
+        public UacEvidenceMetadata UacEvidence { get; set; }
 
         public CaseData()
         {
@@ -45,6 +56,10 @@ namespace IR_Collect.Analysis
             RebuiltEventLogLabels = new List<string>();
             FactStoreFreshnessStatus = "not_present";
             FactStoreFreshnessDetail = "fact_store.db is not present in this case.";
+            FactStoreBuildMode = "NotBuilt";
+            FactStoreBuildGeneratedAt = "";
+            FactStoreBuildDetail = "";
+            FactStoreBuildInputs = new List<IR_Collect.Analysis.Correlation.FactStoreInputFingerprint>();
             AnalystWorkflow = new AnalystWorkflowState();
         }
     }
@@ -125,24 +140,40 @@ namespace IR_Collect.Analysis
             return 100000;
         }
 
+        public static CaseData LoadCaseFromPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                throw new ArgumentException("Evidence path is null or empty.", "path");
+            if (Directory.Exists(path))
+                return LoadCaseFromFolder(path);
+            if (File.Exists(path))
+                return LoadCase(path);
+            throw new FileNotFoundException("Evidence path was not found.", path);
+        }
+
         public static CaseData LoadCase(string zipPath)
         {
              if (string.IsNullOrWhiteSpace(zipPath))
-                 throw new ArgumentException("zipPath is null or empty.", "zipPath");
+                 throw new ArgumentException("archive path is null or empty.", "zipPath");
              if (!File.Exists(zipPath))
-                 throw new FileNotFoundException("Case zip not found.", zipPath);
+                 throw new FileNotFoundException("Evidence archive not found.", zipPath);
              try { zipPath = Path.GetFullPath(zipPath); } catch (Exception ex) { Logger.Warning("LoadCase GetFullPath: " + ex.Message); }
+             if (!ArchiveIntake.IsSupportedArchive(zipPath))
+                 throw new InvalidDataException("Unsupported evidence archive. Supported formats: ZIP, TAR, TAR.GZ, TGZ.");
+             string sourceFormat = ArchiveIntake.DetectFormat(zipPath);
+             string sourceArchiveSha256 = "";
+             try { sourceArchiveSha256 = EvidenceManifest.ComputeSha256(zipPath); }
+             catch (Exception ex) { Logger.Warning("LoadCase source archive hash: " + (ex.Message ?? "")); }
 
              // 1. Unpack
              string caseId = "Case_" + Path.GetFileNameWithoutExtension(zipPath) + "_" + DateTime.Now.Ticks;
              string cacheDir = Path.Combine(Path.GetTempPath(), caseId);
              
              if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
-             Directory.CreateDirectory(cacheDir);
 
              try
              {
-                 ExtractZipSafely(zipPath, cacheDir);
+                 ArchiveIntake.ExtractSafely(zipPath, cacheDir);
              }
              catch (Exception ex)
              {
@@ -155,11 +186,15 @@ namespace IR_Collect.Analysis
              CaseData newCase = new CaseData();
              newCase.CaseID = caseId;
              newCase.SourceZip = zipPath;
+             newCase.SourceFormat = sourceFormat;
+             newCase.SourceEvidenceSha256 = sourceArchiveSha256;
              newCase.CachePath = cacheDir;
              
              // Detect nested single directory
              string[] subDirs = Directory.GetDirectories(cacheDir);
-             string[] rootFiles = Directory.GetFiles(cacheDir);
+             string[] rootFiles = Directory.GetFiles(cacheDir)
+                 .Where(x => !string.Equals(Path.GetFileName(x), ArtifactNames.UacArchiveEntriesCsv, StringComparison.OrdinalIgnoreCase))
+                 .ToArray();
              if (rootFiles.Length == 0 && subDirs.Length == 1)
              {
                  newCase.ExtractPath = subDirs[0];
@@ -168,8 +203,29 @@ namespace IR_Collect.Analysis
              {
                  newCase.ExtractPath = cacheDir;
              }
+             newCase.EvidencePath = newCase.ExtractPath;
+
+             // Hash the extracted evidence before analysis-layer derivation. The source archive hash
+             // above remains the authoritative digest of the original container.
+             try
+             {
+                 EvidenceManifestResult em = EvidenceManifest.HashFolder(newCase.ExtractPath);
+                 newCase.EvidenceFiles = em.Files;
+                 newCase.EvidenceDigest = em.Digest;
+             }
+             catch (Exception ex) { Logger.Warning("LoadCase evidence hash: " + (ex.Message ?? "")); }
+
+             newCase.AnalysisPath = CreateAnalysisWorkspace(caseId);
+             newCase.UacEvidence = UacEvidenceIntake.Inspect(newCase.EvidencePath, sourceFormat, newCase.EvidenceFiles);
+             WarnForUntrustedUacCanonicalSources(newCase);
+             try { RawArtifactCsvDeriver.DeriveInto(newCase.EvidencePath, newCase.AnalysisPath, newCase.LoadWarnings); }
+             catch (Exception ex) { Logger.Warning("LoadCase derive: " + (ex.Message ?? "")); }
+             try { UacArtifactCsvDeriver.DeriveInto(newCase.EvidencePath, newCase.AnalysisPath, newCase.LoadWarnings); }
+             catch (Exception ex) { Logger.Warning("LoadCase UAC derive: " + (ex.Message ?? "")); }
+             UacEvidenceIntake.WriteEvidenceIndex(newCase.EvidencePath, newCase.AnalysisPath,
+                 newCase.UacEvidence, newCase.EvidenceFiles, newCase.LoadWarnings);
              
-             string sysInfoPath = Path.Combine(newCase.ExtractPath, ArtifactNames.SystemInfoTxt);
+             string sysInfoPath = ResolveAnalysisOrEvidencePath(newCase, ArtifactNames.SystemInfoTxt);
              if (File.Exists(sysInfoPath) && new FileInfo(sysInfoPath).Length <= 5L * 1024 * 1024)
              {
                  string[] lines = File.ReadAllLines(sysInfoPath, System.Text.Encoding.UTF8);
@@ -178,6 +234,8 @@ namespace IR_Collect.Analysis
                      if (line.StartsWith("Hostname:")) newCase.Hostname = line.Substring(9).Trim();
                  }
              }
+             if (string.IsNullOrEmpty(newCase.Hostname) && newCase.UacEvidence != null)
+                 newCase.Hostname = newCase.UacEvidence.Hostname;
              if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = Path.GetFileNameWithoutExtension(zipPath);
 
                           // 3. Scan extracted files once for MFT/artifacts (reduces repeated full-tree walks)
@@ -191,6 +249,8 @@ namespace IR_Collect.Analysis
                  if (!IsPathUnderRoot(fullPath, cacheDir)) continue;
 
                  string name = Path.GetFileName(f);
+                 if (IsUntrustedUacCanonicalSource(newCase, name))
+                     continue;
                  if (mftBinPath == null && string.Equals(name, ArtifactNames.MftDumpBin, StringComparison.OrdinalIgnoreCase))
                  {
                      mftBinPath = fullPath;
@@ -208,7 +268,8 @@ namespace IR_Collect.Analysis
                   if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
 
                   string ext = Path.GetExtension(f).ToLowerInvariant();
-                  if (ext == ".csv" || ext == ".txt" || ext == ".evtx" || ext == ".xml" || ext == ".sqlite" || ext == ".hve" || ext == ".log" || ext == ".jrs" || name.Contains("History") ||
+                  bool isUacEvidence = newCase.UacEvidence != null && newCase.UacEvidence.IsUac;
+                  if (isUacEvidence || ext == ".csv" || ext == ".txt" || ext == ".evtx" || ext == ".xml" || ext == ".sqlite" || ext == ".hve" || ext == ".log" || ext == ".jrs" || name.Contains("History") ||
                       ext == ".automaticdestinations-ms" || ext == ".customdestinations-ms" ||
                        ext == ".hiv" || ext == ".dat" || ext == ".reg" || name.StartsWith("NTUSER") || name.StartsWith("UsrClass") ||
                        ext == ".raw" || ext == ".dmp" ||
@@ -232,6 +293,8 @@ namespace IR_Collect.Analysis
                       }
                   }
               }
+
+              RegisterAnalysisWorkspaceArtifacts(newCase);
 
               string coverageReportPath = ResolveArtifactPath(newCase, ArtifactNames.CollectionCoverageJson);
               if (!string.IsNullOrEmpty(coverageReportPath) && File.Exists(coverageReportPath))
@@ -281,8 +344,13 @@ namespace IR_Collect.Analysis
 
               try
               {
-                  newCase.AnalystWorkflowPath = AnalystWorkflowStore.ResolvePath(newCase.SourceZip, newCase.ExtractPath);
-                  newCase.AnalystWorkflow = AnalystWorkflowStore.LoadFromFile(newCase.AnalystWorkflowPath);
+                  string legacyWorkflowPath = AnalystWorkflowStore.ResolvePath(newCase.SourceZip, newCase.EvidencePath);
+                  newCase.AnalystWorkflowPath = AnalystWorkflowStore.ResolveReadOnlyCasePath(
+                      newCase.SourceEvidenceSha256, newCase.EvidenceDigest, newCase.CaseID);
+                  string workflowReadPath = File.Exists(newCase.AnalystWorkflowPath)
+                      ? newCase.AnalystWorkflowPath
+                      : legacyWorkflowPath;
+                  newCase.AnalystWorkflow = AnalystWorkflowStore.LoadFromFile(workflowReadPath);
               }
               catch (Exception ex)
               {
@@ -296,8 +364,8 @@ namespace IR_Collect.Analysis
               try
               {
                   string shellMsg;
-                  ShellBagsParser.TryEnsureShellBagsCsv(newCase.ExtractPath, false, out shellMsg);
-                  string shellCsv = Path.Combine(newCase.ExtractPath, "Registry", ArtifactNames.ShellBagsCsv);
+                  ShellBagsParser.TryEnsureShellBagsCsv(newCase.EvidencePath, newCase.AnalysisPath, false, out shellMsg);
+                  string shellCsv = Path.Combine(newCase.AnalysisPath, "Registry", ArtifactNames.ShellBagsCsv);
                   if (File.Exists(shellCsv))
                       RegisterArtifact(newCase, Path.GetFullPath(shellCsv));
               }
@@ -345,6 +413,12 @@ namespace IR_Collect.Analysis
                        FactProvenanceHelper.ApplyCaseMetadata(newCase, newCase.FactStore != null ? newCase.FactStore.Facts : null);
                        if (newCase.FactStore != null)
                            newCase.FactStore.BuildEntityIndex();
+                       if (newCase.FactStore != null)
+                       {
+                           newCase.FactStoreBuildMode = "Reused";
+                           newCase.FactStoreBuildGeneratedAt = File.GetLastWriteTimeUtc(factStoreDbPath).ToString("o");
+                           newCase.FactStoreBuildDetail = "Loaded the bundled fact_store.db cache.";
+                       }
                        EvaluateFactStoreFreshness(newCase, factStoreDbPath, mftBinPath, mftPreviewPath);
                    }
                    catch (Exception ex)
@@ -360,6 +434,8 @@ namespace IR_Collect.Analysis
                   newCase.FactStoreFreshnessStatus = "not_present";
                   newCase.FactStoreFreshnessDetail = "fact_store.db is not present in this case.";
               }
+
+              RefreshAnalysisWorkspaceManifest(newCase);
 
               lock (_lock) { _cases.Add(newCase); }
               return newCase;
@@ -427,9 +503,8 @@ namespace IR_Collect.Analysis
         /// <summary>
         /// Phase 3.1 (analysis layer): build a CaseData from an arbitrary folder of already-collected
         /// artifacts - another tool's triage output, or an unzipped IR_Collect case - WITHOUT extracting a
-        /// ZIP and WITHOUT touching the live host. Mirrors the post-extraction steps of LoadCase (the two
-        /// should be unified in a later pass). The folder is treated read-only: it is never deleted, only
-        /// derived CSVs (filtered EVTX / ShellBags) may be written alongside, exactly as LoadCase does.
+        /// ZIP and WITHOUT touching the live host. The selected folder is an immutable evidence root;
+        /// canonical CSVs, filtered EVTX, ShellBags, workflow, caches, and reports use separate locations.
         /// </summary>
         public static CaseData LoadCaseFromFolder(string folder)
         {
@@ -444,20 +519,13 @@ namespace IR_Collect.Analysis
             CaseData newCase = new CaseData();
             newCase.CaseID = "Folder_" + leaf + "_" + DateTime.Now.Ticks;
             newCase.SourceZip = null;
-            newCase.CachePath = root;
+            newCase.SourceFormat = "folder";
 
             // Detect a single nested directory (e.g. folder\IR_Output_X\...).
             string[] subDirs = Directory.GetDirectories(root);
             string[] rootFiles = Directory.GetFiles(root);
             newCase.ExtractPath = (rootFiles.Length == 0 && subDirs.Length == 1) ? subDirs[0] : root;
-
-            string sysInfoPath = Path.Combine(newCase.ExtractPath, ArtifactNames.SystemInfoTxt);
-            if (File.Exists(sysInfoPath) && new FileInfo(sysInfoPath).Length <= 5L * 1024 * 1024)
-            {
-                foreach (var line in File.ReadAllLines(sysInfoPath, System.Text.Encoding.UTF8))
-                    if (line.StartsWith("Hostname:")) newCase.Hostname = line.Substring(9).Trim();
-            }
-            if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = leaf;
+            newCase.EvidencePath = newCase.ExtractPath;
 
             // Phase 5.2: hash the input files AS RECEIVED (before we derive any CSVs) so an analysis
             // report can be cryptographically tied to exactly the evidence it consumed.
@@ -469,27 +537,48 @@ namespace IR_Collect.Analysis
             }
             catch (Exception ex) { Logger.Warning("LoadCaseFromFolder evidence hash: " + (ex.Message ?? "")); }
 
-            // Phase 3.1b: derive Amcache/ShimCache/SRUM CSVs from any RAW hive/ESE files present, so the
-            // scan below registers them and the normalizers produce facts (foreign triage folders ship raw
-            // artifacts, not our CSVs). Best-effort; writes nothing for artifacts that need elevation.
-            try { RawArtifactCsvDeriver.DeriveInto(newCase.ExtractPath, newCase.LoadWarnings); }
+            newCase.AnalysisPath = CreateAnalysisWorkspace(newCase.CaseID);
+            newCase.CachePath = newCase.AnalysisPath;
+            newCase.UacEvidence = UacEvidenceIntake.Inspect(newCase.EvidencePath, "folder", newCase.EvidenceFiles);
+            WarnForUntrustedUacCanonicalSources(newCase);
+
+            // Derivatives are written only to the analysis workspace. The selected evidence folder
+            // remains byte-for-byte unchanged and pre-existing canonical names are not trusted.
+            try { RawArtifactCsvDeriver.DeriveInto(newCase.EvidencePath, newCase.AnalysisPath, newCase.LoadWarnings); }
             catch (Exception ex) { Logger.Warning("LoadCaseFromFolder derive: " + (ex.Message ?? "")); }
+            try { UacArtifactCsvDeriver.DeriveInto(newCase.EvidencePath, newCase.AnalysisPath, newCase.LoadWarnings); }
+            catch (Exception ex) { Logger.Warning("LoadCaseFromFolder UAC derive: " + (ex.Message ?? "")); }
+            UacEvidenceIntake.WriteEvidenceIndex(newCase.EvidencePath, newCase.AnalysisPath,
+                newCase.UacEvidence, newCase.EvidenceFiles, newCase.LoadWarnings);
+
+            string sysInfoPath = ResolveAnalysisOrEvidencePath(newCase, ArtifactNames.SystemInfoTxt);
+            if (File.Exists(sysInfoPath) && new FileInfo(sysInfoPath).Length <= 5L * 1024 * 1024)
+            {
+                foreach (var line in File.ReadAllLines(sysInfoPath, System.Text.Encoding.UTF8))
+                    if (line.StartsWith("Hostname:")) newCase.Hostname = line.Substring(9).Trim();
+            }
+            if (string.IsNullOrEmpty(newCase.Hostname) && newCase.UacEvidence != null)
+                newCase.Hostname = newCase.UacEvidence.Hostname;
+            if (string.IsNullOrEmpty(newCase.Hostname)) newCase.Hostname = leaf;
 
             int mftMax = GetMftMaxEntries();
             string mftBinPath = null, mftPreviewPath = null, factStoreDbPath = null;
-            foreach (string f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            foreach (string f in Directory.EnumerateFiles(newCase.EvidencePath, "*", SearchOption.AllDirectories))
             {
                 string fullPath;
                 try { fullPath = Path.GetFullPath(f); } catch { continue; }
-                if (!IsPathUnderRoot(fullPath, root)) continue;
+                if (!IsPathUnderRoot(fullPath, newCase.EvidencePath)) continue;
                 string name = Path.GetFileName(f);
+                if (IsUntrustedUacCanonicalSource(newCase, name))
+                    continue;
                 if (mftBinPath == null && string.Equals(name, ArtifactNames.MftDumpBin, StringComparison.OrdinalIgnoreCase)) { mftBinPath = fullPath; continue; }
                 if (mftPreviewPath == null && string.Equals(name, ArtifactNames.MftPreviewCsv, StringComparison.OrdinalIgnoreCase)) { mftPreviewPath = fullPath; continue; }
                 if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase)) factStoreDbPath = fullPath;
                 if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
 
                 string ext = Path.GetExtension(f).ToLowerInvariant();
-                if (ext == ".csv" || ext == ".txt" || ext == ".evtx" || ext == ".xml" || ext == ".sqlite" || ext == ".hve" || ext == ".log" || ext == ".jrs" || name.Contains("History") ||
+                bool isUacEvidence = newCase.UacEvidence != null && newCase.UacEvidence.IsUac;
+                if (isUacEvidence || ext == ".csv" || ext == ".txt" || ext == ".evtx" || ext == ".xml" || ext == ".sqlite" || ext == ".hve" || ext == ".log" || ext == ".jrs" || name.Contains("History") ||
                     ext == ".automaticdestinations-ms" || ext == ".customdestinations-ms" ||
                     ext == ".hiv" || ext == ".dat" || ext == ".reg" || name.StartsWith("NTUSER") || name.StartsWith("UsrClass") ||
                     ext == ".raw" || ext == ".dmp" ||
@@ -498,11 +587,12 @@ namespace IR_Collect.Analysis
                     string.Equals(name, ArtifactNames.MemoryAcquisitionJson, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(name, ArtifactNames.MemoryAnalysisJson, StringComparison.OrdinalIgnoreCase))
                 {
-                    string rel = GetRelativePath(root, fullPath);
+                    string rel = GetRelativePath(newCase.EvidencePath, fullPath);
                     if (rel != null && rel.IndexOf("..", StringComparison.Ordinal) < 0)
                         newCase.Artifacts[rel] = fullPath;
                 }
             }
+            RegisterAnalysisWorkspaceArtifacts(newCase);
 
             // Optional sidecars (best-effort, same as LoadCase).
             string coveragePath = ResolveArtifactPath(newCase, ArtifactNames.CollectionCoverageJson);
@@ -524,8 +614,13 @@ namespace IR_Collect.Analysis
 
             try
             {
-                newCase.AnalystWorkflowPath = AnalystWorkflowStore.ResolvePath(newCase.SourceZip, newCase.ExtractPath);
-                newCase.AnalystWorkflow = AnalystWorkflowStore.LoadFromFile(newCase.AnalystWorkflowPath);
+                string legacyWorkflowPath = AnalystWorkflowStore.ResolvePath(newCase.SourceZip, newCase.EvidencePath);
+                newCase.AnalystWorkflowPath = AnalystWorkflowStore.ResolveReadOnlyCasePath(
+                    newCase.SourceEvidenceSha256, newCase.EvidenceDigest, newCase.CaseID);
+                string workflowReadPath = File.Exists(newCase.AnalystWorkflowPath)
+                    ? newCase.AnalystWorkflowPath
+                    : legacyWorkflowPath;
+                newCase.AnalystWorkflow = AnalystWorkflowStore.LoadFromFile(workflowReadPath);
             }
             catch (Exception ex)
             {
@@ -538,8 +633,8 @@ namespace IR_Collect.Analysis
             try
             {
                 string shellMsg;
-                ShellBagsParser.TryEnsureShellBagsCsv(newCase.ExtractPath, false, out shellMsg);
-                string shellCsv = Path.Combine(newCase.ExtractPath, "Registry", ArtifactNames.ShellBagsCsv);
+                ShellBagsParser.TryEnsureShellBagsCsv(newCase.EvidencePath, newCase.AnalysisPath, false, out shellMsg);
+                string shellCsv = Path.Combine(newCase.AnalysisPath, "Registry", ArtifactNames.ShellBagsCsv);
                 if (File.Exists(shellCsv)) RegisterArtifact(newCase, Path.GetFullPath(shellCsv));
             }
             catch (Exception ex) { Logger.Warning("LoadCaseFromFolder shellbags.csv: " + (ex.Message ?? "")); }
@@ -564,10 +659,18 @@ namespace IR_Collect.Analysis
                     AugmentFactStoreWithRebuiltEventLogs(newCase);
                     FactProvenanceHelper.ApplyCaseMetadata(newCase, newCase.FactStore != null ? newCase.FactStore.Facts : null);
                     if (newCase.FactStore != null) newCase.FactStore.BuildEntityIndex();
+                    if (newCase.FactStore != null)
+                    {
+                        newCase.FactStoreBuildMode = "Reused";
+                        newCase.FactStoreBuildGeneratedAt = File.GetLastWriteTimeUtc(factStoreDbPath).ToString("o");
+                        newCase.FactStoreBuildDetail = "Loaded the bundled fact_store.db cache.";
+                    }
+                    EvaluateFactStoreFreshness(newCase, factStoreDbPath, mftBinPath, mftPreviewPath);
                 }
                 catch (Exception ex) { AddLoadWarning(newCase, "fact_store.db could not be loaded: " + (ex.Message ?? "")); }
             }
 
+            RefreshAnalysisWorkspaceManifest(newCase);
             lock (_lock) { _cases.Add(newCase); }
             return newCase;
         }
@@ -604,12 +707,22 @@ namespace IR_Collect.Analysis
             {
                 string logLabel = kvp.Key;
                 string evtxPath = kvp.Value;
-                string csvPath = Path.Combine(Path.GetDirectoryName(evtxPath) ?? c.ExtractPath, logLabel + ArtifactNames.EventLogFilteredSuffix);
+                string targetFile = logLabel + ArtifactNames.EventLogFilteredSuffix;
+                string existingCsvPath = ResolveArtifactPath(c, targetFile);
 
-                if (!overwriteExisting && File.Exists(csvPath) && new FileInfo(csvPath).Length > 0)
+                if (!overwriteExisting && !string.IsNullOrEmpty(existingCsvPath) &&
+                    File.Exists(existingCsvPath) && new FileInfo(existingCsvPath).Length > 0)
                 {
-                    RegisterArtifact(c, csvPath);
+                    RegisterArtifact(c, existingCsvPath);
                     result.SkippedLogs++;
+                    continue;
+                }
+
+                string csvPath = GetAnalysisOutputPath(c, Path.Combine("EventLogs", targetFile));
+                if (string.IsNullOrEmpty(csvPath))
+                {
+                    result.FailedLogs++;
+                    result.FailedLabels.Add(logLabel);
                     continue;
                 }
 
@@ -643,6 +756,8 @@ namespace IR_Collect.Analysis
             result.Detail = overwriteExisting
                 ? "Filtered CSVs were rebuilt using the current EventLogDays/EventLogMaxEvents settings."
                 : "Missing filtered CSVs were rebuilt when possible.";
+            if (result.RebuiltLogs > 0)
+                RefreshAnalysisWorkspaceManifest(c);
             return result;
         }
 
@@ -687,12 +802,134 @@ namespace IR_Collect.Analysis
             if (c == null || c.Artifacts == null || string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
                 return;
 
-            string relativeRoot = !string.IsNullOrEmpty(c.CachePath) ? c.CachePath : c.ExtractPath;
+            string relativeRoot = IsPathUnderRoot(fullPath, c.AnalysisPath)
+                ? c.AnalysisPath
+                : (!string.IsNullOrEmpty(c.EvidencePath) ? c.EvidencePath : c.ExtractPath);
             string rel = GetRelativePath(relativeRoot, fullPath);
             if (string.IsNullOrEmpty(rel) || rel.IndexOf("..", StringComparison.Ordinal) >= 0)
                 return;
 
             c.Artifacts[rel] = fullPath;
+        }
+
+        private static void RegisterAnalysisWorkspaceArtifacts(CaseData c)
+        {
+            if (c == null || string.IsNullOrEmpty(c.AnalysisPath) || !Directory.Exists(c.AnalysisPath))
+                return;
+
+            foreach (string file in Directory.EnumerateFiles(c.AnalysisPath, "*", SearchOption.AllDirectories))
+                RegisterArtifact(c, file);
+        }
+
+        private static bool IsUntrustedUacCanonicalSource(CaseData c, string fileName)
+        {
+            if (c == null || c.UacEvidence == null || !c.UacEvidence.IsUac || string.IsNullOrEmpty(fileName))
+                return false;
+
+            string[] reserved =
+            {
+                ArtifactNames.SystemInfoTxt,
+                ArtifactNames.ProcessListCsv,
+                ArtifactNames.ActivityTimelineCsv,
+                ArtifactNames.UacAuthEventsCsv,
+                ArtifactNames.UacNetworkConnectionsCsv,
+                ArtifactNames.UacEvidenceIndexCsv,
+                ArtifactNames.UacAccountsCsv,
+                ArtifactNames.UacShellHistoryCsv,
+                ArtifactNames.UacPersistenceCsv,
+                ArtifactNames.UacJournalFilesCsv,
+                ArtifactNames.UacBootSessionsCsv,
+                ArtifactNames.UacLoginEventsCsv,
+                ArtifactNames.UacAuditEventsCsv,
+                ArtifactNames.UacSystemLogEventsCsv,
+                ArtifactNames.UacPackagesCsv,
+                ArtifactNames.UacWebServerEventsCsv,
+                ArtifactNames.UacFileHashesCsv,
+                ArtifactNames.FactStoreDb,
+                ArtifactNames.AnalysisWorkspaceManifestJson
+            };
+            for (int i = 0; i < reserved.Length; i++)
+                if (string.Equals(fileName, reserved[i], StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        private static void WarnForUntrustedUacCanonicalSources(CaseData c)
+        {
+            if (c == null || c.EvidenceFiles == null || c.UacEvidence == null || !c.UacEvidence.IsUac)
+                return;
+            int count = 0;
+            foreach (EvidenceFile evidence in c.EvidenceFiles)
+            {
+                if (evidence == null || string.IsNullOrEmpty(evidence.RelPath))
+                    continue;
+                if (IsUntrustedUacCanonicalSource(c, Path.GetFileName(evidence.RelPath)))
+                    count++;
+            }
+            if (count > 0)
+                AddLoadWarning(c, count.ToString() +
+                    " pre-existing analysis artifact(s) in the UAC source were retained as raw evidence but not trusted; canonical outputs were regenerated in the analysis workspace.");
+        }
+
+        private static string CreateAnalysisWorkspace(string caseId)
+        {
+            string safe = string.IsNullOrWhiteSpace(caseId) ? "Case" : caseId;
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+                safe = safe.Replace(invalid, '_');
+            string path = Path.Combine(Path.GetTempPath(), safe + "_Analysis_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        private static string ResolveAnalysisOrEvidencePath(CaseData c, string fileName)
+        {
+            if (c == null || string.IsNullOrWhiteSpace(fileName))
+                return null;
+            if (!string.IsNullOrEmpty(c.AnalysisPath))
+            {
+                string generated = Path.Combine(c.AnalysisPath, fileName);
+                if (File.Exists(generated))
+                    return generated;
+            }
+            string root = !string.IsNullOrEmpty(c.EvidencePath) ? c.EvidencePath : c.ExtractPath;
+            if (string.IsNullOrEmpty(root))
+                return null;
+            string evidence = Path.Combine(root, fileName);
+            return File.Exists(evidence) ? evidence : null;
+        }
+
+        public static string GetAnalysisOutputPath(CaseData c, string relativePath)
+        {
+            if (c == null || string.IsNullOrWhiteSpace(relativePath))
+                return null;
+            string root = !string.IsNullOrEmpty(c.AnalysisPath) ? c.AnalysisPath : c.ExtractPath;
+            if (string.IsNullOrEmpty(root))
+                return null;
+
+            string rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, '/', '\\') +
+                Path.DirectorySeparatorChar;
+            string full = Path.GetFullPath(Path.Combine(root, relativePath));
+            if (!full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+                return null;
+            string dir = Path.GetDirectoryName(full);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+            return full;
+        }
+
+        public static void RefreshAnalysisWorkspaceManifest(CaseData c)
+        {
+            try
+            {
+                string path = AnalysisWorkspaceManifest.Write(c);
+                if (!string.IsNullOrEmpty(path))
+                    RegisterArtifact(c, path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning("Analysis workspace manifest: " + (ex.Message ?? ""));
+                AddLoadWarning(c, "analysis workspace manifest could not be written: " + (ex.Message ?? ""));
+            }
         }
 
         private static void AddLoadWarning(CaseData c, string message)
@@ -751,7 +988,7 @@ namespace IR_Collect.Analysis
                 try
                 {
                     if (File.GetLastWriteTimeUtc(sourcePath) > dbWriteUtc.AddSeconds(1))
-                        newerArtifacts.Add(GetRelativePath(c.CachePath ?? c.ExtractPath ?? "", sourcePath));
+                        newerArtifacts.Add(GetRelativePath(c.EvidencePath ?? c.ExtractPath ?? "", sourcePath));
                 }
                 catch (Exception ex)
                 {
@@ -783,12 +1020,26 @@ namespace IR_Collect.Analysis
             return OfflineEventLogRebuildWarningPrefix + " " + rebuilt + "/" + total + " logs rebuilt from EVTX. Event-derived analysis remains limited for the remaining logs.";
         }
 
-        private static IEnumerable<string> EnumerateFactStoreSourcePaths(CaseData c, string mftBinPath, string mftPreviewPath)
+        internal static IEnumerable<string> EnumerateFactStoreSourcePaths(CaseData c, string mftBinPath, string mftPreviewPath)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string path in new string[]
             {
                 ResolveArtifactPath(c, ArtifactNames.ProcessListCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacAuthEventsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacNetworkConnectionsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacEvidenceIndexCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacAccountsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacShellHistoryCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacPersistenceCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacJournalFilesCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacBootSessionsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacLoginEventsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacAuditEventsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacSystemLogEventsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacPackagesCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacWebServerEventsCsv),
+                ResolveArtifactPath(c, ArtifactNames.UacFileHashesCsv),
                 ResolveArtifactPath(c, ArtifactNames.LogonSessionsCsv),
                 ResolveArtifactPath(c, ArtifactNames.NetworkResourcesCsv),
                 ResolveArtifactPath(c, ArtifactNames.ServerConnectionsCsv),
@@ -826,6 +1077,19 @@ namespace IR_Collect.Analysis
                     if (!ArtifactNames.IsEventLogFilteredCsv(kvp.Key)) continue;
                     if (string.IsNullOrEmpty(kvp.Value) || !seen.Add(kvp.Value)) continue;
                     yield return kvp.Value;
+                }
+            }
+
+            if (c != null && !string.IsNullOrEmpty(c.ExtractPath))
+            {
+                string prefetchDir = Path.Combine(c.ExtractPath, "Prefetch");
+                if (Directory.Exists(prefetchDir))
+                {
+                    foreach (string prefetch in Directory.EnumerateFiles(prefetchDir, "*.pf", SearchOption.TopDirectoryOnly))
+                    {
+                        if (seen.Add(prefetch))
+                            yield return prefetch;
+                    }
                 }
             }
         }
@@ -1075,6 +1339,16 @@ namespace IR_Collect.Analysis
                         return exact;
                 }
 
+                if (!string.IsNullOrEmpty(c.AnalysisPath))
+                {
+                    string generated = Path.Combine(c.AnalysisPath, fileName);
+                    string generatedFull = Path.GetFullPath(generated);
+                    string analysisFull = Path.GetFullPath(c.AnalysisPath).TrimEnd(Path.DirectorySeparatorChar, '/', '\\') +
+                        Path.DirectorySeparatorChar;
+                    if (generatedFull.StartsWith(analysisFull, StringComparison.OrdinalIgnoreCase) && File.Exists(generatedFull))
+                        return generatedFull;
+                }
+
                 if (!string.IsNullOrEmpty(c.ExtractPath))
                 {
                     string candidate = Path.Combine(c.ExtractPath, fileName);
@@ -1110,7 +1384,13 @@ namespace IR_Collect.Analysis
         private static void DeleteTempCaseDirectory(CaseData c)
         {
             if (c == null) return;
-            string candidate = !string.IsNullOrEmpty(c.CachePath) ? c.CachePath : c.ExtractPath;
+            DeleteOwnedTempDirectory(c.AnalysisPath);
+            if (!string.Equals(c.CachePath, c.AnalysisPath, StringComparison.OrdinalIgnoreCase))
+                DeleteOwnedTempDirectory(c.CachePath);
+        }
+
+        private static void DeleteOwnedTempDirectory(string candidate)
+        {
             if (string.IsNullOrEmpty(candidate) || !Directory.Exists(candidate)) return;
             string tempRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar, '/', '\\') + Path.DirectorySeparatorChar;
             string fullCandidate = Path.GetFullPath(candidate);

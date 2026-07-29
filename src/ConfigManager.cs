@@ -33,7 +33,13 @@ namespace IR_Collect
             Settings["DeleteOutputDirAfterZip"] = "1";
             Settings["FactStoreWriteSqlite"] = "0";
             Settings["FactStoreAutoBuild"] = "1";
+            Settings["FactStoreIncrementalCache"] = "0";
             Settings["CollectionModeProfile"] = "Standard";
+            Settings["RequireRemovableMediaConfirmation"] = "1";
+            Settings["WarnOnSystemDiskOutput"] = "1";
+            Settings["ForensicStrictSkipMemoryHandoff"] = "1";
+            Settings["ForensicStrictSkipDeepScan"] = "1";
+            Settings["ForensicStrictRequireSecondConfirmation"] = "1";
             Settings["ShowCollectionCompleteMessage"] = "1";
             Settings["MemoryAcquireEnabled"] = "0";
             Settings["MemoryAcquireToolPath"] = "";
