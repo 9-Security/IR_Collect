@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-> 目標版本：`v0.25.1`；尚未完成實機 smoke matrix 與 GitHub Release 發布。
+## [0.25.1] — 2026-08-16
 
 ### Changed
 - **文件規格校準**：將 README、SPEC、ARTIFACTS、文件索引與雙語使用手冊對齊已發布的 `v0.25.0`；補齊 UAC canonical/hash artifacts、CLI alias、release ZIP checksum sidecar 與正式簽章／時間戳 fail-closed 說明。未變更 collector、parser、schema 或分析行為。
@@ -23,6 +23,11 @@
 - **Fact Store completeness visibility**：CSV 超過 100 MiB、500,000 列或讀取中斷時寫入 Load warnings 與 exports；persistent cache 重用時仍保留 normalization warnings。
 - **CLI failure contract**：`-analyze` / `-correlate` / `-graph` 寫檔失敗回傳 `1`；collection 有 coverage gap 回傳 `4`，不再誤報完整成功。
 - **MFT extension names**：`MftParser` 可從 resident `$ATTRIBUTE_LIST` 讀取 `$FILE_NAME` extension-record reference，以唯讀隨機讀取合併 Win32 長檔名並維持 parent/timestamp 一致；損壞 reference fail-soft。Non-resident attribute list 仍保留為已知邊界。
+
+### Known Limitations
+- **Jump List parser**：目前為 bounded MS-SHLLINK byte-scan，對本次 JLECmd 差異驗證 path recall 為 140/172（81.4%），尚非完整 OLE-CFB parser；raw Jump List 必須保留供外部工具交叉驗證。
+- **Real-sample differential coverage**：本次 release gate 缺少可發布的完整 MFT、Prefetch、SRUM、Amcache 與 ShimCache 實體樣本，相關差異驗證明確 skip；合成 fixture 與 185 項 regression 均通過。
+- **Publisher trust**：release EXE 具 `nine-security Inc` Authenticode 簽章及 DigiCert 時間戳，但目前使用的 publisher certificate 為本機自簽，未建立公有 CA 信任鏈。
 
 ## [0.25.0] — 2026-07-29
 

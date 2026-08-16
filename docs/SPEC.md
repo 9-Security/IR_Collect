@@ -1,7 +1,7 @@
 # 9SEC Evidence Workbench 開發規格手冊 (Development Specification)
 
 **專案名稱**: 9SEC Evidence Workbench
-**版本**: v0.25.1 release candidate
+**版本**: v0.25.1
 **最後更新時間**: 2026-08-16
 **開發者**: Antigravity (collaborating with User)
 
@@ -23,7 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
-| **v0.25.1-rc** | 2026-08-16 | **Forensic integrity / Fix** | Collector output collision 拒絕與 atomic ZIP/SHA publish；evidence manifest 完整性、reparse 防護及 Fact Store build 前 digest 重驗；預置 `fact_store.db` 不再當作可信 facts；CSV 上限警告進入 export；CLI 失敗／coverage-gap exit code 對齊；MFT resident `$ATTRIBUTE_LIST` extension `$FILE_NAME` 長檔名合併。尚待實機 smoke matrix 後發布。 |
+| **v0.25.1** | 2026-08-16 | **Forensic integrity / Fix** | Collector output collision 拒絕與 atomic ZIP/SHA publish；evidence manifest 完整性、reparse 防護及 Fact Store build 前 digest 重驗；預置 `fact_store.db` 不再當作可信 facts；CSV 上限警告進入 export；CLI 失敗／coverage-gap exit code 對齊；MFT resident `$ATTRIBUTE_LIST` extension `$FILE_NAME` 長檔名合併。 |
 | **v0.25.0** | 2026-07-29 | **Cross-platform intake / Analysis / Governance** | UAC folder、ZIP、TAR、TAR.GZ/TGZ 可由 GUI 與分析 CLI 直接收容，支援 Linux/macOS process、bodyfile、auth、auditd、system/web log、package、network、account、shell history、persistence、journal/boot、login 與 executable/running-process hashes，保留逐檔 SHA-256 provenance 並進入 Fact Store／Timeline／Correlation／Graph／export。新增 facts-only Case Diff、選用的 persistent Fact Store build cache，以及完整化 Low Impact / Forensic Strict；archive intake、analysis workspace 與衍生輸出同步加入 bounded extraction、read-only evidence root 與 atomic publish hardening。 |
 | **v0.24.2** | 2026-07-20 | **教學資產 / Fix** | **上手教學資產 + Prefetch 解析器強化**:新增 `docs/sample-case/`——手工合成、零真實證據的雙主機案卷（釣魚→Temp 執行→Run 機碼→C$ 橫移→清日誌,兩台以同一 SHA-1 相連）+ 雙語導覽 `docs/DEMO.md`／`DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過（實測觸發 4+2 條 Guided Hunt、跨主機共享 Hash、18 節點調查圖）;整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`。另收 v0.24.1 後的 Prefetch code-review 強化:v30（Win10）run-count offset 誠實標為「推測、未驗證」、referenced-files 上限 8192、解壓 workspace 用較大值、malformed/v23 自測。詳見 CHANGELOG。 |
 | **v0.24.1** | 2026-06-16 | **Hunt / 互通** | **Guided Hunt 規則 ×3 + 輸出 JSON Schema**：新增 ATT&CK 對應規則——事件日誌被清除（T1070.001）、可疑路徑執行（T1204/T1036）、DLL side-loading（T1574.002,接 Prefetch）,各帶正反向自測。新增 `docs/schemas/` 的 `summary_v3`／`correlation_v1`／`graph_v1` JSON Schema（draft-07）+ 漂移守門測試。README 雙語補上離線分析 CLI 段落。詳見 CHANGELOG。 |

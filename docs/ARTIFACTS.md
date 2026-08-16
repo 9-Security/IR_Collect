@@ -2,7 +2,7 @@
 
 **最後更新**: 2026-08-16
 
-**對齊版本**: v0.25.1 release candidate
+**對齊版本**: v0.25.1
 
 以下是本專案目前已實作能力、部分能力與明確範圍外項目的對照；Windows live collection 與 UAC Linux/macOS evidence intake 都納入本表。
 符號說明：
@@ -98,6 +98,6 @@
 - [v] **UAC file-hash facts**: `uac_file_hashes.csv` 正規化 UAC `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,sha256}`，欄位為 `Algorithm / Hash / Path / SourceKind / SourcePath / LineNumber / InputFormat`。支援 checksum-path 與 named-digest envelope，最多 250,000 列、64 個來源檔、單檔 512 MiB、單行 65,536 字元；不合格式或超限資料仍保留 raw 並在 load warnings 顯示。`UacFileHash` facts 使用 `Hash / Path / HashAlgorithm` entities，時間維持 unknown/low confidence，不宣稱執行或惡意性。
 
 ## 文件維護狀態 (Document Maintenance)
-- 本表對齊 `v0.25.1` release candidate 的 collector、UAC intake、ArtifactNames、CaseManager discovery、Fact Store 與輸出 schema；歷史版本差異見 `CHANGELOG.md`。
+- 本表對齊 `v0.25.1` 的 collector、UAC intake、ArtifactNames、CaseManager discovery、Fact Store 與輸出 schema；歷史版本差異見 `CHANGELOG.md`。
 - 新增 collected artifact 時，必須同步 platform intake、案卷 discovery、適用的 UI/file-list 與 normalizer/export 管線；無法同次完成時需在規格 backlog 明列，不得留下孤兒產物。
 - 表中 `[v]` 只代表程式已實作，不代表每次收集都完整成功；實案仍須以 `collection_coverage.json`、load warnings、parser notes 與原始證據核對。

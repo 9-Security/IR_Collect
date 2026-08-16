@@ -4,7 +4,7 @@
 這是一個基於 C# 開發的 Windows 事件回應收集與跨平台證據分析工作台。
 設計目標為**單一 Windows 執行檔 (Portable)**，無需安裝即可執行，支援 GUI 與 CLI；live collection 限 Windows，分析端可直接收容 Windows 案卷及 UAC 產生的 Linux/macOS folder、ZIP、TAR、TAR.GZ/TGZ 證據。
 
-**目前 GitHub 正式版：v0.25.0（2026-07-29）；source 候選版：v0.25.1**。版本來源以 `src/AssemblyInfo.cs` 為準；候選版內容見 `CHANGELOG.md` 的 `Unreleased`，功能契約見 `SPEC.md` 與 `ARTIFACTS.md`。
+**目前 GitHub 正式版：v0.25.1（2026-08-16）**。版本來源以 `src/AssemblyInfo.cs` 為準；發行內容見 `CHANGELOG.md`，功能契約見 `SPEC.md` 與 `ARTIFACTS.md`。
 
 ## 功能特色
 1.  **免安裝**: 只需一個 `9SEC_EvidW.exe` 檔案，支援 Win7 - Win11。

@@ -6,12 +6,11 @@
 
 ## Download
 
-**[Latest release (ZIP)](https://github.com/9-Security/IR_Collect/releases/latest)** — the Release provides a ZIP and matching `.zip.sha256` sidecar. Verify the ZIP, then extract and run. Current source and the v0.25.1 release candidate use `9SEC_EvidW.exe`; the already-published v0.25.0 archive retains the previous executable filename.
+**[Latest release (ZIP)](https://github.com/9-Security/IR_Collect/releases/latest)** — the Release provides a ZIP and matching `.zip.sha256` sidecar. Verify the ZIP, then extract and run. v0.25.1 and later use `9SEC_EvidW.exe`; the v0.25.0 archive retains the previous executable filename.
 
-**Current published release: v0.25.0 (2026-07-29); current source target: v0.25.1.** The
-release-candidate hardening is tracked under **Unreleased** in
-[`docs/CHANGELOG.md`](docs/CHANGELOG.md); use `-version` or `--version` and the release notes to
-confirm any binary's actual capability set.
+**Current published release: v0.25.1 (2026-08-16).** See
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) for release details; use `-version` or `--version` and the
+same-tag documentation to confirm any binary's actual capability set.
 
 - **Runtime:** .NET Framework 4.5 or later (typical on Windows 7+).
 - **GUI:** double-click `9SEC_EvidW.exe`.
