@@ -8,7 +8,7 @@
 
 **[Latest release (ZIP)](https://github.com/9-Security/IR_Collect/releases/latest)** — the Release provides a ZIP and matching `.zip.sha256` sidecar. Verify the ZIP, then extract and run. v0.25.1 and later use `9SEC_EvidW.exe`; the v0.25.0 archive retains the previous executable filename.
 
-**Current published release: v0.25.1 (2026-08-16).** See
+**Current published release: v0.25.2 (2026-08-17).** See
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for release details; use `-version` or `--version` and the
 same-tag documentation to confirm any binary's actual capability set.
 

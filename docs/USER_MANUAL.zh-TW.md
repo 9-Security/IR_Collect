@@ -2,7 +2,7 @@
 
 [English](USER_MANUAL.md) | **繁體中文**
 
-本手冊面向操作人員與事件調查分析師，重點是「如何使用工具完成收集、匯入、檢視與匯出」，不涵蓋開發與發版細節。若只需要現場短版流程，請先看 **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)**（繁體）或 **[FIELD_SOP.md](FIELD_SOP.md)**（英文）。規格與版本歷程見 `SPEC.md`，變更紀錄見 `CHANGELOG.md`，技術文件索引見 `README.md`。本手冊對齊 `v0.25.1`。閱讀其他 tag 或使用其他 binary 時，請以其 `-version`、release notes 與同 tag 文件為準。
+本手冊面向操作人員與事件調查分析師，重點是「如何使用工具完成收集、匯入、檢視與匯出」，不涵蓋開發與發版細節。若只需要現場短版流程，請先看 **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)**（繁體）或 **[FIELD_SOP.md](FIELD_SOP.md)**（英文）。規格與版本歷程見 `SPEC.md`，變更紀錄見 `CHANGELOG.md`，技術文件索引見 `README.md`。本手冊對齊 `v0.25.2`。閱讀其他 tag 或使用其他 binary 時，請以其 `-version`、release notes 與同 tag 文件為準。
 
 ## 1. 工具定位
 

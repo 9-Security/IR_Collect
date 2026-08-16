@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+## [0.25.2] — 2026-08-17
+
+### Added
+- **Jump List OLE-CFB intake**：`.automaticDestinations-ms` 現在會以唯讀、有界限的 OLE Compound File reader 重組 FAT、DIFAT、miniFAT、directory、regular stream 與 mini stream，再從各 LNK stream 擷取目的地；CFB 鏈循環、越界、截斷與過大串流皆 fail-soft 並保留 parser warning。非 CFB 的 `.customDestinations-ms` 與損壞容器仍保留 bounded LNK／文字 fallback。
+
+### Changed
+- **Jump List 目的地涵蓋與 provenance**：文字 fallback 擴充至 A-Z 磁碟、UNC、HTTP(S)、known-folder 與磁碟根目錄；`jump_lists.csv` 的 `Details` 會標示 `Parser`、`Fallback` 與 `ParserNote`，`JumpListNormalizer` 會將降級狀態傳入 Fact `FallbackUsed`／`ParserNote`。每檔不再靜默只取前 10 筆，改為最多 4,096 個去重目的地並在到達上限時明確告警。本機 29 個 AutomaticDestinations（其中 2 個具可比較記錄）對 JLECmd path recall 為 **162/172（94.2%）**，原 v0.25.1 為 140/172（81.4%）。
+- **Jump List 差異驗證可觀測性**：`scripts\DiffValidate.ps1 -Kind jumplist` 更新為 CFB/target reader 說明，並列出最多 10 個未命中的 reference path，便於區分容器重組問題與 shell-item/IDList coverage gap。
+
+### Fixed
+- **非零偏移 LNK 掃描**：修正 `TryParseLnkLocalPath` 回傳絕對位移造成後續 LNK 被跨過；`bytesConsumed` 現為相對於 LNK 開頭，並驗證 ShellLink CLSID、LinkInfo 長度與邊界，降低偽 header 與越界誤讀。
+
+### Known Limitations
+- **Jump List shell-item/IDList**：目前尚未完整解碼 shell namespace／Target IDList，因此 known-folder GUID、搜尋虛擬資料夾、USB shell namespace 與少數需逐段組裝的路徑仍可能無法重現。raw Jump List 必須保留供 JLECmd 或其他專用工具交叉驗證；94.2% 是本機資料集的觀測值，不代表其他主機的保證召回率。
+
 ## [0.25.1] — 2026-08-16
 
 ### Changed

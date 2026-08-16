@@ -4,7 +4,7 @@
 這是一個基於 C# 開發的 Windows 事件回應收集與跨平台證據分析工作台。
 設計目標為**單一 Windows 執行檔 (Portable)**，無需安裝即可執行，支援 GUI 與 CLI；live collection 限 Windows，分析端可直接收容 Windows 案卷及 UAC 產生的 Linux/macOS folder、ZIP、TAR、TAR.GZ/TGZ 證據。
 
-**目前 GitHub 正式版：v0.25.1（2026-08-16）**。版本來源以 `src/AssemblyInfo.cs` 為準；發行內容見 `CHANGELOG.md`，功能契約見 `SPEC.md` 與 `ARTIFACTS.md`。
+**目前 GitHub 正式版：v0.25.2（2026-08-17）**。版本來源以 `src/AssemblyInfo.cs` 為準；發行內容見 `CHANGELOG.md`，功能契約見 `SPEC.md` 與 `ARTIFACTS.md`。
 
 ## 功能特色
 1.  **免安裝**: 只需一個 `9SEC_EvidW.exe` 檔案，支援 Win7 - Win11。
@@ -170,7 +170,7 @@ publish_release.bat REM 正式版建置、封裝；加 -Publish 可上傳 GitHub
 - [x] **Event Log**: 預設完整 `.evtx` + filtered CSV 雙輸出（`EventLogDays=0` 代表使用預設 7 天分析窗；`>0` 為自訂窗）；filtered CSV 另含 `Computer / UserId / TaskDisplayName / EventData` 結構化欄位，供 Fact Store、Timeline、Summary 與 AI 匯出共用；**Phase 3** 針對橫向移動／身分濫用相關事件加深正規化（如 4624–4625、4648、4672、4768–4769、4776、5140/5145、1149、4688、4697、4698/4702、7045），actions 為描述性語意（如 `KerberosServiceTicketRequested`、`ExplicitCredentialUsed`、`ShareAccessChecked`、`RemoteDesktopAuthenticated`），並強化 `SubjectUser` / `TargetUser` 與 SMB path 等實體；`5145` 存取之 `RelativeTargetName` 以 `Path` 呈現。若載入的是 **EVTX-only** 舊案卷，平台會於匯入時離線重建 `*_filtered.csv`，分析窗以各 `.evtx` 內**最新事件時間**為錨點回推；EVTX 檢視支援 **Description | Parsed fields | Raw XML**。UI 另提供 **Rebuild Selected Host Event Logs**。手動 fixture：`scripts/phase3_lateral_movement_fixture.csv`。
 - [x] **Logger**: 集中記錄 (logs/ir_collect.log)；**ZipFile** 壓縮/解壓（無需 PowerShell）。
 - [x] **Phase B3**: Fact Store 可選寫入 SQLite（Settings 勾選；各 host 的 analysis workspace `fact_store.db`；SchemaVersion 3）；**Export full LOG JSON**（Dashboard，`full_log_v3` envelope：`analysis_mode=facts_only`、host 摘要、workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要、完整 facts）；未放置 System.Data.SQLite.dll 時僅略過 SQLite 寫入。同 DLL 亦用於 **BrowsingHistoryView** Chrome/Firefox「Last visit」欄位（有則顯示造訪時間）。
-- [x] **Jump Lists**：CSV 產出含 Path；以 bounded byte-scan 找出 .automaticDestinations-ms / .customDestinations-ms 內候選 LNK 結構（MS-SHLLINK）並擷取 LocalBasePath。目前差異驗證資料集對 JLECmd 的 path recall 為 140/172（81.4%）；尚非完整 OLE-CFB parser，raw Jump List 仍保留供外部工具深挖。
+- [x] **Jump Lists**：CSV 產出含 Path／URL／known-folder 目的地；`.automaticDestinations-ms` 優先以 bounded OLE-CFB reader 重組 FAT／DIFAT／miniFAT、directory 與 regular/mini streams，再解析 MS-SHLLINK LocalBasePath；非 CFB、損壞串流與未結構化目的地使用 bounded fallback。`Details` 會記錄 Parser／Fallback／ParserNote，每檔最多 4,096 個去重目的地且不再只取前 10 筆。目前本機差異驗證對 JLECmd path recall 為 162/172（94.2%）；完整 shell-item／Target IDList 尚未涵蓋，raw Jump List 仍須保留供外部工具深挖。
 - [x] **案卷 Temp 清理**：關閉程式或右鍵「Clear Host Data」時自動刪除 %TEMP% 下該案解壓目錄。
 - [x] **Process User**: process_list.csv 的 User 欄位已由 WMI Win32_Process.GetOwner 補齊（另含 PPID/SessionId/ThreadCount/WorkingSetSize）。
 - [x] **Memory acquisition / handoff**: 已支援外部記憶體採集工具編排與後續外部分析 handoff；平台保留 sidecar 與輸出檔，不內建 dump 解析。

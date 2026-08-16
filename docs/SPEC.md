@@ -1,8 +1,8 @@
 # 9SEC Evidence Workbench 開發規格手冊 (Development Specification)
 
 **專案名稱**: 9SEC Evidence Workbench
-**版本**: v0.25.1
-**最後更新時間**: 2026-08-16
+**版本**: v0.25.2
+**最後更新時間**: 2026-08-17
 **開發者**: Antigravity (collaborating with User)
 
 ---
@@ -23,6 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
+| **v0.25.2** | 2026-08-17 | **Jump List parser / Provenance** | 新增 bounded OLE-CFB FAT／DIFAT／miniFAT 與 regular/mini stream 重組；擴充 A-Z／UNC／HTTP(S)／known-folder 目的地，fallback 狀態進入 Fact provenance；移除每檔 10 筆靜默截斷並修正非零偏移 LNK 掃描。對本機 JLECmd path recall 162/172（94.2%）；完整 shell-item／Target IDList 仍列為限制。 |
 | **v0.25.1** | 2026-08-16 | **Forensic integrity / Fix** | Collector output collision 拒絕與 atomic ZIP/SHA publish；evidence manifest 完整性、reparse 防護及 Fact Store build 前 digest 重驗；預置 `fact_store.db` 不再當作可信 facts；CSV 上限警告進入 export；CLI 失敗／coverage-gap exit code 對齊；MFT resident `$ATTRIBUTE_LIST` extension `$FILE_NAME` 長檔名合併。 |
 | **v0.25.0** | 2026-07-29 | **Cross-platform intake / Analysis / Governance** | UAC folder、ZIP、TAR、TAR.GZ/TGZ 可由 GUI 與分析 CLI 直接收容，支援 Linux/macOS process、bodyfile、auth、auditd、system/web log、package、network、account、shell history、persistence、journal/boot、login 與 executable/running-process hashes，保留逐檔 SHA-256 provenance 並進入 Fact Store／Timeline／Correlation／Graph／export。新增 facts-only Case Diff、選用的 persistent Fact Store build cache，以及完整化 Low Impact / Forensic Strict；archive intake、analysis workspace 與衍生輸出同步加入 bounded extraction、read-only evidence root 與 atomic publish hardening。 |
 | **v0.24.2** | 2026-07-20 | **教學資產 / Fix** | **上手教學資產 + Prefetch 解析器強化**:新增 `docs/sample-case/`——手工合成、零真實證據的雙主機案卷（釣魚→Temp 執行→Run 機碼→C$ 橫移→清日誌,兩台以同一 SHA-1 相連）+ 雙語導覽 `docs/DEMO.md`／`DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過（實測觸發 4+2 條 Guided Hunt、跨主機共享 Hash、18 節點調查圖）;整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`。另收 v0.24.1 後的 Prefetch code-review 強化:v30（Win10）run-count offset 誠實標為「推測、未驗證」、referenced-files 上限 8192、解壓 workspace 用較大值、malformed/v23 自測。詳見 CHANGELOG。 |
@@ -244,7 +245,7 @@
 | **filesystem_7days.csv** | CSV | `Path`, `Size`, `Created`, `Modified`, `Extension`, `SHA256` | 最近 7 天新增/修改檔案掃描（&lt;50MB 計算 Hash） |
 | **file_integrity.csv** | CSV | `FileName`, `Path`, `SHA256`, `SignatureStatus`, `Signer`, `Status` | `SHA256` Hash of System32 binaries |
 | **activity_timeline.csv** | CSV | `Time`, `Source`, `Action`, `Path`, `User`, `Details` | Unified Activity Timeline (Registry/JumpLists/Prefetch/Recent/Process) |
-| **jump_lists.csv** | CSV | `Time`, `Source`, `AppId`, `Path`, `User`, `Details` | Bounded byte-scan 找候選 MS-SHLLINK 並擷取 LocalBasePath；目前差異驗證對 JLECmd path recall 140/172（81.4%），非完整 OLE-CFB parser。**另**經 `JumpListNormalizer` 入 Fact Store／Entity search／`full_log_v3`（facts-only）；**Unified Timeline** 經 `activity_timeline.csv` 之 JumpList 列呈現，不重複 merge 本檔 |
+| **jump_lists.csv** | CSV | `Time`, `Source`, `AppId`, `Path`, `User`, `Details` | `.automaticDestinations-ms` 以 bounded OLE-CFB reader 重組 FAT／DIFAT／miniFAT、directory 與 regular/mini streams，再解析 MS-SHLLINK LocalBasePath；非 CFB、損壞串流及 path-like A-Z／UNC／HTTP(S)／known-folder 目的地使用 bounded fallback。`Details` 記錄 `Parser`／`Fallback`／`ParserNote`，每檔最多 4,096 個去重目的地；fallback 狀態傳入 Fact provenance。目前本機對 JLECmd path recall 162/172（94.2%），完整 shell-item／Target IDList 尚未涵蓋。**另**經 `JumpListNormalizer` 入 Fact Store／Entity search／`full_log_v3`（facts-only）；**Unified Timeline** 經 `activity_timeline.csv` 之 JumpList 列呈現，不重複 merge 本檔 |
 | **JumpLists/*.automaticDestinations-ms** | Binary | Jump List files (raw copy) | File Copy |
 | **collection_coverage.json** | JSON | 收集覆蓋率報告；含 `collection_mode_profile`（本次收集作用中之 **Standard / TriageFast / ForensicStrict**；舊案卷可缺）、`operator_acknowledged_risks`、`restricted_steps`、`skipped_by_profile`、`output_target_class`（`system_disk / removable / network / unknown`）、`overall_status`、各 major artifact group 的 `complete / partial / failed / skipped / missing` 狀態（Memory 步驟另可反映略過或未產出 sidecar）、`completed_steps` / `partial_steps` / `failed_steps` / **`skipped_steps`** / **`missing_steps`**、present/missing artifacts、detail，以及 `collector_user / collector_privilege_state / backup_privilege_status` runtime context。若有 `missing_steps` 或 `skipped_by_profile`，overall 亦降為 `partial`；Event Logs 只有在每個 `.evtx` 都有對應 `*_filtered.csv` 時才會是 `complete` | Collector |
 | **memory_acquisition.json** | JSON | 外部記憶體採集編排 sidecar（`schema=memory_acquisition_v2`）：`status`（complete/partial/failed/skipped 等）、工具路徑與參數、`args_preset`、輸出相對路徑、起迄 UTC、逾時設定、exit code、stdout/stderr 尾段、輸出檔大小與 SHA256、`validation_mode / validation_status / validation_detail`、`diagnostic_category / diagnostic_detail`、collector 是否管理員、設定旗標。不含映像解析 | `MemoryAcquisitionCollector` |

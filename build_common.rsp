@@ -113,6 +113,7 @@ src\Collectors\BrowserCollector.cs
 src\Collectors\UserActivityCollector.cs
 src\Collectors\RegistryCollector.cs
 src\Collectors\RegistryActivityCollector.cs
+src\Collectors\OleCompoundFileReader.cs
 src\Collectors\JumpListsCollector.cs
 src\Collectors\ActivityTimelineBuilder.cs
 src\Collectors\SoftwareCollector.cs

@@ -58,6 +58,10 @@ namespace IR_Collect.Tests
             failed += RunOne("RunToFile_streams_output_and_cleans_on_failure", RunToFile_streams_output_and_cleans_on_failure, sb) ? 0 : 1;
             failed += RunOne("MemoryRecord_args_governance_note_round_trips", MemoryRecord_args_governance_note_round_trips, sb) ? 0 : 1;
             failed += RunOne("Lnk_parser_reads_unicode_and_ansi_local_base_path", Lnk_parser_reads_unicode_and_ansi_local_base_path, sb) ? 0 : 1;
+            failed += RunOne("JumpList_ole_cfb_reassembles_regular_and_mini_streams", JumpList_ole_cfb_reassembles_regular_and_mini_streams, sb) ? 0 : 1;
+            failed += RunOne("JumpList_ole_cfb_malformed_chains_degrade_safely", JumpList_ole_cfb_malformed_chains_degrade_safely, sb) ? 0 : 1;
+            failed += RunOne("JumpList_scan_finds_multiple_nonzero_offset_lnks", JumpList_scan_finds_multiple_nonzero_offset_lnks, sb) ? 0 : 1;
+            failed += RunOne("JumpList_content_fallback_preserves_destination_types", JumpList_content_fallback_preserves_destination_types, sb) ? 0 : 1;
             failed += RunOne("MftRunList_parses_valid_and_survives_truncation", MftRunList_parses_valid_and_survives_truncation, sb) ? 0 : 1;
             failed += RunOne("MftNormalizer_action_reflects_timestamp_source", MftNormalizer_action_reflects_timestamp_source, sb) ? 0 : 1;
             failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
@@ -154,6 +158,7 @@ namespace IR_Collect.Tests
             failed += RunOne("ShellBagsNormalizer_ToFacts_maps_path_user_sid", ShellBagsNormalizer_ToFacts_maps_path_user_sid, sb) ? 0 : 1;
             failed += RunOne("JumpListNormalizer_ToFacts_emits_entities", JumpListNormalizer_ToFacts_emits_entities, sb) ? 0 : 1;
             failed += RunOne("JumpListNormalizer_ToFacts_unc_derives_workstation_share", JumpListNormalizer_ToFacts_unc_derives_workstation_share, sb) ? 0 : 1;
+            failed += RunOne("JumpListNormalizer_ToFacts_propagates_collector_fallback", JumpListNormalizer_ToFacts_propagates_collector_fallback, sb) ? 0 : 1;
             failed += RunOne("BitsJobNormalizer_ToFacts_unc_derives_share_and_remote_ip", BitsJobNormalizer_ToFacts_unc_derives_share_and_remote_ip, sb) ? 0 : 1;
             failed += RunOne("BitsJobNormalizer_ToFacts_multi_segment_remote_name_derives_unc_and_urls", BitsJobNormalizer_ToFacts_multi_segment_remote_name_derives_unc_and_urls, sb) ? 0 : 1;
             failed += RunOne("LogonSessionNormalizer_ToFacts_maps_user_sid_and_logon_metadata", LogonSessionNormalizer_ToFacts_maps_user_sid_and_logon_metadata, sb) ? 0 : 1;
@@ -3190,6 +3195,170 @@ namespace IR_Collect.Tests
             return string.Equals(ap, "C:\\temp\\a.txt", StringComparison.Ordinal);
         }
 
+        private static bool JumpList_ole_cfb_reassembles_regular_and_mini_streams()
+        {
+            const string miniPath = @"C:\Users\alice\Recent\mini.txt";
+            const string fragmentedPath = @"Z:\Evidence\fragmented-target.docx";
+            byte[] cfb = BuildJumpListCfbFixture(miniPath, fragmentedPath);
+            JumpListPathExtractionResult extraction = JumpListsCollector.ExtractJumpListPathsWithDiagnostics(cfb);
+            return string.Equals(extraction.ParserMode, "OLE-CFB", StringComparison.Ordinal) &&
+                !extraction.FallbackUsed &&
+                extraction.Paths.Contains(miniPath, StringComparer.OrdinalIgnoreCase) &&
+                extraction.Paths.Contains(fragmentedPath, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool JumpList_ole_cfb_malformed_chains_degrade_safely()
+        {
+            byte[] cfb = BuildJumpListCfbFixture(@"C:\mini.txt", @"Y:\fragmented.bin");
+            // FAT sector is sector 0 at file offset 512. Make regular stream sector 4 self-reference.
+            WriteCfbUInt32(cfb, 512 + (4 * 4), 4u);
+            OleCompoundFileResult parsed = OleCompoundFileReader.Read(cfb);
+            if (!parsed.IsCompoundFile || parsed.IsComplete || parsed.Streams.Count != 2 ||
+                !parsed.Warnings.Any(x => x.IndexOf("cyclic", StringComparison.OrdinalIgnoreCase) >= 0))
+                return false;
+
+            byte[] outOfRange = BuildJumpListCfbFixture(@"C:\mini.txt", @"Y:\fragmented.bin");
+            WriteCfbUInt32(outOfRange, 512 + (4 * 4), 99u);
+            OleCompoundFileResult rangeParsed = OleCompoundFileReader.Read(outOfRange);
+            return rangeParsed.IsCompoundFile && !rangeParsed.IsComplete &&
+                rangeParsed.Warnings.Any(x => x.IndexOf("invalid sector", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool JumpList_scan_finds_multiple_nonzero_offset_lnks()
+        {
+            const string firstPath = @"C:\one.txt";
+            const string secondPath = @"D:\two.txt";
+            byte[] first = BuildLnkFixture(firstPath, true);
+            byte[] second = BuildLnkFixture(secondPath, true);
+            byte[] data = Enumerable.Repeat((byte)0xAA, 64 + first.Length + 8 + second.Length).ToArray();
+            Buffer.BlockCopy(first, 0, data, 64, first.Length);
+            Buffer.BlockCopy(second, 0, data, 64 + first.Length + 8, second.Length);
+
+            int consumed;
+            string parsedFirst = JumpListsCollector.TryParseLnkLocalPath(data, 64, out consumed);
+            List<string> paths = JumpListsCollector.ExtractPathsFromLnkStructures(data);
+            return string.Equals(parsedFirst, firstPath, StringComparison.Ordinal) && consumed == first.Length &&
+                paths.Contains(firstPath, StringComparer.OrdinalIgnoreCase) &&
+                paths.Contains(secondPath, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool JumpList_content_fallback_preserves_destination_types()
+        {
+            const string url = "https://example.test/evidence?id=42";
+            const string knownFolder = "knownfolder:{33E28130-4E1E-4676-835A-98395C3BC3BB} ==> My Pictures";
+            byte[] content = Encoding.Unicode.GetBytes("D:\\\0" + url + "\0" + knownFolder + "\0");
+            JumpListPathExtractionResult extraction = JumpListsCollector.ExtractJumpListPathsWithDiagnostics(content);
+            bool ok = extraction.FallbackUsed &&
+                extraction.Paths.Contains(@"D:\", StringComparer.OrdinalIgnoreCase) &&
+                extraction.Paths.Contains(url, StringComparer.OrdinalIgnoreCase) &&
+                extraction.Paths.Contains(knownFolder, StringComparer.OrdinalIgnoreCase);
+            if (!ok)
+                throw new InvalidOperationException("Extracted: " + string.Join(" | ", extraction.Paths.ToArray()));
+            return true;
+        }
+
+        private static byte[] BuildJumpListCfbFixture(string miniPath, string fragmentedPath)
+        {
+            const int sectorSize = 512;
+            const uint FreeSector = 0xFFFFFFFFu;
+            const uint EndOfChain = 0xFFFFFFFEu;
+            const uint FatSector = 0xFFFFFFFDu;
+            const int sectorCount = 12;
+            byte[] file = new byte[sectorSize * (sectorCount + 1)];
+
+            byte[] signature = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
+            Buffer.BlockCopy(signature, 0, file, 0, signature.Length);
+            WriteCfbUInt16(file, 0x18, 0x003E);
+            WriteCfbUInt16(file, 0x1A, 3);
+            WriteCfbUInt16(file, 0x1C, 0xFFFE);
+            WriteCfbUInt16(file, 0x1E, 9);
+            WriteCfbUInt16(file, 0x20, 6);
+            WriteCfbUInt32(file, 0x28, 0);
+            WriteCfbUInt32(file, 0x2C, 1);
+            WriteCfbUInt32(file, 0x30, 1);
+            WriteCfbUInt32(file, 0x38, 4096);
+            WriteCfbUInt32(file, 0x3C, 2);
+            WriteCfbUInt32(file, 0x40, 1);
+            WriteCfbUInt32(file, 0x44, EndOfChain);
+            WriteCfbUInt32(file, 0x48, 0);
+            for (int i = 0; i < 109; i++)
+                WriteCfbUInt32(file, 0x4C + (i * 4), FreeSector);
+            WriteCfbUInt32(file, 0x4C, 0);
+
+            int fatOffset = sectorSize;
+            for (int i = 0; i < sectorSize / 4; i++)
+                WriteCfbUInt32(file, fatOffset + (i * 4), FreeSector);
+            WriteCfbUInt32(file, fatOffset + (0 * 4), FatSector);
+            WriteCfbUInt32(file, fatOffset + (1 * 4), EndOfChain);
+            WriteCfbUInt32(file, fatOffset + (2 * 4), EndOfChain);
+            WriteCfbUInt32(file, fatOffset + (3 * 4), EndOfChain);
+
+            int[] fragmentedChain = { 4, 7, 5, 9, 6, 11, 8, 10 };
+            for (int i = 0; i < fragmentedChain.Length; i++)
+            {
+                uint next = i + 1 < fragmentedChain.Length ? (uint)fragmentedChain[i + 1] : EndOfChain;
+                WriteCfbUInt32(file, fatOffset + (fragmentedChain[i] * 4), next);
+            }
+
+            byte[] miniLnk = BuildLnkFixture(miniPath, true);
+            int miniSectorCount = (miniLnk.Length + 63) / 64;
+            int miniFatOffset = sectorSize * 3;
+            for (int i = 0; i < sectorSize / 4; i++)
+                WriteCfbUInt32(file, miniFatOffset + (i * 4), FreeSector);
+            for (int i = 0; i < miniSectorCount; i++)
+                WriteCfbUInt32(file, miniFatOffset + (i * 4), i + 1 < miniSectorCount ? (uint)(i + 1) : EndOfChain);
+
+            int rootMiniStreamOffset = sectorSize * 4;
+            Buffer.BlockCopy(miniLnk, 0, file, rootMiniStreamOffset, miniLnk.Length);
+
+            byte[] fragmentedLnk = BuildLnkFixture(fragmentedPath, true);
+            byte[] regularStream = new byte[4096];
+            Buffer.BlockCopy(fragmentedLnk, 0, regularStream, 480, fragmentedLnk.Length);
+            for (int i = 0; i < fragmentedChain.Length; i++)
+            {
+                int physicalOffset = (fragmentedChain[i] + 1) * sectorSize;
+                Buffer.BlockCopy(regularStream, i * sectorSize, file, physicalOffset, sectorSize);
+            }
+
+            int directoryOffset = sectorSize * 2;
+            WriteCfbDirectoryEntry(file, directoryOffset, "Root Entry", 5, 3,
+                (ulong)(miniSectorCount * 64));
+            WriteCfbDirectoryEntry(file, directoryOffset + 128, "1", 2, 0, (ulong)miniLnk.Length);
+            WriteCfbDirectoryEntry(file, directoryOffset + 256, "2", 2, 4, 4096);
+            return file;
+        }
+
+        private static void WriteCfbDirectoryEntry(byte[] data, int offset, string name, byte type,
+            uint startSector, ulong streamSize)
+        {
+            byte[] nameBytes = Encoding.Unicode.GetBytes((name ?? "") + "\0");
+            int copyLength = Math.Min(nameBytes.Length, 64);
+            Buffer.BlockCopy(nameBytes, 0, data, offset, copyLength);
+            WriteCfbUInt16(data, offset + 64, (ushort)copyLength);
+            data[offset + 66] = type;
+            data[offset + 67] = 1;
+            WriteCfbUInt32(data, offset + 68, 0xFFFFFFFFu);
+            WriteCfbUInt32(data, offset + 72, 0xFFFFFFFFu);
+            WriteCfbUInt32(data, offset + 76, 0xFFFFFFFFu);
+            WriteCfbUInt32(data, offset + 116, startSector);
+            WriteCfbUInt32(data, offset + 120, (uint)(streamSize & 0xFFFFFFFFuL));
+            WriteCfbUInt32(data, offset + 124, (uint)(streamSize >> 32));
+        }
+
+        private static void WriteCfbUInt16(byte[] data, int offset, ushort value)
+        {
+            data[offset] = (byte)(value & 0xFF);
+            data[offset + 1] = (byte)(value >> 8);
+        }
+
+        private static void WriteCfbUInt32(byte[] data, int offset, uint value)
+        {
+            data[offset] = (byte)(value & 0xFF);
+            data[offset + 1] = (byte)((value >> 8) & 0xFF);
+            data[offset + 2] = (byte)((value >> 16) & 0xFF);
+            data[offset + 3] = (byte)((value >> 24) & 0xFF);
+        }
+
         private static bool RunToFile_streams_output_and_cleans_on_failure()
         {
             string dir = CreateTempDir("IRCollectRunToFile_");
@@ -5694,6 +5863,29 @@ namespace IR_Collect.Tests
                 if (!HasEntity(f, "Path", @"\\FILESERVER\tools\x\y.txt"))
                     return false;
                 return f.FallbackUsed;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool JumpListNormalizer_ToFacts_propagates_collector_fallback()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "IRCollectJLProv_" + Guid.NewGuid().ToString("N"));
+            string csv = Path.Combine(dir, ArtifactNames.JumpListsCsv);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(csv,
+                    "Time,Source,AppId,Path,User,Details\n" +
+                    "2020-01-02 03:04:05,Automatic,app,C:\\evidence.txt,user," +
+                    "File: x.automaticDestinations-ms; Parser=OLE-CFB+Fallback; Fallback=true; ParserNote=CFB stream chain is cyclic.\n",
+                    new UTF8Encoding(false));
+                List<Fact> facts = JumpListNormalizer.ToFacts(csv);
+                return facts.Count == 1 && facts[0].FallbackUsed &&
+                    !string.IsNullOrWhiteSpace(facts[0].ParserNote) &&
+                    facts[0].ParserNote.IndexOf("cyclic", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             finally
             {

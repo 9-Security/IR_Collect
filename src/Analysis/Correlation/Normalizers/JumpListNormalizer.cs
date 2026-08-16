@@ -41,10 +41,24 @@ namespace IR_Collect.Analysis.Correlation.Normalizers
                 fact.ParseLevel = FactProvenanceMetadata.StructuredParseLevel;
                 fact.Details = BuildDetails(sourceCol, details);
 
+                string parserMode = GetCollectorDetail(details, "Parser");
+                string collectorParserNote = GetCollectorDetail(details, "ParserNote");
+                bool collectorFallback = string.Equals(GetCollectorDetail(details, "Fallback"), "true",
+                    StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(parserMode) &&
+                     parserMode.IndexOf("Fallback", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (collectorFallback)
+                {
+                    fact.FallbackUsed = true;
+                    AppendParserNote(fact, !string.IsNullOrWhiteSpace(collectorParserNote)
+                        ? collectorParserNote
+                        : "Jump List collector used " + parserMode + ".");
+                }
+
                 if (!hasUsableTime)
                 {
                     fact.FallbackUsed = true;
-                    fact.ParserNote = "Jump List row did not expose a usable timestamp in the Time column.";
+                    AppendParserNote(fact, "Jump List row did not expose a usable timestamp in the Time column.");
                 }
 
                 if (!string.IsNullOrWhiteSpace(path))
@@ -86,6 +100,31 @@ namespace IR_Collect.Analysis.Correlation.Normalizers
                 sb.Append("CollectorDetails=").Append(details.Trim());
             }
             return sb.Length == 0 ? "" : sb.ToString();
+        }
+
+        private static string GetCollectorDetail(string details, string key)
+        {
+            if (string.IsNullOrWhiteSpace(details) || string.IsNullOrWhiteSpace(key))
+                return "";
+            string marker = key + "=";
+            int start = details.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+                return "";
+            start += marker.Length;
+            int end = details.IndexOf(';', start);
+            if (end < 0)
+                end = details.Length;
+            return details.Substring(start, end - start).Trim();
+        }
+
+        private static void AppendParserNote(Fact fact, string note)
+        {
+            if (fact == null || string.IsNullOrWhiteSpace(note))
+                return;
+            if (string.IsNullOrWhiteSpace(fact.ParserNote))
+                fact.ParserNote = note.Trim();
+            else
+                fact.ParserNote += " " + note.Trim();
         }
     }
 }

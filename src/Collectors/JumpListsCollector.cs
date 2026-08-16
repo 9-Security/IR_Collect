@@ -8,8 +8,24 @@ using IR_Collect.Utils;
 
 namespace IR_Collect.Collectors
 {
+    internal sealed class JumpListPathExtractionResult
+    {
+        public JumpListPathExtractionResult()
+        {
+            Paths = new List<string>();
+            Warnings = new List<string>();
+        }
+
+        public List<string> Paths { get; private set; }
+        public string ParserMode { get; set; }
+        public bool FallbackUsed { get; set; }
+        public List<string> Warnings { get; private set; }
+    }
+
     public static class JumpListsCollector
     {
+        private const int MaxExtractedPaths = 4096;
+
         public static void Collect(string outputDir)
         {
             Console.WriteLine("[*] Collecting Jump Lists...");
@@ -68,10 +84,10 @@ namespace IR_Collect.Collectors
             {
                 string destDir = Path.Combine(outputDir, "JumpLists");
                 if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-                
+                var copiedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var e in entries)
                 {
-                    if (!string.IsNullOrEmpty(e.FilePath) && File.Exists(e.FilePath))
+                    if (!string.IsNullOrEmpty(e.FilePath) && copiedFiles.Add(e.FilePath) && File.Exists(e.FilePath))
                     {
                         string destFile = Path.Combine(destDir, Path.GetFileName(e.FilePath));
                         try { File.Copy(e.FilePath, destFile, true); } catch (Exception ex) { errorCount++; Logger.Warning("JumpLists copy: " + ex.Message); }
@@ -131,11 +147,12 @@ namespace IR_Collect.Collectors
                     if (total < data.Length)
                         Array.Resize(ref data, total);
                 }
-                var paths = ExtractJumpListPaths(data);
+                JumpListPathExtractionResult extraction = ExtractJumpListPathsWithDiagnostics(data);
+                string details = BuildCollectorDetails(Path.GetFileName(filePath), extraction);
 
-                if (paths.Count > 0)
+                if (extraction.Paths.Count > 0)
                     {
-                        foreach (var path in paths.Take(10)) // Limit to 10 per file
+                        foreach (var path in extraction.Paths)
                         {
                             entries.Add(new JumpListEntry
                             {
@@ -144,7 +161,7 @@ namespace IR_Collect.Collectors
                                 AppId = appId,
                                 Path = path,
                                 User = user,
-                                Details = "File: " + Path.GetFileName(filePath),
+                                Details = details,
                                 FilePath = filePath
                             });
                         }
@@ -159,7 +176,7 @@ namespace IR_Collect.Collectors
                             AppId = appId,
                             Path = "",
                             User = user,
-                            Details = "File: " + Path.GetFileName(filePath),
+                            Details = details,
                             FilePath = filePath
                         });
                     }
@@ -168,27 +185,80 @@ namespace IR_Collect.Collectors
         }
 
         /// <summary>
-        /// Extract target paths from a jump-list file's bytes exactly as collection does: structured
-        /// LNK LocalBasePath read first, then merge any additional UTF-16/ASCII path-like content.
+        /// Extract target paths from a jump-list file's bytes exactly as collection does: OLE-CFB
+        /// streams first when present, then a bounded raw LNK/content fallback for recovery.
         /// Shared by ParseJumpListFile and the -parse differential-validation CLI so the two never drift.
         /// </summary>
         internal static List<string> ExtractJumpListPaths(byte[] data)
         {
-            string content = Encoding.Unicode.GetString(data);
-            string ascii = Encoding.ASCII.GetString(data);
-
-            var paths = ExtractPathsFromLnkStructures(data);
-            if (paths.Count == 0)
-                return ExtractPathsFromContent(content, ascii);
-
-            var contentPaths = ExtractPathsFromContent(content, ascii);
-            var seen = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
-            foreach (var p in contentPaths)
-                if (!seen.Contains(p)) { seen.Add(p); paths.Add(p); }
-            return paths;
+            return ExtractJumpListPathsWithDiagnostics(data).Paths;
         }
 
-        /// <summary>Scan for LNK structures (header 0x4C) and extract LocalBasePath from LinkInfo, or fallback to UTF-16 path scan.</summary>
+        internal static JumpListPathExtractionResult ExtractJumpListPathsWithDiagnostics(byte[] data)
+        {
+            var extraction = new JumpListPathExtractionResult();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (data == null || data.Length == 0)
+            {
+                extraction.ParserMode = "ByteScanFallback";
+                extraction.FallbackUsed = true;
+                AddExtractionWarning(extraction, "Jump List input is empty.");
+                return extraction;
+            }
+
+            OleCompoundFileResult compound = OleCompoundFileReader.Read(data);
+            if (compound.IsCompoundFile)
+            {
+                extraction.ParserMode = "OLE-CFB";
+                bool streamContentFallback = false;
+                for (int i = 0; i < compound.Streams.Count; i++)
+                {
+                    OleCompoundStream stream = compound.Streams[i];
+                    if (stream == null || stream.Data == null ||
+                        string.Equals(stream.Name, "DestList", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    MergePaths(extraction, seen, ExtractPathsFromLnkStructures(stream.Data));
+                    int beforeContent = extraction.Paths.Count;
+                    MergePaths(extraction, seen, ExtractPathsFromContent(stream.Data));
+                    if (extraction.Paths.Count > beforeContent)
+                        streamContentFallback = true;
+                }
+
+                int beforeRawFallback = extraction.Paths.Count;
+                MergePaths(extraction, seen, ExtractPathsFromLnkStructures(data));
+                MergePaths(extraction, seen, ExtractPathsFromContent(data));
+                if (extraction.Paths.Count > beforeRawFallback)
+                {
+                    extraction.FallbackUsed = true;
+                    AddExtractionWarning(extraction, "Raw byte scan recovered paths outside reconstructed CFB streams.");
+                }
+                if (streamContentFallback)
+                {
+                    extraction.FallbackUsed = true;
+                    AddExtractionWarning(extraction, "Path-like content fallback supplemented structured LNK fields.");
+                }
+                if (!compound.IsComplete)
+                {
+                    extraction.FallbackUsed = true;
+                    for (int i = 0; i < compound.Warnings.Count; i++)
+                        AddExtractionWarning(extraction, compound.Warnings[i]);
+                }
+                if (extraction.FallbackUsed)
+                    extraction.ParserMode = "OLE-CFB+Fallback";
+            }
+            else
+            {
+                extraction.ParserMode = "ByteScanFallback";
+                extraction.FallbackUsed = true;
+                MergePaths(extraction, seen, ExtractPathsFromLnkStructures(data));
+                MergePaths(extraction, seen, ExtractPathsFromContent(data));
+                AddExtractionWarning(extraction, "Input is not an OLE-CFB container; bounded LNK/content scan was used.");
+            }
+            return extraction;
+        }
+
+        /// <summary>Scan for complete ShellLink headers and extract LocalBasePath from LinkInfo.</summary>
         internal static List<string> ExtractPathsFromLnkStructures(byte[] data)
         {
             var paths = new List<string>();
@@ -198,7 +268,7 @@ namespace IR_Collect.Collectors
             int pos = 0;
             while (pos <= data.Length - 4)
             {
-                if (data[pos] == 0x4C && data[pos + 1] == 0 && data[pos + 2] == 0 && data[pos + 3] == 0)
+                if (IsShellLinkHeader(data, pos))
                 {
                     int skipBytes;
                     string path = TryParseLnkLocalPath(data, pos, out skipBytes);
@@ -206,34 +276,6 @@ namespace IR_Collect.Collectors
                     {
                         seen.Add(path);
                         paths.Add(path);
-                    }
-                    if (string.IsNullOrEmpty(path))
-                    {
-                        int scanEnd = Math.Min(pos + 2048, data.Length - 6);
-                        for (int i = pos + 20; i < scanEnd; i += 2)
-                        {
-                            if (i + 6 <= data.Length && data[i] == 'C' && data[i + 1] == 0 && data[i + 2] == ':' && data[i + 3] == 0 && data[i + 4] == '\\' && data[i + 5] == 0)
-                            {
-                                path = ReadUtf16NullTerminated(data, i);
-                                if (!string.IsNullOrEmpty(path) && path.Length > 3 && path.Length < 260 && path.Contains("\\") && !seen.Contains(path))
-                                {
-                                    seen.Add(path);
-                                    paths.Add(path);
-                                }
-                                break;
-                            }
-                            if (i + 6 <= data.Length && data[i] == 'D' && data[i + 1] == 0 && data[i + 2] == ':' && data[i + 3] == 0 && data[i + 4] == '\\' && data[i + 5] == 0)
-                            {
-                                path = ReadUtf16NullTerminated(data, i);
-                                if (!string.IsNullOrEmpty(path) && path.Length > 3 && path.Length < 260 && path.Contains("\\") && !seen.Contains(path))
-                                {
-                                    seen.Add(path);
-                                    paths.Add(path);
-                                }
-                                break;
-                            }
-                        }
-                        skipBytes = 76;
                     }
                     pos += Math.Max(76, skipBytes);
                 }
@@ -248,6 +290,7 @@ namespace IR_Collect.Collectors
             bytesConsumed = 76;
             const int headerSize = 76;
             if (data == null || lnkStart < 0 || lnkStart + headerSize > data.Length) return null;
+            if (!IsShellLinkHeader(data, lnkStart)) return null;
 
             // MS-SHLLINK ShellLinkHeader: LinkFlags at offset 0x14. bit0=HasLinkTargetIDList,
             // bit1=HasLinkInfo. The previous code ignored these and always read the ANSI
@@ -270,8 +313,15 @@ namespace IR_Collect.Collectors
             int linkInfoSize = BitConverter.ToInt32(data, linkInfoStart + 0x00);
             int linkInfoHeaderSize = BitConverter.ToInt32(data, linkInfoStart + 0x04);
             uint linkInfoFlags = (uint)BitConverter.ToInt32(data, linkInfoStart + 0x08);
-            if (linkInfoSize < 0x1C || linkInfoSize > 8192) { bytesConsumed = off + 4; return null; }
-            bytesConsumed = linkInfoStart + linkInfoSize;
+            if (linkInfoSize < 0x1C || linkInfoSize > 8192)
+            {
+                bytesConsumed = Math.Max(headerSize, (off + 4) - lnkStart);
+                return null;
+            }
+            if (linkInfoHeaderSize < 0x1C || linkInfoHeaderSize > linkInfoSize ||
+                (long)linkInfoStart + linkInfoSize > data.Length)
+                return null;
+            bytesConsumed = (linkInfoStart + linkInfoSize) - lnkStart;
             if ((linkInfoFlags & 0x00000001u) == 0) return null; // VolumeIDAndLocalBasePath not present
 
             // Prefer the Unicode local base path (LocalBasePathOffsetUnicode at 0x1C) when the optional
@@ -294,11 +344,25 @@ namespace IR_Collect.Collectors
             if (pathStart < 0 || pathStart + 1 > data.Length) return null;
 
             string path = unicode ? ReadUtf16NullTerminated(data, pathStart) : ReadAnsiNullTerminated(data, pathStart);
-            if (!string.IsNullOrEmpty(path) && path.Length > 2 && path.Length < 260) return path;
+            if (!string.IsNullOrEmpty(path) && path.Length > 2 && path.Length <= 1024) return path;
             // Last resort: try the other encoding in case LinkInfoHeaderSize was misleading.
             path = unicode ? ReadAnsiNullTerminated(data, pathStart) : ReadUtf16NullTerminated(data, pathStart);
-            if (!string.IsNullOrEmpty(path) && path.Length > 2 && path.Length < 260) return path;
+            if (!string.IsNullOrEmpty(path) && path.Length > 2 && path.Length <= 1024) return path;
             return null;
+        }
+
+        private static bool IsShellLinkHeader(byte[] data, int start)
+        {
+            if (data == null || start < 0 || start + 20 > data.Length)
+                return false;
+            if (data[start] != 0x4C || data[start + 1] != 0 || data[start + 2] != 0 || data[start + 3] != 0)
+                return false;
+            byte[] clsid = { 0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+                             0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 };
+            for (int i = 0; i < clsid.Length; i++)
+                if (data[start + 4 + i] != clsid[i])
+                    return false;
+            return true;
         }
 
         private static string ReadUtf16NullTerminated(byte[] data, int start)
@@ -310,7 +374,7 @@ namespace IR_Collect.Collectors
                 if (c == '\0') break;
                 if (char.IsControl(c) && c != '\t') break;
                 sb.Append(c);
-                if (sb.Length >= 259) break;
+                if (sb.Length >= 1024) break;
             }
             return sb.ToString().Trim();
         }
@@ -318,7 +382,7 @@ namespace IR_Collect.Collectors
         private static string ReadAnsiNullTerminated(byte[] data, int start)
         {
             var sb = new StringBuilder();
-            for (int i = start; i < data.Length && i < start + 260; i++)
+            for (int i = start; i < data.Length && i < start + 1025; i++)
             {
                 if (data[i] == 0) break;
                 if (data[i] < 32 && data[i] != '\t') break;
@@ -327,37 +391,137 @@ namespace IR_Collect.Collectors
             return sb.ToString().Trim();
         }
 
-        private static List<string> ExtractPathsFromContent(string unicode, string ascii)
+        private static List<string> ExtractPathsFromContent(byte[] data)
         {
             var paths = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (data == null || data.Length == 0)
+                return paths;
 
-            // Look for common drive patterns (C:\, D:\, etc.)
-            string[] drivePatterns = { "C:\\", "D:\\", "E:\\", "F:\\" };
-            foreach (var pattern in drivePatterns)
+            ExtractPathsFromText(Encoding.Unicode.GetString(data), paths, seen);
+            ExtractPathsFromText(Encoding.ASCII.GetString(data), paths, seen);
+            return paths;
+        }
+
+        private static void ExtractPathsFromText(string text, List<string> paths, HashSet<string> seen)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+            for (char drive = 'A'; drive <= 'Z' && paths.Count < MaxExtractedPaths; drive++)
             {
+                string pattern = drive + ":\\";
                 int idx = 0;
-                while ((idx = unicode.IndexOf(pattern, idx)) >= 0)
+                while (idx < text.Length && (idx = text.IndexOf(pattern, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
                 {
-                    int end = idx;
-                    while (end < unicode.Length && unicode[end] != '\0' && unicode[end] != '\r' && unicode[end] != '\n' && end - idx < 260)
-                    {
-                        end++;
-                    }
-                    if (end > idx)
-                    {
-                        string candidate = unicode.Substring(idx, end - idx).Trim();
-                        if (candidate.Length > 3 && candidate.Contains("\\") && !seen.Contains(candidate))
-                        {
-                            seen.Add(candidate);
-                            paths.Add(candidate);
-                        }
-                    }
-                    idx = end;
+                    AddTextCandidate(text, idx, paths, seen);
+                    idx += pattern.Length;
                 }
             }
 
-            return paths;
+            string[] destinationPrefixes = { "https://", "http://", "knownfolder:" };
+            for (int p = 0; p < destinationPrefixes.Length && paths.Count < MaxExtractedPaths; p++)
+            {
+                string prefix = destinationPrefixes[p];
+                int idx = 0;
+                while (idx < text.Length &&
+                    (idx = text.IndexOf(prefix, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+                {
+                    AddTextCandidate(text, idx, paths, seen);
+                    idx += prefix.Length;
+                }
+            }
+
+            int unc = 0;
+            while (paths.Count < MaxExtractedPaths && unc < text.Length &&
+                (unc = text.IndexOf("\\\\", unc, StringComparison.Ordinal)) >= 0)
+            {
+                AddTextCandidate(text, unc, paths, seen);
+                unc += 2;
+            }
+        }
+
+        private static void AddTextCandidate(string text, int start, List<string> paths, HashSet<string> seen)
+        {
+            bool knownFolder = text.IndexOf("knownfolder:", start, StringComparison.OrdinalIgnoreCase) == start;
+            int end = start;
+            while (end < text.Length && end - start < 1024)
+            {
+                char c = text[end];
+                if (c == '\0' || c == '\r' || c == '\n' || c == '"' || c == '<' ||
+                    (c == '>' && !knownFolder) || c == '|')
+                    break;
+                if (char.IsControl(c))
+                    break;
+                end++;
+            }
+            if (end <= start)
+                return;
+            string candidate = text.Substring(start, end - start).Trim().TrimEnd('.', ',', ';');
+            if (candidate.Length < 3 || !IsLikelyAbsolutePath(candidate))
+                return;
+            if (seen.Add(candidate))
+                paths.Add(candidate);
+        }
+
+        private static bool IsLikelyAbsolutePath(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
+            if (value.Length >= 3 && char.IsLetter(value[0]) && value[1] == ':' && value[2] == '\\')
+                return true;
+            if (value.Length >= 5 && value[0] == '\\' && value[1] == '\\' && value.IndexOf('\\', 2) > 2)
+                return true;
+            if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return value.IndexOf('/', value.IndexOf("://", StringComparison.Ordinal) + 3) > 0;
+            return value.StartsWith("knownfolder:", StringComparison.OrdinalIgnoreCase) && value.Length > 12;
+        }
+
+        private static void MergePaths(JumpListPathExtractionResult extraction, HashSet<string> seen,
+            IEnumerable<string> candidates)
+        {
+            if (candidates == null)
+                return;
+            foreach (string candidate in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(candidate) || !seen.Add(candidate))
+                    continue;
+                if (extraction.Paths.Count >= MaxExtractedPaths)
+                {
+                    AddExtractionWarning(extraction, "Jump List path output reached the supported 4096-entry limit.");
+                    extraction.FallbackUsed = true;
+                    return;
+                }
+                extraction.Paths.Add(candidate);
+            }
+        }
+
+        private static void AddExtractionWarning(JumpListPathExtractionResult extraction, string warning)
+        {
+            const int MaxWarnings = 20;
+            if (extraction == null || string.IsNullOrWhiteSpace(warning) ||
+                extraction.Warnings.Count >= MaxWarnings || extraction.Warnings.Contains(warning))
+                return;
+            extraction.Warnings.Add(warning);
+        }
+
+        private static string BuildCollectorDetails(string fileName, JumpListPathExtractionResult extraction)
+        {
+            var details = new StringBuilder();
+            details.Append("File: ").Append(fileName ?? "");
+            details.Append("; Parser=").Append(extraction != null ? extraction.ParserMode : "Unknown");
+            if (extraction != null && extraction.FallbackUsed)
+                details.Append("; Fallback=true");
+            if (extraction != null && extraction.Warnings.Count > 0)
+            {
+                details.Append("; ParserNote=");
+                for (int i = 0; i < extraction.Warnings.Count; i++)
+                {
+                    if (i > 0) details.Append(" | ");
+                    details.Append((extraction.Warnings[i] ?? "").Replace("\r", " ").Replace("\n", " ").Replace(";", ","));
+                }
+            }
+            return details.ToString();
         }
 
         private class JumpListEntry

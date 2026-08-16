@@ -2,7 +2,7 @@
 
 **English** | [繁體中文](USER_MANUAL.zh-TW.md)
 
-This manual is for operators and incident analysts. It explains **how** to collect, import, review, and export with the tool—not build or release engineering. For a short field playbook see **[FIELD_SOP.md](FIELD_SOP.md)** (English) or **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)** (Traditional Chinese). Specification and version history: `SPEC.md`. Changes: `CHANGELOG.md`. Doc index: `README.md`. This manual is aligned with `v0.25.1`. When reading another tag or binary, use its `-version`, release notes, and same-tag documents.
+This manual is for operators and incident analysts. It explains **how** to collect, import, review, and export with the tool—not build or release engineering. For a short field playbook see **[FIELD_SOP.md](FIELD_SOP.md)** (English) or **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)** (Traditional Chinese). Specification and version history: `SPEC.md`. Changes: `CHANGELOG.md`. Doc index: `README.md`. This manual is aligned with `v0.25.2`. When reading another tag or binary, use its `-version`, release notes, and same-tag documents.
 
 ## 1. What the tool is
 

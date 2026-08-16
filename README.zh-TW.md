@@ -8,7 +8,7 @@
 
 **[最新發行版（ZIP）](https://github.com/9-Security/IR_Collect/releases/latest)** — Release 提供 ZIP 與對應的 `.zip.sha256` sidecar；請先驗證 ZIP，再解壓執行。v0.25.1 起使用 **`9SEC_EvidW.exe`**，v0.25.0 archive 仍保留先前的執行檔名。
 
-**目前 GitHub 正式版：v0.25.1（2026-08-16）。** 發行內容見 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；請以 `-version`／`--version` 與同 tag 文件確認任一執行檔的實際能力。
+**目前 GitHub 正式版：v0.25.2（2026-08-17）。** 發行內容見 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)；請以 `-version`／`--version` 與同 tag 文件確認任一執行檔的實際能力。
 
 - **執行環境：** .NET Framework 4.5+（一般 Win7 以上已具備）。
 - **圖形介面：** 連點 `9SEC_EvidW.exe`。

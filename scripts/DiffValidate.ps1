@@ -189,7 +189,7 @@ function Validate-Lnk {
 }
 
 function Validate-JumpList {
-    Write-Section "JUMPLIST  (9SEC Evidence Workbench path scan  vs  JLECmd)  [informational]"
+    Write-Section "JUMPLIST  (9SEC Evidence Workbench CFB/target reader  vs  JLECmd)  [informational]"
     $exe = Resolve-Tool "JLECmd"
     if (-not $exe) {
         Write-Host ("SKIP: JLECmd.exe not found under " + $ToolsDir + " - jump list validation skipped.") -ForegroundColor Yellow
@@ -224,6 +224,7 @@ function Validate-JumpList {
     }
 
     $totalRef = 0; $totalRecalled = 0; $filesCompared = 0
+    $missing = @()
     foreach ($f in $files) {
         $key = $f.Name
         if (-not $refByFile.ContainsKey($key)) { continue }
@@ -231,7 +232,10 @@ function Validate-JumpList {
         if ($ref.Count -eq 0) { continue }
         $ours = @(Get-OurPaths "jumplist" $f.FullName | ForEach-Object { Norm $_ })
         $recalled = 0
-        foreach ($r in $ref) { if ($ours -contains $r) { $recalled++ } }
+        foreach ($r in $ref) {
+            if ($ours -contains $r) { $recalled++ }
+            else { $missing += [PSCustomObject]@{ File = $key; ReferencePath = $r } }
+        }
         $totalRef += $ref.Count
         $totalRecalled += $recalled
         $filesCompared++
@@ -244,8 +248,12 @@ function Validate-JumpList {
         $pct = [math]::Round(100.0 * $totalRecalled / $totalRef, 1)
         Write-Host ("Files compared: " + $filesCompared)
         Write-Host ("Path recall vs JLECmd: " + $totalRecalled + "/" + $totalRef + " (" + $pct + "%)") -ForegroundColor DarkGray
-        Write-Host "NOTE: our jump-list reader is a byte-scan heuristic, not a full OLE-CFB parser;" -ForegroundColor DarkGray
-        Write-Host "      recall < 100% here is a known coverage gap for Phase 2.3, not a gate failure." -ForegroundColor DarkGray
+        if ($missing.Count -gt 0) {
+            Write-Host "Missing reference path sample (up to 10):" -ForegroundColor DarkGray
+            $missing | Select-Object -First 10 | Format-Table -AutoSize | Out-String | Write-Host
+        }
+        Write-Host "NOTE: the reader reconstructs bounded OLE-CFB streams and retains a raw target scan fallback;" -ForegroundColor DarkGray
+        Write-Host "      unresolved shell-item/IDList targets remain an informational coverage gap, not a gate failure." -ForegroundColor DarkGray
     }
 
     Remove-Item (Split-Path $csv -Parent) -Recurse -Force -ErrorAction SilentlyContinue
