@@ -11,8 +11,8 @@
 
 ## 0. 先取得執行檔
 
-自行建置或下載 `9SEC_Evidence_Workbench.exe`（見主 [README](../README.md)）。下列指令皆為唯讀、
-免提權。在 PowerShell 中請把 `9SEC_Evidence_Workbench.exe` 換成 `.\9SEC_Evidence_Workbench.exe`。
+自行建置或下載 `9SEC_EvidW.exe`（見主 [README](../README.md)）。下列指令皆為唯讀、
+免提權。在 PowerShell 中請把 `9SEC_EvidW.exe` 換成 `.\9SEC_EvidW.exe`。
 
 ## 1. 一段話說完這個案子
 
@@ -25,7 +25,7 @@
 ## 2. 分析單一主機
 
 ```
-9SEC_Evidence_Workbench.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
+9SEC_EvidW.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
 ```
 
 它會唯讀地讀入資料夾、建立 fact store、跑 Guided Hunt 規則，並寫出一份 `summary_v3`
@@ -48,7 +48,7 @@ JSON（schema 見 [`schemas/summary_v3.schema.json`](schemas/summary_v3.schema.j
 也分析一下伺服器：
 
 ```
-9SEC_Evidence_Workbench.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
+9SEC_EvidW.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
 ```
 
 → **2** 條：`GH-EXEC-SUSPATH-001`（同一支檔案從 `C:\ProgramData\` 執行，Amcache 與
@@ -59,7 +59,7 @@ ShimCache 都看得到）與 `GH-LOGCLEAR-001`。
 以工作站作 baseline、伺服器作 target：
 
 ```
-9SEC_Evidence_Workbench.exe -diff docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01 diff.json
+9SEC_EvidW.exe -diff docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01 diff.json
 ```
 
 工具會寫出 `diff_v1` JSON，共 **12** 筆觀察差異：4 筆 Added、8 筆 Removed。
@@ -72,7 +72,7 @@ Added；工作站的 Run 機碼、`\\FILE-SRV01\C$` 與 Temp 落地檔則會是 
 ## 4. 關聯兩台主機
 
 ```
-9SEC_Evidence_Workbench.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_EvidW.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 它會跨兩台主機比對共享實體（預設 Path／Hash／User／IP／AppId），寫出 `correlation_v1`
@@ -89,7 +89,7 @@ JSON。`shared_entities` 有 **2** 個命中：
 以那個共享 hash 為種子，展開多跳圖：
 
 ```
-9SEC_Evidence_Workbench.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_EvidW.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 → 一份 `graph_v1` JSON，橫跨 **2 台主機**共 **18 個節點／34 條邊**。從種子往外讀：

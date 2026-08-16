@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Linq;
+using System.Runtime.InteropServices;
 using IR_Collect.Collectors;
 using IR_Collect.Utils;
 
@@ -12,6 +13,9 @@ namespace IR_Collect
 {
     public static class Collector
     {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateDirectoryW")]
+        private static extern bool CreateDirectoryNative(string path, IntPtr securityAttributes);
+
         public sealed class CollectionResult
         {
             public string ZipPath { get; set; }
@@ -96,9 +100,12 @@ namespace IR_Collect
             var cfgProfile = new ConfigManager();
             string finalEvidenceId = NormalizeEvidenceId(evidenceId);
             string outputDir = "IR_Output_" + finalEvidenceId;
+            string zipPath = finalEvidenceId + ".zip";
+            string shaPath = zipPath + ".sha256";
             bool acknowledged = requestedContext != null && requestedContext.OperatorAcknowledgedRisks;
             CollectionRunContext runContext = CollectionImpactPolicy.Create(cfgProfile, outputDir, acknowledged);
             ValidateCollectionRunContext(runContext);
+            ValidateCollectionOutputTargets(outputDir, zipPath, shaPath);
 
             string collectionModeProfile = runContext.CollectionModeProfile;
             Console.WriteLine("Collection mode profile: " + collectionModeProfile);
@@ -106,10 +113,7 @@ namespace IR_Collect
             Console.WriteLine("Collecting System Info...");
             report("Collecting System Info...");
             
-            if (!Directory.Exists(outputDir))
-            {
-                Directory.CreateDirectory(outputDir);
-            }
+            CreateCollectionOutputDirectory(outputDir);
 
             File.WriteAllText(Path.Combine(outputDir, ArtifactNames.SystemInfoTxt), "Hostname: " + Environment.MachineName + "\r\nOS: " + Environment.OSVersion, new System.Text.UTF8Encoding(false));
 
@@ -277,17 +281,15 @@ namespace IR_Collect
             try { WriteCollectionTiming(outputDir); } catch (Exception ex) { Logger.Warning("WriteCollectionTiming: " + (ex.Message ?? "")); }
 
             // Package Output
-            string zipPath = finalEvidenceId + ".zip";
             Console.WriteLine("Packaging data to: " + zipPath);
             PackDir(outputDir, zipPath);
             if (!File.Exists(zipPath))
                 throw new IOException("Packaging failed: zip file was not created: " + zipPath);
 
-            string shaPath = zipPath + ".sha256";
             string sha256 = ComputeSha256(zipPath);
             if (!string.IsNullOrEmpty(sha256))
             {
-                File.WriteAllText(shaPath, sha256, new System.Text.UTF8Encoding(false));
+                WriteNewTextAtomic(shaPath, sha256);
                 Console.WriteLine("SHA256: " + sha256);
             }
             else
@@ -980,13 +982,18 @@ namespace IR_Collect
 
         internal static void PackDir(string sourceDir, string zipFile)
         {
+            string stagedZip = null;
             try
             {
-                if (File.Exists(zipFile)) File.Delete(zipFile);
+                if (File.Exists(zipFile))
+                    throw new IOException("Packaging target already exists: " + zipFile);
+                stagedZip = AtomicFile.CreateTempPath(zipFile);
                 CompressionLevel level = GetConfiguredCompressionLevel();
                 var sw = Stopwatch.StartNew();
                 Console.WriteLine("[i] Packaging (compression: " + level + "; set config.ini CollectionZipCompression=Optimal for smallest output)...");
-                ZipFile.CreateFromDirectory(sourceDir, zipFile, level, false);
+                ZipFile.CreateFromDirectory(sourceDir, stagedZip, level, false);
+                File.Move(stagedZip, Path.GetFullPath(zipFile));
+                stagedZip = null;
                 sw.Stop();
                 Console.WriteLine(string.Format("    [t] Packaging done in {0:N1}s", sw.Elapsed.TotalSeconds));
             }
@@ -995,6 +1002,52 @@ namespace IR_Collect
                 Console.WriteLine("Packaging failed: " + ex.Message);
                 Logger.Error("PackDir", ex);
                 throw new IOException("Packaging failed: " + ex.Message, ex);
+            }
+            finally
+            {
+                AtomicFile.TryDelete(stagedZip);
+            }
+        }
+
+        internal static void ValidateCollectionOutputTargets(string outputDir, string zipPath, string shaPath)
+        {
+            var collisions = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrEmpty(outputDir) && Directory.Exists(outputDir)) collisions.Add(outputDir);
+            if (!string.IsNullOrEmpty(zipPath) && File.Exists(zipPath)) collisions.Add(zipPath);
+            if (!string.IsNullOrEmpty(shaPath) && File.Exists(shaPath)) collisions.Add(shaPath);
+            if (collisions.Count > 0)
+                throw new IOException(
+                    "Collection output already exists. Use a unique Evidence ID; existing evidence was not modified: " +
+                    string.Join(", ", collisions.ToArray()));
+        }
+
+        internal static void CreateCollectionOutputDirectory(string outputDir)
+        {
+            if (string.IsNullOrWhiteSpace(outputDir))
+                throw new ArgumentException("Collection output directory is null or empty.", "outputDir");
+            string fullPath = Path.GetFullPath(outputDir);
+            if (!CreateDirectoryNative(fullPath, IntPtr.Zero))
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new IOException("Collection output directory could not be claimed without overwrite: " +
+                    fullPath + " (Win32 error " + error + ").");
+            }
+        }
+
+        internal static void WriteNewTextAtomic(string destination, string content)
+        {
+            string temp = AtomicFile.CreateTempPath(destination);
+            try
+            {
+                using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+                    writer.Write(content ?? "");
+                File.Move(temp, Path.GetFullPath(destination));
+                temp = null;
+            }
+            finally
+            {
+                AtomicFile.TryDelete(temp);
             }
         }
 

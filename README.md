@@ -6,26 +6,27 @@
 
 ## Download
 
-**[Latest release (ZIP)](https://github.com/9-Security/IR_Collect/releases/latest)** — contains `9SEC_Evidence_Workbench.exe` only. Extract and run.
+**[Latest release (ZIP)](https://github.com/9-Security/IR_Collect/releases/latest)** — the Release provides a ZIP and matching `.zip.sha256` sidecar. Verify the ZIP, then extract and run. Current source and the v0.25.1 release candidate use `9SEC_EvidW.exe`; the already-published v0.25.0 archive retains the previous executable filename.
 
-This README tracks the current source tree, including items under **Unreleased** in
-[`docs/CHANGELOG.md`](docs/CHANGELOG.md). A published release may lag those items; use `-version`
-and the release notes to confirm the binary's actual capability set.
+**Current published release: v0.25.0 (2026-07-29); current source target: v0.25.1.** The
+release-candidate hardening is tracked under **Unreleased** in
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md); use `-version` or `--version` and the release notes to
+confirm any binary's actual capability set.
 
 - **Runtime:** .NET Framework 4.5 or later (typical on Windows 7+).
-- **GUI:** double-click `9SEC_Evidence_Workbench.exe`.
-- **CLI collection:** `9SEC_Evidence_Workbench.exe -c` (prefer an elevated prompt for full logs, raw volumes, etc.).
+- **GUI:** double-click `9SEC_EvidW.exe`.
+- **CLI collection:** `9SEC_EvidW.exe -c` (prefer an elevated prompt for full logs, raw volumes, etc.).
 - Prefer collection **output on removable media** to limit change on the examined system.
 
 ### Offline analysis & correlation (no live host, no GUI)
 
 9SEC Evidence Workbench can also analyze artifacts **anyone** already collected — point it at a folder or evidence archive and it runs the same facts-only correlation pipeline:
 
-- `9SEC_Evidence_Workbench.exe -analyze <folder-or-archive> [out.json]` — ingest a folder or ZIP/TAR/TAR.GZ/TGZ archive; UAC output is detected, indexed, and normalized where supported → `summary_v3` JSON.
-- `9SEC_Evidence_Workbench.exe -diff <baseline> <target> [out.json]` — compare two folders or evidence archives through their normalized facts → `diff_v1` Added/Modified/Removed JSON.
-- `9SEC_Evidence_Workbench.exe -correlate <out.json> <pathA> <pathB> [...]` — cross-host shared-entity + temporal correlation → `correlation_v1` JSON.
-- `9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>` — multi-hop investigation graph from a seed entity → `graph_v1` JSON.
-- `9SEC_Evidence_Workbench.exe -version` — tool name + version.
+- `9SEC_EvidW.exe -analyze <folder-or-archive> [out.json]` — ingest a folder or ZIP/TAR/TAR.GZ/TGZ archive; UAC output is detected, indexed, and normalized where supported → `summary_v3` JSON.
+- `9SEC_EvidW.exe -diff <baseline> <target> [out.json]` — compare two folders or evidence archives through their normalized facts → `diff_v1` Added/Modified/Removed JSON.
+- `9SEC_EvidW.exe -correlate <out.json> <pathA> <pathB> [...]` — cross-host shared-entity + temporal correlation → `correlation_v1` JSON.
+- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>` — multi-hop investigation graph from a seed entity → `graph_v1` JSON.
+- `9SEC_EvidW.exe -version` — tool name + version.
 
 The GUI **Diff** tab compares the selected target with another loaded case whose Fact Store is ready.
 Results can be filtered by category, change type, or source and opened in the corresponding Facts or
@@ -121,4 +122,4 @@ Under **`docs/`** on GitHub. **Field SOP** and **User manual** are bilingual (En
 | [docs/SPEC.md](docs/SPEC.md) | Specification, version history, roadmap |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | Changelog |
 
-**Issues and discussions** are welcome. The full source tree may exist only in the maintainer’s checkout; the shipping binary is always on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.
+**Issues and discussions** are welcome. Source and documentation are maintained in this repository. Use documents from the same tag as the binary; shipping binaries are available on **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)**.

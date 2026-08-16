@@ -52,6 +52,9 @@ namespace IR_Collect.Tests
             failed += RunOne("ConfigAcl_hardening_keeps_file_readable_and_no_throw", ConfigAcl_hardening_keeps_file_readable_and_no_throw, sb) ? 0 : 1;
             failed += RunOne("CsvExport_neutralizes_formula_injection", CsvExport_neutralizes_formula_injection, sb) ? 0 : 1;
             failed += RunOne("AtomicFile_failure_preserves_published_output_and_cleans_staging", AtomicFile_failure_preserves_published_output_and_cleans_staging, sb) ? 0 : 1;
+            failed += RunOne("Collector_output_collision_preserves_existing_evidence", Collector_output_collision_preserves_existing_evidence, sb) ? 0 : 1;
+            failed += RunOne("EvidenceManifest_rejects_reparse_attributes", EvidenceManifest_rejects_reparse_attributes, sb) ? 0 : 1;
+            failed += RunOne("EvidenceManifest_missing_root_is_incomplete", EvidenceManifest_missing_root_is_incomplete, sb) ? 0 : 1;
             failed += RunOne("RunToFile_streams_output_and_cleans_on_failure", RunToFile_streams_output_and_cleans_on_failure, sb) ? 0 : 1;
             failed += RunOne("MemoryRecord_args_governance_note_round_trips", MemoryRecord_args_governance_note_round_trips, sb) ? 0 : 1;
             failed += RunOne("Lnk_parser_reads_unicode_and_ansi_local_base_path", Lnk_parser_reads_unicode_and_ansi_local_base_path, sb) ? 0 : 1;
@@ -59,9 +62,15 @@ namespace IR_Collect.Tests
             failed += RunOne("MftNormalizer_action_reflects_timestamp_source", MftNormalizer_action_reflects_timestamp_source, sb) ? 0 : 1;
             failed += RunOne("MftFixup_restores_bytes_at_sector_boundaries", MftFixup_restores_bytes_at_sector_boundaries, sb) ? 0 : 1;
             failed += RunOne("MftParser_prefers_win32_long_name_over_dos_short_name", MftParser_prefers_win32_long_name_over_dos_short_name, sb) ? 0 : 1;
+            failed += RunOne("MftParser_follows_resident_attribute_list_file_name_extension", MftParser_follows_resident_attribute_list_file_name_extension, sb) ? 0 : 1;
             failed += RunOne("ShimCache_structured_win10_entry_recovers_path_and_filetime", ShimCache_structured_win10_entry_recovers_path_and_filetime, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_ingests_artifacts_and_builds_summary", AnalyzeFolder_ingests_artifacts_and_builds_summary, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_readonly_workspace_rejects_forged_canonical_and_stabilizes_digest", AnalyzeFolder_readonly_workspace_rejects_forged_canonical_and_stabilizes_digest, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_source_change_is_rejected_before_fact_build", AnalyzeFolder_source_change_is_rejected_before_fact_build, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_missing_source_is_rejected_before_fact_build", AnalyzeFolder_missing_source_is_rejected_before_fact_build, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_preexisting_fact_store_is_not_trusted", AnalyzeFolder_preexisting_fact_store_is_not_trusted, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeFolder_uac_preexisting_fact_store_is_not_trusted", AnalyzeFolder_uac_preexisting_fact_store_is_not_trusted, sb) ? 0 : 1;
+            failed += RunOne("AnalyzeArchive_preexisting_fact_store_is_not_trusted", AnalyzeArchive_preexisting_fact_store_is_not_trusted, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_uac_process_snapshot_derives_canonical_process_csv", AnalyzeFolder_uac_process_snapshot_derives_canonical_process_csv, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_uac_bodyfile_derives_activity_timeline", AnalyzeFolder_uac_bodyfile_derives_activity_timeline, sb) ? 0 : 1;
             failed += RunOne("AnalyzeFolder_uac_auth_log_derives_structured_auth_facts", AnalyzeFolder_uac_auth_log_derives_structured_auth_facts, sb) ? 0 : 1;
@@ -81,9 +90,12 @@ namespace IR_Collect.Tests
             failed += RunOne("DiffTab_builds_grid_from_loaded_ready_baseline", DiffTab_builds_grid_from_loaded_ready_baseline, sb) ? 0 : 1;
             failed += RunOne("DiffCli_compares_readonly_folders_and_writes_diff_v1", DiffCli_compares_readonly_folders_and_writes_diff_v1, sb) ? 0 : 1;
             failed += RunOne("FactStoreBuildCache_reuses_unchanged_case", FactStoreBuildCache_reuses_unchanged_case, sb) ? 0 : 1;
+            failed += RunOne("FactStoreBuildCache_reuses_normalization_warnings", FactStoreBuildCache_reuses_normalization_warnings, sb) ? 0 : 1;
             failed += RunOne("FactStoreBuildCache_rebuilds_only_changed_eventlog", FactStoreBuildCache_rebuilds_only_changed_eventlog, sb) ? 0 : 1;
             failed += RunOne("FactStoreBuildCache_non_event_change_falls_back_full", FactStoreBuildCache_non_event_change_falls_back_full, sb) ? 0 : 1;
             failed += RunOne("FactStoreBuildCache_corrupt_cache_falls_back_full", FactStoreBuildCache_corrupt_cache_falls_back_full, sb) ? 0 : 1;
+            failed += RunOne("CorrelationCsvHelper_large_file_records_load_warning", CorrelationCsvHelper_large_file_records_load_warning, sb) ? 0 : 1;
+            failed += RunOne("CorrelationCsvHelper_row_limit_boundary_is_stable", CorrelationCsvHelper_row_limit_boundary_is_stable, sb) ? 0 : 1;
             failed += RunOne("FactStoreAutoBuild_rebuilds_stale_store", FactStoreAutoBuild_rebuilds_stale_store, sb) ? 0 : 1;
             failed += RunOne("CorrelateCli_finds_shared_entity_across_two_folders", CorrelateCli_finds_shared_entity_across_two_folders, sb) ? 0 : 1;
             failed += RunOne("BuildInfo_version_matches_assembly_and_is_stamped_in_outputs", BuildInfo_version_matches_assembly_and_is_stamped_in_outputs, sb) ? 0 : 1;
@@ -179,6 +191,8 @@ namespace IR_Collect.Tests
             failed += RunOne("CollectionCoverage_forensic_policy_metadata_round_trips_and_marks_partial", CollectionCoverage_forensic_policy_metadata_round_trips_and_marks_partial, sb) ? 0 : 1;
             failed += RunOne("MemoryCollectors_run_policy_writes_skipped_sidecars_without_tools", MemoryCollectors_run_policy_writes_skipped_sidecars_without_tools, sb) ? 0 : 1;
             failed += RunOne("CollectionResult_profile_skip_sets_coverage_gap", CollectionResult_profile_skip_sets_coverage_gap, sb) ? 0 : 1;
+            failed += RunOne("CollectionExitCode_distinguishes_errors_gaps_and_success", CollectionExitCode_distinguishes_errors_gaps_and_success, sb) ? 0 : 1;
+            failed += RunOne("AnalysisClis_output_failure_returns_nonzero", AnalysisClis_output_failure_returns_nonzero, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard", ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict", ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict", ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict, sb) ? 0 : 1;
@@ -749,6 +763,22 @@ namespace IR_Collect.Tests
             return rec;
         }
 
+        private static byte[] BuildAttributeListAttr(ulong extensionRecordNumber)
+        {
+            const int contentLength = 0x20;
+            const int attributeLength = 0x38;
+            byte[] attribute = new byte[attributeLength];
+            BitConverter.GetBytes((uint)0x20).CopyTo(attribute, 0);
+            BitConverter.GetBytes((uint)attributeLength).CopyTo(attribute, 4);
+            BitConverter.GetBytes((uint)contentLength).CopyTo(attribute, 0x10);
+            BitConverter.GetBytes((ushort)0x18).CopyTo(attribute, 0x14);
+            int entry = 0x18;
+            BitConverter.GetBytes((uint)0x30).CopyTo(attribute, entry);
+            BitConverter.GetBytes((ushort)contentLength).CopyTo(attribute, entry + 4);
+            BitConverter.GetBytes(extensionRecordNumber).CopyTo(attribute, entry + 0x10);
+            return attribute;
+        }
+
         private static bool MftParser_prefers_win32_long_name_over_dos_short_name()
         {
             byte[] dos = BuildFileNameAttr("TEST~1.TXT", 2);
@@ -759,6 +789,54 @@ namespace IR_Collect.Tests
             // Win32 first then DOS: still the Win32 long name.
             var e2 = IR_Collect.MFT.MftParser.ParseRecord(BuildMftRecordWithAttrs(new[] { win, dos }), 7);
             return e2 != null && string.Equals(e2.FileName, "testfile.txt", StringComparison.Ordinal);
+        }
+
+        private static bool MftParser_follows_resident_attribute_list_file_name_extension()
+        {
+            string dir = CreateTempDir("IRCollectMftAttributeList_");
+            try
+            {
+                string path = Path.Combine(dir, "$MFT");
+                byte[] image = new byte[9 * 1024];
+                byte[] baseRecord = BuildMftRecordWithAttrs(new[]
+                {
+                    BuildFileNameAttr("LONGNA~1.TXT", 2),
+                    BuildAttributeListAttr(((ulong)4 << 48) | 8)
+                });
+                byte[] extensionRecord = BuildMftRecordWithAttrs(new[]
+                {
+                    BuildFileNameAttr("LongNameFromExtension.txt", 1)
+                });
+                BitConverter.GetBytes((ushort)3).CopyTo(baseRecord, 0x10);
+                BitConverter.GetBytes((ushort)4).CopyTo(extensionRecord, 0x10);
+                BitConverter.GetBytes(((ulong)3 << 48) | 7).CopyTo(extensionRecord, 0x20);
+                Array.Copy(baseRecord, 0, image, 7 * 1024, 1024);
+                Array.Copy(extensionRecord, 0, image, 8 * 1024, 1024);
+                File.WriteAllBytes(path, image);
+
+                IR_Collect.MFT.MftParser.ParseResult parsed =
+                    IR_Collect.MFT.MftParser.ParseWithDiagnostics(path, 16);
+                IR_Collect.MFT.MftParser.MftEntry entry = parsed.Entries.FirstOrDefault(x => x.RecordNumber == 7);
+                if (entry == null ||
+                    !string.Equals(entry.FileName, "LongNameFromExtension.txt", StringComparison.Ordinal))
+                    return false;
+
+                byte[] staleBase = BuildMftRecordWithAttrs(new[]
+                {
+                    BuildFileNameAttr("LONGNA~1.TXT", 2),
+                    BuildAttributeListAttr(((ulong)5 << 48) | 8)
+                });
+                BitConverter.GetBytes((ushort)3).CopyTo(staleBase, 0x10);
+                Array.Copy(staleBase, 0, image, 7 * 1024, 1024);
+                File.WriteAllBytes(path, image);
+                parsed = IR_Collect.MFT.MftParser.ParseWithDiagnostics(path, 16);
+                entry = parsed.Entries.FirstOrDefault(x => x.RecordNumber == 7);
+                return entry != null && string.Equals(entry.FileName, "LONGNA~1.TXT", StringComparison.Ordinal);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
         }
 
         // Build one Win10 ("10ts") AppCompatCache value: a header whose first DWORD points at the
@@ -4956,6 +5034,286 @@ namespace IR_Collect.Tests
                 line.IndexOf("Mixed", StringComparison.Ordinal) < 0;
         }
 
+        private static bool Collector_output_collision_preserves_existing_evidence()
+        {
+            string work = CreateTempDir("IRCollectOutputCollision_");
+            try
+            {
+                string outputDir = Path.Combine(work, "IR_Output_CASE-1");
+                string zipPath = Path.Combine(work, "CASE-1.zip");
+                string shaPath = zipPath + ".sha256";
+                Directory.CreateDirectory(outputDir);
+                string marker = Path.Combine(outputDir, "existing.txt");
+                File.WriteAllText(marker, "existing", new UTF8Encoding(false));
+                byte[] originalZip = new byte[] { 1, 2, 3, 4 };
+                File.WriteAllBytes(zipPath, originalZip);
+                File.WriteAllText(shaPath, "old-hash", new UTF8Encoding(false));
+
+                bool targetsRejected = false;
+                try { Collector.ValidateCollectionOutputTargets(outputDir, zipPath, shaPath); }
+                catch (IOException) { targetsRejected = true; }
+
+                string source = Path.Combine(work, "source");
+                Directory.CreateDirectory(source);
+                File.WriteAllText(Path.Combine(source, "new.txt"), "new", new UTF8Encoding(false));
+                bool packRejected = false;
+                try { Collector.PackDir(source, zipPath); }
+                catch (IOException) { packRejected = true; }
+
+                bool shaPublishRejected = false;
+                try { Collector.WriteNewTextAtomic(shaPath, "new-hash"); }
+                catch (IOException) { shaPublishRejected = true; }
+
+                string claimedDirectory = Path.Combine(work, "claimed");
+                Collector.CreateCollectionOutputDirectory(claimedDirectory);
+                bool directoryClaimRejected = false;
+                try { Collector.CreateCollectionOutputDirectory(claimedDirectory); }
+                catch (IOException) { directoryClaimRejected = true; }
+
+                return targetsRejected && packRejected && shaPublishRejected && directoryClaimRejected &&
+                    File.ReadAllText(marker) == "existing" &&
+                    File.ReadAllBytes(zipPath).SequenceEqual(originalZip) &&
+                    File.ReadAllText(shaPath) == "old-hash";
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool EvidenceManifest_rejects_reparse_attributes()
+        {
+            return EvidenceManifest.IsRejectedReparsePoint(FileAttributes.ReparsePoint) &&
+                EvidenceManifest.IsRejectedReparsePoint(FileAttributes.Directory | FileAttributes.ReparsePoint) &&
+                !EvidenceManifest.IsRejectedReparsePoint(FileAttributes.Normal) &&
+                !EvidenceManifest.IsRejectedReparsePoint(FileAttributes.Directory);
+        }
+
+        private static bool EvidenceManifest_missing_root_is_incomplete()
+        {
+            EvidenceManifestResult manifest = EvidenceManifest.HashFolder(
+                Path.Combine(Path.GetTempPath(), "IRCollectMissingEvidence_" + Guid.NewGuid().ToString("N")));
+            return manifest != null && !manifest.IsComplete && manifest.Warnings.Any(x =>
+                x.IndexOf("missing", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static bool AnalyzeFolder_source_change_is_rejected_before_fact_build()
+        {
+            string dir = CreateTempDir("IRCollectEvidenceMutation_");
+            CaseData c = null;
+            try
+            {
+                string path = Path.Combine(dir, ArtifactNames.ProcessListCsv);
+                string header = "PID,Name,Path,CommandLine,StartTime,User,SHA256,SignatureStatus,Signer,PPID,SessionId,ThreadCount,WorkingSetSize\r\n";
+                string before = header + "100,good.exe,C:\\Temp\\good.exe,,,,,,,,,,,\r\n";
+                string after = header + "100,evil.exe,C:\\Temp\\evil.exe,,,,,,,,,,,\r\n";
+                if (before.Length != after.Length) return false;
+                File.WriteAllText(path, before, new UTF8Encoding(false));
+                c = CaseManager.LoadCaseFromFolder(dir);
+                File.WriteAllText(path, after, new UTF8Encoding(false));
+
+                try
+                {
+                    FactStoreBuildCoordinator.Build(c, false, false);
+                    return false;
+                }
+                catch (InvalidDataException ex)
+                {
+                    return ex.Message.IndexOf("changed after", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            finally
+            {
+                if (c != null) CaseManager.RemoveCase(c);
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_missing_source_is_rejected_before_fact_build()
+        {
+            string dir = CreateTempDir("IRCollectEvidenceMissing_");
+            string moved = dir + "_moved";
+            CaseData c = null;
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, ArtifactNames.ProcessListCsv),
+                    "PID,Name,Path\r\n100,good.exe,C:\\Temp\\good.exe\r\n", new UTF8Encoding(false));
+                c = CaseManager.LoadCaseFromFolder(dir);
+                Directory.Move(dir, moved);
+
+                try
+                {
+                    FactStoreBuildCoordinator.Build(c, false, false);
+                    return false;
+                }
+                catch (InvalidDataException ex)
+                {
+                    return ex.Message.IndexOf("no longer available", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+            finally
+            {
+                if (c != null) CaseManager.RemoveCase(c);
+                TryDeleteDir(dir);
+                TryDeleteDir(moved);
+            }
+        }
+
+        private static bool AnalyzeFolder_preexisting_fact_store_is_not_trusted()
+        {
+            string dir = CreateTempDir("IRCollectUntrustedDb_");
+            CaseData c = null;
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, ArtifactNames.SystemInfoTxt),
+                    "Hostname: DB-TEST\r\n", new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(dir, ArtifactNames.FactStoreDb),
+                    "not-a-trusted-cache", new UTF8Encoding(false));
+                c = CaseManager.LoadCaseFromFolder(dir);
+                return c.FactStore == null &&
+                    string.Equals(c.FactStoreFreshnessStatus, "untrusted_source", StringComparison.Ordinal) &&
+                    c.LoadWarnings.Any(x => x.IndexOf("not trusted", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            finally
+            {
+                if (c != null) CaseManager.RemoveCase(c);
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeFolder_uac_preexisting_fact_store_is_not_trusted()
+        {
+            string dir = CreateTempDir("IRCollectUacUntrustedDb_");
+            CaseData c = null;
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, "uac.log"),
+                    "2026-08-16 01:02:03 +0000 INF Operating system: linux\r\n" +
+                    "2026-08-16 01:02:03 +0000 INF Hostname: UAC-DB-TEST\r\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(dir, ArtifactNames.FactStoreDb),
+                    "not-a-trusted-cache", new UTF8Encoding(false));
+
+                c = CaseManager.LoadCaseFromFolder(dir);
+                return c.UacEvidence != null && c.UacEvidence.IsUac && c.FactStore == null &&
+                    string.Equals(c.FactStoreFreshnessStatus, "untrusted_source", StringComparison.Ordinal) &&
+                    c.LoadWarnings.Any(x => x.IndexOf("fact_store.db", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        x.IndexOf("not trusted", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            finally
+            {
+                if (c != null) CaseManager.RemoveCase(c);
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool AnalyzeArchive_preexisting_fact_store_is_not_trusted()
+        {
+            string dir = CreateTempDir("IRCollectUntrustedArchiveDb_");
+            CaseData c = null;
+            try
+            {
+                string zip = Path.Combine(dir, "case.zip");
+                using (FileStream fs = new FileStream(zip, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    ZipArchiveEntry systemInfo = archive.CreateEntry(ArtifactNames.SystemInfoTxt, CompressionLevel.Fastest);
+                    using (var writer = new StreamWriter(systemInfo.Open(), new UTF8Encoding(false)))
+                        writer.Write("Hostname: ARCHIVE-DB-TEST\r\n");
+                    ZipArchiveEntry database = archive.CreateEntry(ArtifactNames.FactStoreDb, CompressionLevel.Fastest);
+                    using (var writer = new StreamWriter(database.Open(), new UTF8Encoding(false)))
+                        writer.Write("not-a-trusted-cache");
+                }
+
+                c = CaseManager.LoadCase(zip);
+                return c.FactStore == null &&
+                    string.Equals(c.FactStoreFreshnessStatus, "untrusted_source", StringComparison.Ordinal) &&
+                    c.LoadWarnings.Any(x => x.IndexOf("not trusted", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            finally
+            {
+                if (c != null) CaseManager.RemoveCase(c);
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool CorrelationCsvHelper_large_file_records_load_warning()
+        {
+            string dir = CreateTempDir("IRCollectLargeCsv_");
+            try
+            {
+                string path = Path.Combine(dir, "large.csv");
+                using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+                    stream.SetLength(100L * 1024L * 1024L + 1L);
+
+                CorrelationCsvHelper.ResetDiagnostics();
+                List<Dictionary<string, string>> rows = CorrelationCsvHelper.ReadCsv(path);
+                var c = new CaseData();
+                FactStore.AppendCsvDiagnostics(c);
+                return rows.Count == 0 && c.LoadWarnings.Any(x =>
+                    x.IndexOf("exceeds 100 MiB", StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool CorrelationCsvHelper_row_limit_boundary_is_stable()
+        {
+            return !CorrelationCsvHelper.ExceedsRowLimit(500000) &&
+                CorrelationCsvHelper.ExceedsRowLimit(500001);
+        }
+
+        private static bool CollectionExitCode_distinguishes_errors_gaps_and_success()
+        {
+            var success = new Collector.CollectionResult
+            {
+                FailedSteps = new List<string>(),
+                CoverageReport = new CollectionCoverageReport()
+            };
+            var error = new Collector.CollectionResult
+            {
+                FailedSteps = new List<string> { "MFT" },
+                CoverageReport = new CollectionCoverageReport()
+            };
+            var gap = new Collector.CollectionResult
+            {
+                FailedSteps = new List<string>(),
+                CoverageReport = new CollectionCoverageReport { PartialSteps = 1 }
+            };
+            return Program.GetCollectionExitCode(null) == 1 &&
+                Program.GetCollectionExitCode(success) == 0 &&
+                Program.GetCollectionExitCode(error) == 2 &&
+                Program.GetCollectionExitCode(gap) == 4;
+        }
+
+        private static bool AnalysisClis_output_failure_returns_nonzero()
+        {
+            string work = CreateTempDir("IRCollectCliOutput_");
+            string a = Path.Combine(work, "a");
+            string b = Path.Combine(work, "b");
+            try
+            {
+                Directory.CreateDirectory(a);
+                Directory.CreateDirectory(b);
+                File.WriteAllText(Path.Combine(a, ArtifactNames.SystemInfoTxt), "Hostname: CLI-A\r\n", new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(b, ArtifactNames.SystemInfoTxt), "Hostname: CLI-B\r\n", new UTF8Encoding(false));
+                var output = new StringWriter(CultureInfo.InvariantCulture);
+                int analyze = AnalysisCli.Run(a, work, output);
+                int correlate = CorrelationCli.Run(new List<string> { a, b }, work, null, output);
+                int graph = GraphCli.Run("Path", "C:\\Temp\\none.exe", 1, work,
+                    new List<string> { a }, output);
+                return analyze != 0 && correlate != 0 && graph != 0 &&
+                    output.ToString().IndexOf("not written", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            finally
+            {
+                CaseManager.CleanupAll();
+                TryDeleteDir(work);
+            }
+        }
+
         private static string CreateTempDir(string prefix)
         {
             string dir = Path.Combine(Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
@@ -5899,6 +6257,33 @@ namespace IR_Collect.Tests
                     second.BuildMode == "Reused" &&
                     second.ReusedGroups.Contains("All") &&
                     secondCase.FactStoreBuildMode == "Reused";
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        private static bool FactStoreBuildCache_reuses_normalization_warnings()
+        {
+            string work = CreateTempDir("IRCollectFactCacheWarnings_");
+            try
+            {
+                string evidence = Path.Combine(work, "evidence");
+                string cache = Path.Combine(work, "cache");
+                Directory.CreateDirectory(evidence);
+                WriteFactStoreCacheFixtures(evidence, false, false);
+
+                const string warning = "CSV normalization was truncated at 500000 rows: synthetic.csv";
+                CaseData firstCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis1"));
+                firstCase.LoadWarnings.Add(warning);
+                FactStoreBuildResult first = FactStoreBuildCoordinator.Build(firstCase, true, true, cache);
+                if (first.Store == null || !first.CacheWritten) return false;
+
+                CaseData secondCase = CreateFactStoreCacheCase(evidence, Path.Combine(work, "analysis2"));
+                FactStoreBuildResult second = FactStoreBuildCoordinator.Build(secondCase, true, false, cache);
+                return second.Store != null && second.BuildMode == "Reused" &&
+                    secondCase.LoadWarnings.Any(x => string.Equals(x, warning, StringComparison.Ordinal));
             }
             finally
             {

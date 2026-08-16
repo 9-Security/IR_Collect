@@ -7,6 +7,23 @@
 
 ## [Unreleased]
 
+> 目標版本：`v0.25.1`；尚未完成實機 smoke matrix 與 GitHub Release 發布。
+
+### Changed
+- **文件規格校準**：將 README、SPEC、ARTIFACTS、文件索引與雙語使用手冊對齊已發布的 `v0.25.0`；補齊 UAC canonical/hash artifacts、CLI alias、release ZIP checksum sidecar 與正式簽章／時間戳 fail-closed 說明。未變更 collector、parser、schema 或分析行為。
+- **執行檔發布名稱**：正式與本機建置 basename 統一為 `9SEC_EvidW.exe`。正式版在 staging 目錄以最終 basename 編譯、簽章與驗證後才升級，避免 PE `OriginalFilename` 漂移；本機與 `INCLUDE_TESTS` review build 改置於 `%TEMP%`，review EXE 在 gate 完成後清除，不再覆寫或污染專案根目錄的唯一正式 EXE。
+- **BAT 入口縮減**：移除 `run_diff_validate.bat` 與 `run_endpoint_gate.bat`。`scripts\DiffValidate.ps1` 改為自行處理 reference-tool skip、review build 與清理；`publish_release.bat` 預設整合 regression、正式簽章／時間戳 build 與封裝，維持單一發布 gate。
+- **Release package validation**：封裝前驗證 EXE FileVersion、PE `OriginalFilename`、Authenticode 簽章與時間戳；指定 `-Publish` 但缺少 GitHub CLI 時改為 fail closed，避免自動化誤報已發布。
+
+### Security
+- **Evidence source integrity**：folder/archive intake 必須完成逐檔 SHA-256 manifest，拒絕 reparse point 與不完整列舉；Fact Store build 前重驗 evidence digest 與各 normalizer input SHA-256。匯入證據內預置的 `fact_store.db` 只保留為 raw evidence，不直接還原成本案 facts。
+- **Collector output preservation**：同 Evidence ID 的 output directory、ZIP 或 SHA sidecar 存在時在寫入前拒絕；ZIP/SHA 改由同目錄 staging 完成後才發布，失敗不覆寫既有證據。
+
+### Fixed
+- **Fact Store completeness visibility**：CSV 超過 100 MiB、500,000 列或讀取中斷時寫入 Load warnings 與 exports；persistent cache 重用時仍保留 normalization warnings。
+- **CLI failure contract**：`-analyze` / `-correlate` / `-graph` 寫檔失敗回傳 `1`；collection 有 coverage gap 回傳 `4`，不再誤報完整成功。
+- **MFT extension names**：`MftParser` 可從 resident `$ATTRIBUTE_LIST` 讀取 `$FILE_NAME` extension-record reference，以唯讀隨機讀取合併 Win32 長檔名並維持 parent/timestamp 一致；損壞 reference fail-soft。Non-resident attribute list 仍保留為已知邊界。
+
 ## [0.25.0] — 2026-07-29
 
 > 本版主題：**跨平台 UAC 證據收容、Case Diff、Fact Store 快取與 Forensic Strict 工作流程強化**。

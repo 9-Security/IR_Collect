@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/graph_v1.schema.json",
   "title": "9SEC Evidence Workbench graph_v1",
-  "description": "Output of `9SEC_Evidence_Workbench.exe -graph` — multi-hop investigation graph expanded from a seed entity.",
+  "description": "Output of `9SEC_EvidW.exe -graph` — multi-hop investigation graph expanded from a seed entity.",
   "type": "object",
   "required": ["export_schema", "generated_at", "tool_name", "tool_version", "seed_type", "seed_value", "max_depth", "host_count", "node_count", "edge_count", "nodes", "edges"],
   "properties": {

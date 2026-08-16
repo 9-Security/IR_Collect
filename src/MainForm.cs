@@ -2800,7 +2800,7 @@ namespace IR_Collect
 
             if (c.FactStore == null || c.FactStore.Facts == null || c.FactStore.Facts.Count == 0)
             {
-                info.Text = "No observed facts are available. Build Fact Store or load a case that includes fact_store.db.";
+                info.Text = "No observed facts are available. Build Fact Store from the loaded source artifacts.";
                 p.Controls.Add(info);
                 return p;
             }

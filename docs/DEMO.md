@@ -12,9 +12,9 @@ the tool actually prints, not illustrations.
 
 ## 0. Get a binary
 
-Build or download `9SEC_Evidence_Workbench.exe` (see the main [README](../README.md)). All the
-commands below are read-only and need no elevation. Replace `9SEC_Evidence_Workbench.exe` with
-`.\9SEC_Evidence_Workbench.exe` in PowerShell.
+Build or download `9SEC_EvidW.exe` (see the main [README](../README.md)). All the
+commands below are read-only and need no elevation. Replace `9SEC_EvidW.exe` with
+`.\9SEC_EvidW.exe` in PowerShell.
 
 ## 1. The case in one paragraph
 
@@ -27,7 +27,7 @@ link between the two hosts is the binary's SHA-1: `a94a8fe5…`.
 ## 2. Analyze one host
 
 ```
-9SEC_Evidence_Workbench.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
+9SEC_EvidW.exe -analyze docs\sample-case\WKSTN-07 wkstn07.json
 ```
 
 This ingests the folder read-only, builds the fact store, evaluates the Guided
@@ -52,7 +52,7 @@ execution or network activity alone.
 Analyze the server too:
 
 ```
-9SEC_Evidence_Workbench.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
+9SEC_EvidW.exe -analyze docs\sample-case\FILE-SRV01 filesrv01.json
 ```
 
 → **2** matches: `GH-EXEC-SUSPATH-001` (the same binary from `C:\ProgramData\`,
@@ -63,7 +63,7 @@ seen by both Amcache and ShimCache) and `GH-LOGCLEAR-001`.
 Use the workstation as the baseline and the server as the target:
 
 ```
-9SEC_Evidence_Workbench.exe -diff docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01 diff.json
+9SEC_EvidW.exe -diff docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01 diff.json
 ```
 
 This writes a `diff_v1` JSON with **12** observed changes: 4 Added and 8 Removed.
@@ -78,7 +78,7 @@ different host roles or collection coverage can produce legitimate differences.
 ## 4. Correlate the two hosts
 
 ```
-9SEC_Evidence_Workbench.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_EvidW.exe -correlate corr.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 This pivots shared entities (Path / Hash / User / IP / AppId by default) across
@@ -95,7 +95,7 @@ The shared hash is the moment the two separate triage folders become one inciden
 Seed a multi-hop graph on that shared hash:
 
 ```
-9SEC_Evidence_Workbench.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
+9SEC_EvidW.exe -graph Hash a94a8fe5ccb19ba61c4c0873d391e987982fbbd3 2 graph.json docs\sample-case\WKSTN-07 docs\sample-case\FILE-SRV01
 ```
 
 → a `graph_v1` JSON with **18 nodes / 34 edges** across **2 hosts**. Reading it

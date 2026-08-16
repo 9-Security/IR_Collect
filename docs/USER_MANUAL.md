@@ -2,7 +2,7 @@
 
 **English** | [繁體中文](USER_MANUAL.zh-TW.md)
 
-This manual is for operators and incident analysts. It explains **how** to collect, import, review, and export with the tool—not build or release engineering. For a short field playbook see **[FIELD_SOP.md](FIELD_SOP.md)** (English) or **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)** (Traditional Chinese). Specification and version history: `SPEC.md`. Changes: `CHANGELOG.md`. Doc index: `README.md`. If you use a **partial public mirror** (e.g. GitHub), treat the full `docs/` tree in the development workspace as authoritative; files not mirrored there (such as `ARTIFACTS.md`) live only in the full source tree.
+This manual is for operators and incident analysts. It explains **how** to collect, import, review, and export with the tool—not build or release engineering. For a short field playbook see **[FIELD_SOP.md](FIELD_SOP.md)** (English) or **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)** (Traditional Chinese). Specification and version history: `SPEC.md`. Changes: `CHANGELOG.md`. Doc index: `README.md`. This manual is aligned with the `v0.25.1` release candidate; the latest published release remains `v0.25.0` until the release gate and manual smoke matrix are complete. When reading another tag or binary, use its `-version`, release notes, and same-tag documents.
 
 ## 1. What the tool is
 
@@ -61,7 +61,7 @@ Recommendations:
 
 ### 3.1 GUI
 
-1. Run `9SEC_Evidence_Workbench.exe`
+1. Run `9SEC_EvidW.exe`
 2. Accept UAC; prefer **Run as administrator**
 3. On the Dashboard click `Local Collect`
 4. Enter an `Evidence ID`
@@ -74,9 +74,9 @@ Recommendations:
 ### 3.2 CLI
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
-9SEC_Evidence_Workbench.exe --help
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
+9SEC_EvidW.exe --help
 ```
 
 Notes:
@@ -285,14 +285,18 @@ This removes **all** loaded data, not just “analysis cache.”
 ### 5.1 Commands
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
-9SEC_Evidence_Workbench.exe -analyze <folder-or-archive> [out.json]
-9SEC_Evidence_Workbench.exe -diff <baseline> <target> [out.json]
-9SEC_Evidence_Workbench.exe -correlate <out.json> <pathA> <pathB> [...]
-9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>
-9SEC_Evidence_Workbench.exe --help
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
+9SEC_EvidW.exe -analyze <folder-or-archive> [out.json]
+9SEC_EvidW.exe -diff <baseline> <target> [out.json]
+9SEC_EvidW.exe -correlate <out.json> <pathA> <pathB> [...]
+9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>
+9SEC_EvidW.exe -version
+9SEC_EvidW.exe --help
 ```
+
+`--collect` is an alias for `-c`; `--version` is an alias for `-version`; `-h` is an alias for
+`--help`.
 
 ### 5.2 Typical uses
 
@@ -345,6 +349,18 @@ Partial failures:
 - `bam_dam.csv`, `bits_jobs.csv`, `wmi_persistence.csv`
 - `amcache_programs.csv`, `amcache_files.csv`, `shimcache.csv`, `shimcache_entries.csv`
 - `srum_network_usage.csv`, `srum_app_usage.csv`
+
+For imported UAC evidence, the analysis workspace may additionally contain:
+
+- `uac_evidence_index.csv`; archive input also produces `uac_archive_entries.csv`
+- `analysis_workspace_v1.json` (source digest, tool identity, and derived-output SHA-256 manifest)
+- `uac_auth_events.csv`, `uac_audit_events.csv`, `uac_system_log_events.csv`, `uac_web_server_events.csv`
+- `uac_network_connections.csv`, `uac_accounts.csv`, `uac_packages.csv`, `uac_shell_history.csv`
+- `uac_persistence.csv`, `uac_journal_files.csv`, `uac_boot_sessions.csv`, `uac_login_events.csv`
+- `uac_file_hashes.csv` for supported executable/running-process MD5, SHA-1, and SHA-256 lists
+
+These are parser-derived files outside the read-only evidence root. Unsupported inputs remain visible
+through `uac_evidence_index.csv` as `indexed-raw`.
 
 ### 6.3 Analysis / export artifacts
 
@@ -431,7 +447,7 @@ Default **on**: faster path to Facts, entity search, and full LOG JSON export.
 
 ### 9.2 Write Fact Store to SQLite when building
 
-Writes `fact_store.db` under each host ExtractPath—useful for large cases or repeat analysis.
+Writes `fact_store.db` under each host's separate analysis workspace without modifying the evidence root. A database already present in imported evidence is retained as raw evidence and rebuilt from source artifacts before use.
 
 Requires `System.Data.SQLite.dll` beside the EXE for SQLite writes; GUI still works without it (in-memory path only).
 

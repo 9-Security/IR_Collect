@@ -121,17 +121,19 @@ namespace IR_Collect.Analysis
             string outPath = outFile;
             if (string.IsNullOrEmpty(outPath))
                 outPath = Path.Combine(Directory.GetCurrentDirectory(), "ir_graph.json");
+            bool outputWritten = true;
             try { AtomicFile.WriteAllText(outPath, Serialize(report), new UTF8Encoding(false)); }
             catch (Exception ex)
             {
                 console.WriteLine("[!] Could not write " + outPath + ": " + ex.Message);
                 outPath = "(not written)";
+                outputWritten = false;
             }
 
             console.WriteLine("[+] Graph from " + seedType + ":" + seedValue + " (depth " + maxDepth + ", "
                 + report.HostCount + " host(s)): " + report.NodeCount + " node(s), " + report.EdgeCount + " edge(s).");
             console.WriteLine("[+] Graph JSON: " + outPath);
-            return 0;
+            return outputWritten ? 0 : 1;
         }
 
         /// <summary>

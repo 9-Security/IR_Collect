@@ -60,6 +60,7 @@ namespace IR_Collect.Analysis
             string outPath = outFile;
             if (string.IsNullOrEmpty(outPath))
                 outPath = CaseManager.GetAnalysisOutputPath(c, "ir_analysis.json");
+            bool outputWritten = true;
             try
             {
                 AtomicFile.WriteAllText(outPath, json, new UTF8Encoding(false));
@@ -69,6 +70,7 @@ namespace IR_Collect.Analysis
             {
                 console.WriteLine("[!] Could not write " + outPath + ": " + ex.Message);
                 outPath = "(not written)";
+                outputWritten = false;
             }
 
             int guidedMatches = (payload.GuidedHunt != null && payload.GuidedHunt.RuleMatches != null)
@@ -78,7 +80,7 @@ namespace IR_Collect.Analysis
                 + payload.FactCount + " facts across " + payload.FactSourceCounts.Count + " source(s) from "
                 + payload.ArtifactsCount + " artifact file(s); " + guidedMatches + " guided-hunt match(es).");
             console.WriteLine("[+] Summary JSON: " + outPath);
-            return 0;
+            return outputWritten ? 0 : 1;
         }
 
         /// <summary>

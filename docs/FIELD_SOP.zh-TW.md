@@ -6,7 +6,7 @@
 
 ## 1. 現場前檢查
 
-- 優先以系統管理員執行 `9SEC_Evidence_Workbench.exe`
+- 優先以系統管理員執行 `9SEC_EvidW.exe`
 - 優先從外接儲存裝置執行，並讓輸出寫到外接儲存裝置
 - 確認磁碟空間足夠，尤其若有啟用 Memory acquisition
 - 若案件敏感，先確認 `config.ini` 內 AI / Upload endpoint 是否符合政策
@@ -16,7 +16,7 @@
 
 ### GUI
 
-1. 執行 `9SEC_Evidence_Workbench.exe`
+1. 執行 `9SEC_EvidW.exe`
 2. 按 `Local Collect`
 3. 輸入 `Evidence ID`
 4. 等待收集完成
@@ -28,8 +28,8 @@ acquisition / analysis 預設會略過，手動 Deep Scan 會被阻擋。
 ### CLI
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
 ```
 
 收集完成後應看到：

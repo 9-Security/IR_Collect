@@ -34,11 +34,13 @@ namespace IR_Collect.Analysis.Correlation
         [DataMember(Name = "config_fingerprint")] public string ConfigFingerprint { get; set; }
         [DataMember(Name = "inputs")] public List<FactStoreInputFingerprint> Inputs { get; set; }
         [DataMember(Name = "facts")] public List<Fact> Facts { get; set; }
+        [DataMember(Name = "normalization_warnings")] public List<string> NormalizationWarnings { get; set; }
 
         public FactStoreBuildCacheEnvelope()
         {
             Inputs = new List<FactStoreInputFingerprint>();
             Facts = new List<Fact>();
+            NormalizationWarnings = new List<string>();
         }
     }
 
@@ -92,6 +94,7 @@ namespace IR_Collect.Analysis.Correlation
         internal static FactStoreBuildResult Build(CaseData c, bool allowReuse, bool persistCache, string cacheRootOverride)
         {
             if (c == null) throw new ArgumentNullException("c");
+            CaseManager.ValidateEvidenceUnchanged(c);
 
             var result = new FactStoreBuildResult();
             result.Inputs = BuildInputManifest(c);
@@ -130,6 +133,7 @@ namespace IR_Collect.Analysis.Correlation
                 List<FactStoreInputFingerprint> changed = FindChangedInputs(cached.Inputs, result.Inputs);
                 if (changed.Count == 0)
                 {
+                    ApplyNormalizationWarnings(c, cached.NormalizationWarnings, null);
                     result.Store = FactStore.CreateFromFacts(c, cached.Facts);
                     result.BuildMode = "Reused";
                     result.GeneratedAt = cached.GeneratedAt ?? result.GeneratedAt;
@@ -141,6 +145,7 @@ namespace IR_Collect.Analysis.Correlation
 
                 if (changed.All(IsEventLogInput))
                 {
+                    ApplyNormalizationWarnings(c, cached.NormalizationWarnings, changed);
                     result.Store = BuildEventLogIncremental(c, cached.Facts, changed, result);
                     result.BuildMode = "Incremental";
                     result.Detail = "Only changed filtered Event Log inputs were normalized; unchanged facts were reused.";
@@ -172,7 +177,8 @@ namespace IR_Collect.Analysis.Correlation
                         EvidenceDigest = c.EvidenceDigest ?? "",
                         ConfigFingerprint = configFingerprint,
                         Inputs = CloneInputs(result.Inputs),
-                        Facts = result.Store.Facts != null ? new List<Fact>(result.Store.Facts) : new List<Fact>()
+                        Facts = result.Store.Facts != null ? new List<Fact>(result.Store.Facts) : new List<Fact>(),
+                        NormalizationWarnings = CollectNormalizationWarnings(c)
                     });
                     result.CacheWritten = true;
                 }
@@ -220,6 +226,7 @@ namespace IR_Collect.Analysis.Correlation
             List<FactStoreInputFingerprint> changed,
             FactStoreBuildResult result)
         {
+            CorrelationCsvHelper.ResetDiagnostics();
             var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (FactStoreInputFingerprint input in changed)
             {
@@ -238,6 +245,7 @@ namespace IR_Collect.Analysis.Correlation
             }
 
             result.ReusedGroups.Add("Non-EventLog");
+            FactStore.AppendCsvDiagnostics(c);
             return FactStore.CreateFromFacts(c, facts);
         }
 
@@ -253,9 +261,7 @@ namespace IR_Collect.Analysis.Correlation
             if (records.ContainsKey(key)) return;
 
             var info = new FileInfo(path);
-            string sha = FindEvidenceSha256(c, path);
-            if (string.IsNullOrEmpty(sha))
-                sha = EvidenceManifest.ComputeSha256(path);
+            string sha = EvidenceManifest.ComputeSha256(path);
             records[key] = new FactStoreInputFingerprint
             {
                 RelativePath = relative,
@@ -265,20 +271,6 @@ namespace IR_Collect.Analysis.Correlation
                 NormalizerName = normalizerName ?? "",
                 FullPath = path
             };
-        }
-
-        private static string FindEvidenceSha256(CaseData c, string path)
-        {
-            if (c == null || c.EvidenceFiles == null || string.IsNullOrEmpty(c.EvidencePath))
-                return "";
-            string relative = RelativeUnder(c.EvidencePath, path);
-            if (string.IsNullOrEmpty(relative)) return "";
-            EvidenceFile match = c.EvidenceFiles.FirstOrDefault(x =>
-                x != null && string.Equals(
-                    (x.RelPath ?? "").Replace('\\', '/'),
-                    relative.Replace('\\', '/'),
-                    StringComparison.OrdinalIgnoreCase));
-            return match != null ? (match.Sha256 ?? "") : "";
         }
 
         private static string ResolveNormalizerName(string path)
@@ -502,6 +494,49 @@ namespace IR_Collect.Analysis.Correlation
             c.FactStoreBuildGeneratedAt = result.GeneratedAt ?? "";
             c.FactStoreBuildDetail = result.Detail ?? "";
             c.FactStoreBuildInputs = CloneInputs(result.Inputs);
+        }
+
+        private static List<string> CollectNormalizationWarnings(CaseData c)
+        {
+            if (c == null || c.LoadWarnings == null) return new List<string>();
+            lock (c.LoadWarnings)
+            {
+                return c.LoadWarnings
+                    .Where(IsNormalizationWarning)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+
+        private static void ApplyNormalizationWarnings(
+            CaseData c,
+            IEnumerable<string> warnings,
+            IEnumerable<FactStoreInputFingerprint> changedInputs)
+        {
+            if (c == null || c.LoadWarnings == null || warnings == null) return;
+            List<string> changedNames = (changedInputs ?? Enumerable.Empty<FactStoreInputFingerprint>())
+                .Where(x => x != null && !string.IsNullOrEmpty(x.RelativePath))
+                .Select(x => Path.GetFileName((x.RelativePath ?? "").Replace('/', Path.DirectorySeparatorChar)))
+                .Where(x => !string.IsNullOrEmpty(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            lock (c.LoadWarnings)
+            {
+                foreach (string warning in warnings.Where(IsNormalizationWarning))
+                {
+                    if (changedNames.Any(x => warning.IndexOf(x, StringComparison.OrdinalIgnoreCase) >= 0))
+                        continue;
+                    if (!c.LoadWarnings.Any(x => string.Equals(x, warning, StringComparison.OrdinalIgnoreCase)))
+                        c.LoadWarnings.Add(warning);
+                }
+            }
+        }
+
+        private static bool IsNormalizationWarning(string warning)
+        {
+            return !string.IsNullOrEmpty(warning) &&
+                warning.StartsWith("CSV normalization ", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FormatInputSample(IEnumerable<FactStoreInputFingerprint> inputs)

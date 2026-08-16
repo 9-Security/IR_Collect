@@ -2,7 +2,7 @@
 
 [English](USER_MANUAL.md) | **繁體中文**
 
-本手冊面向操作人員與事件調查分析師，重點是「如何使用工具完成收集、匯入、檢視與匯出」，不涵蓋開發與發版細節。若只需要現場短版流程，請先看 **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)**（繁體）或 **[FIELD_SOP.md](FIELD_SOP.md)**（英文）。規格與版本歷程見 `SPEC.md`，變更紀錄見 `CHANGELOG.md`，技術文件索引見 `README.md`。若你使用僅鏡像部分文件的公開 repo（例如 GitHub），以開發工作區內完整 `docs/` 為準；未列於該鏡像的檔案（如 `ARTIFACTS.md`）請至完整原始碼樹取得。
+本手冊面向操作人員與事件調查分析師，重點是「如何使用工具完成收集、匯入、檢視與匯出」，不涵蓋開發與發版細節。若只需要現場短版流程，請先看 **[FIELD_SOP.zh-TW.md](FIELD_SOP.zh-TW.md)**（繁體）或 **[FIELD_SOP.md](FIELD_SOP.md)**（英文）。規格與版本歷程見 `SPEC.md`，變更紀錄見 `CHANGELOG.md`，技術文件索引見 `README.md`。本手冊對齊 `v0.25.1` 候選版；在 release gate 與實機 smoke matrix 完成前，GitHub 最新正式版仍為 `v0.25.0`。閱讀其他 tag 或使用其他 binary 時，請以其 `-version`、release notes 與同 tag 文件為準。
 
 ## 1. 工具定位
 
@@ -61,7 +61,7 @@ Local Collect 屬於 **Live Response**；folder/archive 分析會維持 evidence
 
 ### 3.1 GUI 快速流程
 
-1. 執行 `9SEC_Evidence_Workbench.exe`
+1. 執行 `9SEC_EvidW.exe`
 2. 建議接受 UAC 並以系統管理員身分執行
 3. 在 Dashboard 按 `Local Collect`
 4. 輸入 `Evidence ID`
@@ -74,9 +74,9 @@ Local Collect 屬於 **Live Response**；folder/archive 分析會維持 evidence
 ### 3.2 CLI 快速流程
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
-9SEC_Evidence_Workbench.exe --help
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
+9SEC_EvidW.exe --help
 ```
 
 說明：
@@ -313,14 +313,18 @@ Full rebuild 並顯示原因。這是為了維持正確性，不是 partial-succ
 ### 5.1 基本命令
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
-9SEC_Evidence_Workbench.exe -analyze <資料夾或封裝> [out.json]
-9SEC_Evidence_Workbench.exe -diff <基線> <目標> [out.json]
-9SEC_Evidence_Workbench.exe -correlate <out.json> <路徑A> <路徑B> [...]
-9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>
-9SEC_Evidence_Workbench.exe --help
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
+9SEC_EvidW.exe -analyze <資料夾或封裝> [out.json]
+9SEC_EvidW.exe -diff <基線> <目標> [out.json]
+9SEC_EvidW.exe -correlate <out.json> <路徑A> <路徑B> [...]
+9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>
+9SEC_EvidW.exe -version
+9SEC_EvidW.exe --help
 ```
+
+`--collect` 是 `-c` 的 alias；`--version` 是 `-version` 的 alias；`-h` 是 `--help` 的
+alias。
 
 ### 5.2 CLI 典型用途
 
@@ -386,6 +390,18 @@ Full rebuild 並顯示原因。這是為了維持正確性，不是 partial-succ
 - `shimcache_entries.csv`
 - `srum_network_usage.csv`
 - `srum_app_usage.csv`
+
+匯入 UAC 證據時，analysis workspace 可能另含：
+
+- `uac_evidence_index.csv`；archive input 另有 `uac_archive_entries.csv`
+- `analysis_workspace_v1.json`（來源 digest、工具身分與衍生輸出 SHA-256 manifest）
+- `uac_auth_events.csv`、`uac_audit_events.csv`、`uac_system_log_events.csv`、`uac_web_server_events.csv`
+- `uac_network_connections.csv`、`uac_accounts.csv`、`uac_packages.csv`、`uac_shell_history.csv`
+- `uac_persistence.csv`、`uac_journal_files.csv`、`uac_boot_sessions.csv`、`uac_login_events.csv`
+- `uac_file_hashes.csv`（支援 executable/running-process 的 MD5、SHA-1 與 SHA-256 清單）
+
+以上皆為 parser 在唯讀 evidence root 之外建立的衍生檔；不支援的輸入仍會在
+`uac_evidence_index.csv` 中以 `indexed-raw` 保持可見。
 
 ### 6.3 分析與匯出產物
 
@@ -495,7 +511,7 @@ Full rebuild 並顯示原因。這是為了維持正確性，不是 partial-succ
 
 ### 9.2 Write Fact Store to SQLite when building
 
-啟用後會在每台主機的 ExtractPath 下寫入 `fact_store.db`。
+啟用後會在每台主機的獨立 analysis workspace 寫入 `fact_store.db`，不修改 evidence root。匯入證據中已存在的 DB 只保留為 raw evidence，必須由 source artifacts 重建後才使用。
 
 適合：
 

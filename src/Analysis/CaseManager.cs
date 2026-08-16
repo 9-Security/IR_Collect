@@ -209,11 +209,13 @@ namespace IR_Collect.Analysis
              // above remains the authoritative digest of the original container.
              try
              {
-                 EvidenceManifestResult em = EvidenceManifest.HashFolder(newCase.ExtractPath);
-                 newCase.EvidenceFiles = em.Files;
-                 newCase.EvidenceDigest = em.Digest;
+                 CaptureEvidenceManifest(newCase, newCase.ExtractPath);
              }
-             catch (Exception ex) { Logger.Warning("LoadCase evidence hash: " + (ex.Message ?? "")); }
+             catch
+             {
+                 TryDeleteDirectory(cacheDir);
+                 throw;
+             }
 
              newCase.AnalysisPath = CreateAnalysisWorkspace(caseId);
              newCase.UacEvidence = UacEvidenceIntake.Inspect(newCase.EvidencePath, sourceFormat, newCase.EvidenceFiles);
@@ -249,6 +251,8 @@ namespace IR_Collect.Analysis
                  if (!IsPathUnderRoot(fullPath, cacheDir)) continue;
 
                  string name = Path.GetFileName(f);
+                 if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase))
+                     factStoreDbPath = fullPath;
                  if (IsUntrustedUacCanonicalSource(newCase, name))
                      continue;
                  if (mftBinPath == null && string.Equals(name, ArtifactNames.MftDumpBin, StringComparison.OrdinalIgnoreCase))
@@ -261,11 +265,7 @@ namespace IR_Collect.Analysis
                       mftPreviewPath = fullPath;
                       continue;
                   }
-                  if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase))
-                  {
-                      factStoreDbPath = fullPath;
-                  }
-                  if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
+                   if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
 
                   string ext = Path.GetExtension(f).ToLowerInvariant();
                   bool isUacEvidence = newCase.UacEvidence != null && newCase.UacEvidence.IsUac;
@@ -403,33 +403,12 @@ namespace IR_Collect.Analysis
 
                if (!string.IsNullOrEmpty(factStoreDbPath) && File.Exists(factStoreDbPath))
                {
-                   try
-                   {
-                       int skippedFactRows;
-                       newCase.FactStore = FactStorePersistence.LoadFromSqlite(factStoreDbPath, newCase.CaseID, newCase.Hostname, out skippedFactRows);
-                       if (skippedFactRows > 0)
-                           AddLoadWarning(newCase, "fact_store.db: " + skippedFactRows + " unreadable fact row(s) were skipped. Rebuild Fact Store to refresh the cache.");
-                       AugmentFactStoreWithRebuiltEventLogs(newCase);
-                       FactProvenanceHelper.ApplyCaseMetadata(newCase, newCase.FactStore != null ? newCase.FactStore.Facts : null);
-                       if (newCase.FactStore != null)
-                           newCase.FactStore.BuildEntityIndex();
-                       if (newCase.FactStore != null)
-                       {
-                           newCase.FactStoreBuildMode = "Reused";
-                           newCase.FactStoreBuildGeneratedAt = File.GetLastWriteTimeUtc(factStoreDbPath).ToString("o");
-                           newCase.FactStoreBuildDetail = "Loaded the bundled fact_store.db cache.";
-                       }
-                       EvaluateFactStoreFreshness(newCase, factStoreDbPath, mftBinPath, mftPreviewPath);
-                   }
-                   catch (Exception ex)
-                   {
-                       Logger.Warning("LoadCase fact_store.db: " + (ex.Message ?? ""));
-                       newCase.LoadWarnings.Add("fact_store.db could not be loaded: " + (ex.Message ?? ""));
-                       newCase.FactStoreFreshnessStatus = "load_failed";
-                       newCase.FactStoreFreshnessDetail = "fact_store.db exists but could not be loaded.";
-                   }
+                   AddLoadWarning(newCase,
+                       "Pre-existing fact_store.db was retained as raw evidence but was not trusted because it is not cryptographically bound to this evidence manifest. Rebuild Fact Store from source artifacts.");
+                   newCase.FactStoreFreshnessStatus = "untrusted_source";
+                   newCase.FactStoreFreshnessDetail = "Pre-existing fact_store.db was not loaded; source artifacts must be normalized by this tool version.";
                }
-              else
+               else
               {
                   newCase.FactStoreFreshnessStatus = "not_present";
                   newCase.FactStoreFreshnessDetail = "fact_store.db is not present in this case.";
@@ -529,13 +508,7 @@ namespace IR_Collect.Analysis
 
             // Phase 5.2: hash the input files AS RECEIVED (before we derive any CSVs) so an analysis
             // report can be cryptographically tied to exactly the evidence it consumed.
-            try
-            {
-                EvidenceManifestResult em = EvidenceManifest.HashFolder(newCase.ExtractPath);
-                newCase.EvidenceFiles = em.Files;
-                newCase.EvidenceDigest = em.Digest;
-            }
-            catch (Exception ex) { Logger.Warning("LoadCaseFromFolder evidence hash: " + (ex.Message ?? "")); }
+            CaptureEvidenceManifest(newCase, newCase.ExtractPath);
 
             newCase.AnalysisPath = CreateAnalysisWorkspace(newCase.CaseID);
             newCase.CachePath = newCase.AnalysisPath;
@@ -569,11 +542,12 @@ namespace IR_Collect.Analysis
                 try { fullPath = Path.GetFullPath(f); } catch { continue; }
                 if (!IsPathUnderRoot(fullPath, newCase.EvidencePath)) continue;
                 string name = Path.GetFileName(f);
+                if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase))
+                    factStoreDbPath = fullPath;
                 if (IsUntrustedUacCanonicalSource(newCase, name))
                     continue;
                 if (mftBinPath == null && string.Equals(name, ArtifactNames.MftDumpBin, StringComparison.OrdinalIgnoreCase)) { mftBinPath = fullPath; continue; }
                 if (mftPreviewPath == null && string.Equals(name, ArtifactNames.MftPreviewCsv, StringComparison.OrdinalIgnoreCase)) { mftPreviewPath = fullPath; continue; }
-                if (factStoreDbPath == null && string.Equals(name, ArtifactNames.FactStoreDb, StringComparison.OrdinalIgnoreCase)) factStoreDbPath = fullPath;
                 if (string.Equals(name, ArtifactNames.SystemInfoTxt, StringComparison.OrdinalIgnoreCase)) continue;
 
                 string ext = Path.GetExtension(f).ToLowerInvariant();
@@ -652,22 +626,10 @@ namespace IR_Collect.Analysis
 
             if (!string.IsNullOrEmpty(factStoreDbPath) && File.Exists(factStoreDbPath))
             {
-                try
-                {
-                    int skipped;
-                    newCase.FactStore = FactStorePersistence.LoadFromSqlite(factStoreDbPath, newCase.CaseID, newCase.Hostname, out skipped);
-                    AugmentFactStoreWithRebuiltEventLogs(newCase);
-                    FactProvenanceHelper.ApplyCaseMetadata(newCase, newCase.FactStore != null ? newCase.FactStore.Facts : null);
-                    if (newCase.FactStore != null) newCase.FactStore.BuildEntityIndex();
-                    if (newCase.FactStore != null)
-                    {
-                        newCase.FactStoreBuildMode = "Reused";
-                        newCase.FactStoreBuildGeneratedAt = File.GetLastWriteTimeUtc(factStoreDbPath).ToString("o");
-                        newCase.FactStoreBuildDetail = "Loaded the bundled fact_store.db cache.";
-                    }
-                    EvaluateFactStoreFreshness(newCase, factStoreDbPath, mftBinPath, mftPreviewPath);
-                }
-                catch (Exception ex) { AddLoadWarning(newCase, "fact_store.db could not be loaded: " + (ex.Message ?? "")); }
+                AddLoadWarning(newCase,
+                    "Pre-existing fact_store.db was retained as raw evidence but was not trusted because it is not cryptographically bound to this evidence manifest. Rebuild Fact Store from source artifacts.");
+                newCase.FactStoreFreshnessStatus = "untrusted_source";
+                newCase.FactStoreFreshnessDetail = "Pre-existing fact_store.db was not loaded; source artifacts must be normalized by this tool version.";
             }
 
             RefreshAnalysisWorkspaceManifest(newCase);
@@ -766,7 +728,9 @@ namespace IR_Collect.Analysis
             if (c == null)
                 return;
 
-            string factStoreDbPath = ResolveArtifactPath(c, ArtifactNames.FactStoreDb);
+            string factStoreDbPath = !string.IsNullOrEmpty(c.AnalysisPath)
+                ? Path.Combine(c.AnalysisPath, ArtifactNames.FactStoreDb)
+                : null;
             string mftBinPath = ResolveArtifactPath(c, ArtifactNames.MftDumpBin);
             string mftPreviewPath = ResolveArtifactPath(c, ArtifactNames.MftPreviewCsv);
             EvaluateFactStoreFreshness(c, factStoreDbPath, mftBinPath, mftPreviewPath);
@@ -879,6 +843,53 @@ namespace IR_Collect.Analysis
             string path = Path.Combine(Path.GetTempPath(), safe + "_Analysis_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(path);
             return path;
+        }
+
+        private static void CaptureEvidenceManifest(CaseData c, string evidenceRoot)
+        {
+            EvidenceManifestResult manifest;
+            try
+            {
+                manifest = EvidenceManifest.HashFolder(evidenceRoot);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("Evidence manifest could not be created: " + (ex.Message ?? "unknown error"), ex);
+            }
+
+            if (manifest == null || !manifest.IsComplete)
+            {
+                string detail = manifest != null && manifest.Warnings != null && manifest.Warnings.Count > 0
+                    ? string.Join("; ", manifest.Warnings.Take(4).ToArray())
+                    : "one or more evidence files could not be enumerated or hashed";
+                throw new InvalidDataException("Evidence manifest is incomplete; analysis was not started. " + detail);
+            }
+
+            c.EvidenceFiles = manifest.Files;
+            c.EvidenceDigest = manifest.Digest;
+        }
+
+        internal static void ValidateEvidenceUnchanged(CaseData c)
+        {
+            if (c == null)
+                return;
+            if (string.IsNullOrEmpty(c.EvidenceDigest))
+                return;
+            if (string.IsNullOrEmpty(c.EvidencePath) || !Directory.Exists(c.EvidencePath))
+                throw new InvalidDataException(
+                    "Evidence source is no longer available. Reload the case before building facts so provenance remains valid.");
+
+            EvidenceManifestResult current = EvidenceManifest.HashFolder(c.EvidencePath);
+            if (current == null || !current.IsComplete)
+            {
+                string detail = current != null && current.Warnings != null && current.Warnings.Count > 0
+                    ? string.Join("; ", current.Warnings.Take(4).ToArray())
+                    : "one or more evidence files could not be enumerated or hashed";
+                throw new InvalidDataException("Evidence source could not be revalidated. Reload the case. " + detail);
+            }
+            if (!string.Equals(current.Digest, c.EvidenceDigest, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "Evidence source changed after the case was loaded. Reload the case before building facts so provenance remains valid.");
         }
 
         private static string ResolveAnalysisOrEvidencePath(CaseData c, string fileName)

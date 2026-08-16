@@ -13,6 +13,14 @@ namespace IR_Collect
         static extern bool AttachConsole(int dwProcessId);
         private const int ATTACH_PARENT_PROCESS = -1;
 
+        internal static int GetCollectionExitCode(Collector.CollectionResult result)
+        {
+            if (result == null) return 1;
+            if (result.HasErrors) return 2;
+            if (result.HasCoverageGaps) return 4;
+            return 0;
+        }
+
         [DllImport("kernel32.dll")]
         static extern bool FreeConsole();
 
@@ -113,6 +121,8 @@ namespace IR_Collect
                         }
 
                         var result = Collector.RunCollectionDetailed(evidenceId, null, runContext);
+                        if (result == null)
+                            throw new InvalidOperationException("Collection returned no result.");
                         string zipPath = result != null ? result.ZipPath : null;
                         if (result != null && result.HasErrors)
                         {
@@ -120,7 +130,7 @@ namespace IR_Collect
                             Console.WriteLine("[!] Failed steps: " + result.BuildFailureSummary());
                             if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
                             FreeConsole();
-                            Environment.Exit(2);
+                            Environment.Exit(GetCollectionExitCode(result));
                         }
                         if (result != null && result.HasCoverageGaps)
                         {
@@ -141,7 +151,7 @@ namespace IR_Collect
                             }
                             if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);
                             FreeConsole();
-                            Environment.Exit(0);
+                            Environment.Exit(GetCollectionExitCode(result));
                         }
                         Console.WriteLine("[+] Collection Complete.");
                         if (!string.IsNullOrEmpty(zipPath)) Console.WriteLine("[+] Output: " + zipPath);

@@ -12,6 +12,27 @@ namespace IR_Collect.Analysis.Correlation
         private const long MaxCsvFileBytes = 100L * 1024 * 1024;
         /// <summary>Max rows to read; 0 = no limit.</summary>
         private const int MaxCsvRows = 500000;
+        [ThreadStatic]
+        private static List<string> _diagnostics;
+
+        internal static void ResetDiagnostics()
+        {
+            _diagnostics = new List<string>();
+        }
+
+        internal static List<string> ConsumeDiagnostics()
+        {
+            var result = _diagnostics ?? new List<string>();
+            _diagnostics = null;
+            return result;
+        }
+
+        private static void ReportDiagnostic(string message)
+        {
+            Logger.Warning(message);
+            if (_diagnostics == null) _diagnostics = new List<string>();
+            if (!_diagnostics.Contains(message)) _diagnostics.Add(message);
+        }
 
         public static List<Dictionary<string, string>> ReadCsv(string path, StringComparer keyComparer = null)
         {
@@ -22,11 +43,17 @@ namespace IR_Collect.Analysis.Correlation
                 long fileLen = new FileInfo(path).Length;
                 if (MaxCsvFileBytes > 0 && fileLen > MaxCsvFileBytes)
                 {
-                    Logger.Warning("ReadCsv: file too large (" + (fileLen / 1024 / 1024) + " MB): " + path);
+                    ReportDiagnostic("CSV normalization skipped because the file exceeds 100 MiB (" +
+                        (fileLen / 1024 / 1024) + " MiB): " + path);
                     return list;
                 }
             }
-            catch (Exception ex) { Logger.Warning("ReadCsv size check: " + ex.Message); return list; }
+            catch (Exception ex)
+            {
+                ReportDiagnostic("CSV normalization skipped because file size could not be read: " + path +
+                    " (" + ex.Message + ")");
+                return list;
+            }
 
             var cmp = keyComparer ?? StringComparer.OrdinalIgnoreCase;
             try
@@ -42,7 +69,11 @@ namespace IR_Collect.Analysis.Correlation
                     while ((line = sr.ReadLine()) != null)
                     {
                         row++;
-                        if (MaxCsvRows > 0 && row > MaxCsvRows) { Logger.Warning("ReadCsv: row limit " + MaxCsvRows + " reached: " + path); break; }
+                        if (ExceedsRowLimit(row))
+                        {
+                            ReportDiagnostic("CSV normalization was truncated at " + MaxCsvRows + " rows: " + path);
+                            break;
+                        }
                         if (string.IsNullOrWhiteSpace(line)) continue;
                         string[] parts = SplitCsvLine(line);
                         var map = new Dictionary<string, string>(cmp);
@@ -56,9 +87,17 @@ namespace IR_Collect.Analysis.Correlation
                     }
                 }
             }
-            catch (Exception ex) { Logger.Warning("ReadCsv: " + ex.Message); }
+            catch (Exception ex)
+            {
+                ReportDiagnostic("CSV normalization stopped before end-of-file: " + path + " (" + ex.Message + ")");
+            }
 
             return list;
+        }
+
+        internal static bool ExceedsRowLimit(int row)
+        {
+            return MaxCsvRows > 0 && row > MaxCsvRows;
         }
 
         /// <summary>委派至 <see cref="CsvUtils.SplitLine"/>，統一 RFC 4180 解析邏輯（含 escaped quote ""）。</summary>

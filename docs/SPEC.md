@@ -1,8 +1,8 @@
 # 9SEC Evidence Workbench 開發規格手冊 (Development Specification)
 
 **專案名稱**: 9SEC Evidence Workbench
-**版本**: v0.25.0
-**最後更新時間**: 2026-07-29
+**版本**: v0.25.1 release candidate
+**最後更新時間**: 2026-08-16
 **開發者**: Antigravity (collaborating with User)
 
 ---
@@ -23,6 +23,7 @@
 
 | 版本 | 日期 | 變更類型 | 變更內容摘要 |
 | :--- | :--- | :--- | :--- |
+| **v0.25.1-rc** | 2026-08-16 | **Forensic integrity / Fix** | Collector output collision 拒絕與 atomic ZIP/SHA publish；evidence manifest 完整性、reparse 防護及 Fact Store build 前 digest 重驗；預置 `fact_store.db` 不再當作可信 facts；CSV 上限警告進入 export；CLI 失敗／coverage-gap exit code 對齊；MFT resident `$ATTRIBUTE_LIST` extension `$FILE_NAME` 長檔名合併。尚待實機 smoke matrix 後發布。 |
 | **v0.25.0** | 2026-07-29 | **Cross-platform intake / Analysis / Governance** | UAC folder、ZIP、TAR、TAR.GZ/TGZ 可由 GUI 與分析 CLI 直接收容，支援 Linux/macOS process、bodyfile、auth、auditd、system/web log、package、network、account、shell history、persistence、journal/boot、login 與 executable/running-process hashes，保留逐檔 SHA-256 provenance 並進入 Fact Store／Timeline／Correlation／Graph／export。新增 facts-only Case Diff、選用的 persistent Fact Store build cache，以及完整化 Low Impact / Forensic Strict；archive intake、analysis workspace 與衍生輸出同步加入 bounded extraction、read-only evidence root 與 atomic publish hardening。 |
 | **v0.24.2** | 2026-07-20 | **教學資產 / Fix** | **上手教學資產 + Prefetch 解析器強化**:新增 `docs/sample-case/`——手工合成、零真實證據的雙主機案卷（釣魚→Temp 執行→Run 機碼→C$ 橫移→清日誌,兩台以同一 SHA-1 相連）+ 雙語導覽 `docs/DEMO.md`／`DEMO.zh-TW.md`,帶使用者把 `-analyze`／`-correlate`／`-graph` 端到端跑過（實測觸發 4+2 條 Guided Hunt、跨主機共享 Hash、18 節點調查圖）;整合兼漂移守門自測 `GuidedHunt_demo_case_trips_expected_rules`。另收 v0.24.1 後的 Prefetch code-review 強化:v30（Win10）run-count offset 誠實標為「推測、未驗證」、referenced-files 上限 8192、解壓 workspace 用較大值、malformed/v23 自測。詳見 CHANGELOG。 |
 | **v0.24.1** | 2026-06-16 | **Hunt / 互通** | **Guided Hunt 規則 ×3 + 輸出 JSON Schema**：新增 ATT&CK 對應規則——事件日誌被清除（T1070.001）、可疑路徑執行（T1204/T1036）、DLL side-loading（T1574.002,接 Prefetch）,各帶正反向自測。新增 `docs/schemas/` 的 `summary_v3`／`correlation_v1`／`graph_v1` JSON Schema（draft-07）+ 漂移守門測試。README 雙語補上離線分析 CLI 段落。詳見 CHANGELOG。 |
@@ -133,7 +134,7 @@
     - 使用 `CreateFile` 開啟 **動態系統碟**（`Path.GetPathRoot(Environment.SystemDirectory)`，如 `\\.\C:`）物理磁碟或 `\\.\X:\$MFT` (需 Admin)。
     - 匯出為 `MFT_Dump.bin`。
     - 支援 `$MFT` run list 解析以處理碎片化 MFT。
-    - 自動解析前 5000 筆紀錄為 `mft_preview.csv`（包含 Standard 與 FileName MACB、大小與完整路徑）。載入 Case 時，MFT 筆數由 **Settings** 內 **MFT max entries** 控制（預設 100000，上限 500000，對應 config.ini 的 MftMaxEntries），binary 與 CSV 後備皆套用，以降低大 MFT 記憶體使用。
+    - 自動解析前 5000 筆紀錄為 `mft_preview.csv`（包含 Standard 與 FileName MACB、大小與完整路徑）。載入 Case 時，MFT 筆數由 **Settings** 內 **MFT max entries** 控制（預設 100000，上限 500000，對應 config.ini 的 MftMaxEntries），binary 與 CSV 後備皆套用，以降低大 MFT 記憶體使用。Parser 會追蹤 resident `$ATTRIBUTE_LIST` 中的 `$FILE_NAME` extension record 以回收 Win32 長檔名；non-resident attribute list 無法僅由 `$MFT` dump 完整還原，維持外部工具交叉驗證邊界。
     - 透過 `fsutil usn readjournal` 產出 `usn_journal.csv`。
 
 #### G. 活動彙整 (Activity Timeline)
@@ -159,23 +160,26 @@
 - **ForensicStrict**: `ForensicStrictSkipMemoryHandoff=1` 時不啟動外部分析器；若 handoff 已啟用，寫出 `skipped` sidecar，將步驟列入 profile skip 並使 overall coverage 為 `partial`。
 - **範圍**: 不內建實體記憶體讀取、不解析映像、不整合 Volatility/Rekall；亦不在 Fact Store 產出「記憶體事實」。
 
-#### I. 打包機制 (Packer)
+#### J. 打包機制 (Packer)
 - **收集器**: `src\Collector.cs` (PackDir 方法)
 - **機制**:
-    - 使用 `System.IO.Compression.ZipFile.CreateFromDirectory` 將輸出目錄打包為 `.zip`（無需 PowerShell）。
+    - 使用 `System.IO.Compression.ZipFile.CreateFromDirectory` 將輸出目錄先打包至同目錄 temporary file，再原子發布為 `.zip`（無需 PowerShell）；若 `IR_Output_<ID>`、最終 ZIP 或 SHA sidecar 已存在，收集器會在寫入前拒絕執行，不覆寫或混入前次證據。
     - 案卷匯入由 `ArchiveIntake` 安全處理 ZIP、TAR、TAR.GZ/TGZ；拒絕 path traversal，限制 entry 數、單檔/總展開量、展開壓縮比與最低剩餘空間。預設 hard cap 為 200,000 entries、單檔 300 GiB、總展開 750 GiB；展開量達 1 GiB 後壓縮比上限 1000:1，最低保留 1 GiB 可用空間。ZIP 先做 central-directory preflight；TAR.GZ 依串流 header 逐 entry 守門。解壓只寫同磁碟 staging，成功才發布，失敗/取消/截斷/超限不留下半成品，並輸出 archive entry 映射。原生 collector 仍以 ZIP 產出。
-    - Folder/archive 的原始 evidence root 只讀；所有 canonical derivatives、離線重建 Event Log CSV、ShellBags、Fact Store cache 與 CLI 預設報告寫入獨立 `%TEMP%` analysis workspace，並採同目錄 temporary file + atomic replace/move 發布。Writer 失敗時保留既有完整輸出且清理 partial file。UAC source 中預置的 canonical 同名檔列為 raw evidence，不直接信任。`analysis_workspace_v1.json` 記錄 source digest、tool identity 與每個衍生檔的 SHA-256。Analyst workflow 依來源 digest 保存在目前使用者 Local Application Data。
-    - CLI `-c` 支援手動傳入證物編號作為 ZIP 檔名；若未提供則自動產生 `AA-YYYYMMDDHHmm` 形式。
+    - Folder/archive 的原始 evidence root 只讀；載入必須完成逐檔 SHA-256 manifest，拒絕 reparse-point file/directory，Fact Store build 前重新計算整體 digest，來源改變或 manifest 不完整即停止並要求重新匯入。所有 canonical derivatives、離線重建 Event Log CSV、ShellBags、Fact Store cache 與 CLI 預設報告寫入獨立 `%TEMP%` analysis workspace，並採同目錄 temporary file + atomic replace/move 發布。Writer 失敗時保留既有完整輸出且清理 partial file。來源中預置的 canonical 同名檔與 `fact_store.db` 列為 raw evidence，不直接信任。`analysis_workspace_v1.json` 記錄 source digest、tool identity 與每個衍生檔的 SHA-256。Analyst workflow 依來源 digest 保存在目前使用者 Local Application Data。
+    - CLI `-c` 支援手動傳入證物編號作為 ZIP 檔名；若未提供則自動產生 `AA-YYYYMMDDHHmm` 形式。Exit code `0/1/2/3/4` 分別表示完整成功、執行或輸出失敗、收集步驟失敗／命令參數錯誤、操作員取消、完成但有 coverage gap；分析 CLI 寫檔失敗回傳 `1`。
     - GUI Local Collect 會提示輸入證物編號，收集完成後可自動上傳並顯示結果。
     - 產出 ZIP 後會建立對應 `*.sha256` 檔案。
 
-### 3.2 建置系統 (Build System)
-- **腳本**: `build.bat`, `build_release.bat`
+### 3.2 建置與發布系統 (Build and Release System)
+- **腳本**: `build.bat`, `build_review.bat`, `run_review_regression.bat`, `build_release.bat`, `publish_release.bat`, `scripts\PackageRelease.ps1`, `scripts\SignLocalBuild.ps1`
 - **功能**:
-    - 自動偵測 .NET Framework 4.0+ 編譯器 (csc.exe)。
-    - `build.bat`: 本機建置，直接產出並簽章 `9SEC_Evidence_Workbench.exe`。
-    - `build_release.bat`: 一鍵正式發佈，先產出 `9SEC_Evidence_Workbench_release_candidate.exe`，簽章成功後升級為 `9SEC_Evidence_Workbench.exe`。
-    - **自動簽章**: 自動生成或檢索 "nine-security Inc" 自簽憑證，並對 `9SEC_Evidence_Workbench.exe` 進行代碼簽章；既有憑證必須通過跨 PowerShell 版本的 code-signing EKU 判讀，且 RSA 私鑰可實際開啟，才會被重用。若僅因本機未信任自簽 root 導致驗證狀態非 `Valid`，建置輸出會明確標示 `LocalSelfSignedUntrusted`；若 timestamp server 在離線或受限環境下不可達，簽章會保留但明確標示 `TimestampServerUnavailable` 與 `Timestamp signer: not attached`；若本機無法建立自簽 code-signing 憑證，則標示 `SkippedLocalCertUnavailable`，避免將其誤認為一般編譯失敗。
+    - 使用固定路徑 `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`，維持 .NET Framework 4.5+ / C# 5 相容性；`build_common.rsp` 為明確且有序的建置輸入清單。
+    - `build.bat`: 本機建置，在 `%TEMP%\9SEC_EvidW-local-build\9SEC_EvidW.exe` 產出並嘗試簽章，不覆寫專案根目錄的正式檔。本機若無法建立 code-signing 憑證或 timestamp server 不可達，會明確標示 `SkippedLocalCertUnavailable` 或 `TimestampServerUnavailable`，供開發者判讀。
+    - `build_release.bat`: 先在 `.release-stage\` 以最終 basename 產出 `9SEC_EvidW.exe`；正式 release gate 同時要求簽章與可信時間戳，任一缺失即 fail closed。驗證成功後才搬移到專案根目錄，確保 PE `OriginalFilename` / `InternalName` 與發布檔名一致。
+    - `build_review.bat` / `run_review_regression.bat`: 在 `%TEMP%` 建置 `INCLUDE_TESTS` review EXE、執行 self-tests，完成後清理 review EXE並保留測試結果文字檔。
+    - `publish_release.bat`: 預設先執行 regression，再呼叫正式 release build，最後產生 `dist\9SEC_Evidence_Workbench_vX.Y.Z.zip` 與同名 `.zip.sha256`。`-SkipBuild` 僅封裝既有正式 EXE且明確略過 regression，但仍要求 FileVersion、PE `OriginalFilename`、Authenticode 簽章與時間戳符合版本契約；`-Publish` 透過 GitHub CLI 建立或更新 Release並上傳 ZIP/checksum，缺少 `gh` 時 fail closed。
+    - Parser differential validation 直接由 `scripts\DiffValidate.ps1` 執行；若 reference tools 不存在則明確 skip 並成功結束，存在時按需建置及清理 `%TEMP%` review EXE。
+    - **自動簽章**: 自動生成或檢索 "nine-security Inc" 自簽憑證；既有憑證必須通過跨 PowerShell 版本的 code-signing EKU 判讀，且 RSA 私鑰可實際開啟，才會被重用。若簽章存在但本機未信任自簽 root，輸出明確標示 `LocalSelfSignedUntrusted`，不誤稱為受公有 CA 信任。
     - **Icon**: 支援嵌入應用程式圖示 (`/win32icon`)。
 
 ### 3.3 產出檔案規格詳情 (Output Artifacts Detail)
@@ -240,7 +244,7 @@
 | **filesystem_7days.csv** | CSV | `Path`, `Size`, `Created`, `Modified`, `Extension`, `SHA256` | 最近 7 天新增/修改檔案掃描（&lt;50MB 計算 Hash） |
 | **file_integrity.csv** | CSV | `FileName`, `Path`, `SHA256`, `SignatureStatus`, `Signer`, `Status` | `SHA256` Hash of System32 binaries |
 | **activity_timeline.csv** | CSV | `Time`, `Source`, `Action`, `Path`, `User`, `Details` | Unified Activity Timeline (Registry/JumpLists/Prefetch/Recent/Process) |
-| **jump_lists.csv** | CSV | `Time`, `Source`, `AppId`, `Path`, `User`, `Details` | Jump Lists Parser；**另**經 `JumpListNormalizer` 入 Fact Store／Entity search／`full_log_v3`（facts-only）；**Unified Timeline** 經 `activity_timeline.csv` 之 JumpList 列呈現，不重複 merge 本檔 |
+| **jump_lists.csv** | CSV | `Time`, `Source`, `AppId`, `Path`, `User`, `Details` | Bounded byte-scan 找候選 MS-SHLLINK 並擷取 LocalBasePath；目前差異驗證對 JLECmd path recall 140/172（81.4%），非完整 OLE-CFB parser。**另**經 `JumpListNormalizer` 入 Fact Store／Entity search／`full_log_v3`（facts-only）；**Unified Timeline** 經 `activity_timeline.csv` 之 JumpList 列呈現，不重複 merge 本檔 |
 | **JumpLists/*.automaticDestinations-ms** | Binary | Jump List files (raw copy) | File Copy |
 | **collection_coverage.json** | JSON | 收集覆蓋率報告；含 `collection_mode_profile`（本次收集作用中之 **Standard / TriageFast / ForensicStrict**；舊案卷可缺）、`operator_acknowledged_risks`、`restricted_steps`、`skipped_by_profile`、`output_target_class`（`system_disk / removable / network / unknown`）、`overall_status`、各 major artifact group 的 `complete / partial / failed / skipped / missing` 狀態（Memory 步驟另可反映略過或未產出 sidecar）、`completed_steps` / `partial_steps` / `failed_steps` / **`skipped_steps`** / **`missing_steps`**、present/missing artifacts、detail，以及 `collector_user / collector_privilege_state / backup_privilege_status` runtime context。若有 `missing_steps` 或 `skipped_by_profile`，overall 亦降為 `partial`；Event Logs 只有在每個 `.evtx` 都有對應 `*_filtered.csv` 時才會是 `complete` | Collector |
 | **memory_acquisition.json** | JSON | 外部記憶體採集編排 sidecar（`schema=memory_acquisition_v2`）：`status`（complete/partial/failed/skipped 等）、工具路徑與參數、`args_preset`、輸出相對路徑、起迄 UTC、逾時設定、exit code、stdout/stderr 尾段、輸出檔大小與 SHA256、`validation_mode / validation_status / validation_detail`、`diagnostic_category / diagnostic_detail`、collector 是否管理員、設定旗標。不含映像解析 | `MemoryAcquisitionCollector` |
@@ -336,14 +340,14 @@
 - [x] **Timeline (Combined)**: Process + MFT + EventLog（*_filtered.csv）+ USN 整合時間軸；Export CSV/JSON。
 - [x] **Advanced EVTX Viewer**: 事件詳情可切換 Description | Parsed fields | Raw XML。
 - [x] **Report HTML**: Summary 分頁「Export HTML Report」產出單一 HTML（Host、Counts、Highlights、Observed facts）。
-- [x] **Fact Store**: 記憶體 FactStore、Entity 索引（HashSet 存 Fact，O(1) add/lookup）、GetByEntity/GetByTimeRange；載入案卷時預設於背景自動建置（Settings 可關閉），支援 Entity search。Fact 另帶 `TimeKind` / `TimeConfidence`，用來標示 timestamp 來源與可信度；目前已含 USN Journal normalizer。若案卷內存在 `fact_store.db`，載入時會檢查其是否比目前 source artifacts 舊，並以 `fact_store_freshness_status/detail` 標示 cache 是否 stale。**前置**：須先載入 Case（ExtractPath 存在）；Build 時從磁碟讀取各 CSV/XML（及已解析的 MftEntries），**目前預設寫入記憶體**，SQLite 持久化見 Phase B3。
-- [x] **Incremental Fact Store Build Cache**: Settings 可選啟用目前使用者 Local Application Data 下的 gzip JSON cache（預設關閉，不寫入 evidence root）。每個 input 保存 `relative_path / size / mtime_utc / sha256 / normalizer_name`；exact match 直接 `Reused`，只有 `EventLogs/*_filtered.csv` 變更時局部重建受影響 facts，其他新增／刪除／變更、schema/tool/config 不相容或損毀 cache 均回退 `Full`。cache 原子寫入、ACL best effort 限目前使用者、壓縮 1 GiB／解壓 4 GiB 安全上限，並可由 Settings 清除。Summary 與 exports 保存 build mode、產生時間、原因與 input manifest。
+- [x] **Fact Store**: 記憶體 FactStore、Entity 索引（HashSet 存 Fact，O(1) add/lookup）、GetByEntity/GetByTimeRange；載入案卷時預設於背景自動建置（Settings 可關閉），支援 Entity search。Fact 另帶 `TimeKind` / `TimeConfidence`，用來標示 timestamp 來源與可信度；目前已含 USN Journal normalizer。Evidence root 內預置的 `fact_store.db` 不載入為 facts，狀態標示 `untrusted_source` 並要求由 source artifacts 重建；只有本次 analysis workspace 產生的 SQLite 參與 freshness 檢查。**前置**：須先載入 Case（ExtractPath 存在）；Build 時從磁碟讀取各 CSV/XML（及已解析的 MftEntries），**目前預設寫入記憶體**，SQLite 持久化見 Phase B3。
+- [x] **Incremental Fact Store Build Cache**: Settings 可選啟用目前使用者 Local Application Data 下的 gzip JSON cache（預設關閉，不寫入 evidence root）。每次 build 先重驗 evidence digest，並重新計算每個 input 的 `relative_path / size / mtime_utc / sha256 / normalizer_name`；exact match 直接 `Reused`，只有 `EventLogs/*_filtered.csv` 變更時局部重建受影響 facts，其他新增／刪除／變更、schema/tool/config 不相容或損毀 cache 均回退 `Full`。cache 原子寫入、ACL best effort 限目前使用者、壓縮 1 GiB／解壓 4 GiB 安全上限，並可由 Settings 清除。CSV 超過 100 MiB、500,000 列或讀取中斷會寫入 case Load warnings 與 exports。Summary 與 exports 保存 build mode、產生時間、原因與 input manifest。
 - [x] **Manual Rebuild Entry**: UI 提供單一主機層級的 **Rebuild Selected Host Event Logs / Fact Store**。Event Log 重建會改寫該主機 `EventLogs/*_filtered.csv`；Fact Store 重建則會刷新記憶體中的 facts，並於啟用 SQLite 寫入時同步更新 `fact_store.db`。
 - [x] **Cross-source Fact Correlation**: 以 Fact Store、Entity 索引與時間窗查詢支援分析師做跨來源比對，不在工具內直接執行內建規則判定。
 - [x] **Event Log 收集優化**: 預設保留完整 EVTX，並同時輸出含 `Computer / UserId / TaskDisplayName / EventData` 的 filtered CSV 供 Timeline / Fact Store / Export 使用；config.ini EventLogDays/EventLogMaxEvents 控制 filtered 視窗與上限。
-- [x] **Collection Coverage**: 收集完成時寫出 `collection_coverage.json`，記錄 major artifact groups 的 `complete / partial / failed / skipped / missing`、缺失 artifacts、runtime context，以及 collection profile、輸出分類、操作員確認、受限與 profile 略過步驟；若有 `missing` 或 enabled step 因 profile 略過，overall 亦降為 `partial`。Summary / HTML / JSON 匯出會同步帶出，協助分析師區分「未觀察到」與「未成功收集」。
+- [x] **Collection Coverage**: 收集完成時寫出 `collection_coverage.json`，記錄 major artifact groups 的 `complete / partial / failed / skipped / missing`、缺失 artifacts、runtime context，以及 collection profile、輸出分類、操作員確認、受限與 profile 略過步驟；若有 `missing` 或 enabled step 因 profile 略過，overall 亦降為 `partial`，CLI 回傳 exit code `4`。Summary / HTML / JSON 匯出會同步帶出，協助分析師區分「未觀察到」與「未成功收集」。
 - [x] **Logger**: Utils/Logger.cs 集中記錄；ZipFile 取代 PowerShell 壓縮/解壓。
-- [x] **Phase B3 SQLite**: Fact Store 持久化（拆欄 Id/Time/Source/EntityKey + JSON 欄 Details；SchemaVersion 3）。**實作**：Settings「Write Fact Store to SQLite when building」勾選後，Build Fact Store 時寫入各 host 之 `ExtractPath\fact_store.db`；Dashboard「Export full LOG JSON」匯出 `full_log_v3` facts-only envelope（host 摘要、analyst workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要、完整 facts）；SQLite 以執行期載入 System.Data.SQLite.dll（DLL 未放置於 exe 同目錄時僅略過寫入）；`FactStorePersistence.LoadFromSqlite` 可自 DB 還原 FactStore。**未來新增的 LOG**：凡納入 `FactStore.BuildFromCase` 即自動納入同一 JSON 輸出。Case Diff 另由兩案 Fact Store 產生 `diff_v1`，不新增 artifact-specific export；**Privacy redaction** 不實作。
+- [x] **Phase B3 SQLite**: Fact Store 持久化（拆欄 Id/Time/Source/EntityKey + JSON 欄 Details；SchemaVersion 3）。**實作**：Settings「Write Fact Store to SQLite when building」勾選後，Build Fact Store 時寫入各 host 之 analysis workspace `fact_store.db`，不回寫 evidence root；Dashboard「Export full LOG JSON」匯出 `full_log_v3` facts-only envelope（host 摘要、analyst workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要、完整 facts）；SQLite 以執行期載入 System.Data.SQLite.dll（DLL 未放置於 exe 同目錄時僅略過寫入）；`FactStorePersistence.LoadFromSqlite` 僅供受控內部／測試讀取，匯入 evidence root 內預置 DB 不會直接還原為本案 facts。**未來新增的 LOG**：凡納入 `FactStore.BuildFromCase` 即自動納入同一 JSON 輸出。Case Diff 另由兩案 Fact Store 產生 `diff_v1`，不新增 artifact-specific export；**Privacy redaction** 不實作。
 
 ### 5.1 已完成工程工作包與後續邊界
 > `v0.22.0` 的歷史拆分見 [V0_22_ENGINEERING_SPEC.md](V0_22_ENGINEERING_SPEC.md)；Case Diff、Fact Store 增量快取與 Forensic Strict 的現行規格／驗收狀態見 [V0_25_ENGINEERING_SPEC.md](V0_25_ENGINEERING_SPEC.md)。

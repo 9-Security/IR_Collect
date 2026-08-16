@@ -3,7 +3,7 @@
     Phase 2.2 - differential validation of 9SEC Evidence Workbench parsers against the Eric Zimmerman tools.
 
 .DESCRIPTION
-    Runs 9SEC Evidence Workbench's real production parser (via 9SEC_Evidence_Workbench_review.exe -parse) and the matching
+    Runs 9SEC Evidence Workbench's real production parser (via 9SEC_EvidW_review.exe -parse) and the matching
     Eric Zimmerman reference tool (LECmd / JLECmd) on the same input artifacts, then diffs the
     extracted paths. Disagreements where the reference tool found a LinkInfo LocalBasePath that we
     did NOT reproduce are treated as failures (the gate); cases the reference resolves only from a
@@ -21,7 +21,8 @@
     Directory containing the EZ tool exes. Default: tools\EZ\net9
 
 .PARAMETER ReviewExe
-    Path to 9SEC_Evidence_Workbench_review.exe (built with INCLUDE_TESTS). Default: .\9SEC_Evidence_Workbench_review.exe
+    Path to the temporary 9SEC_EvidW_review.exe built with INCLUDE_TESTS.
+    Default: %TEMP%\9SEC_EvidW_review.exe
 
 .PARAMETER Kind
     Which parser(s) to validate: lnk, jumplist, or all. Default: all
@@ -41,7 +42,7 @@
 [CmdletBinding()]
 param(
     [string]$ToolsDir = "tools\EZ\net9",
-    [string]$ReviewExe = ".\9SEC_Evidence_Workbench_review.exe",
+    [string]$ReviewExe = (Join-Path $env:TEMP "9SEC_EvidW_review.exe"),
     [ValidateSet("lnk", "jumplist", "mft", "srum", "amcache", "shimcache", "prefetch", "all")]
     [string]$Kind = "all",
     [int]$Sample = 30,
@@ -53,7 +54,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$SKIP = 3          # exit code: validation skipped (tool missing) - not a failure
 $script:failures = 0
 $script:skipped = $false
 
@@ -549,32 +549,52 @@ function Validate-Prefetch {
 
 # --- main ---
 Write-Host "9SEC Evidence Workbench - Phase 2.2 differential validation" -ForegroundColor White
-if (-not (Test-Path $ReviewExe)) {
-    Write-Host ("ERROR: review exe not found at " + $ReviewExe + " - build it with build_review.bat first.") -ForegroundColor Red
-    exit 1
-}
 if (-not (Test-Path $ToolsDir)) {
     Write-Host ("SKIP: EZ tools dir not found (" + $ToolsDir + "). Run scripts\Get-ZimmermanTools.ps1 or pass -ToolsDir.") -ForegroundColor Yellow
     Write-Host "(Skipped, not failed - this gate is a no-op without the reference tools.)"
-    exit $SKIP
-}
-
-if ($Kind -eq "all" -or $Kind -eq "lnk") { Validate-Lnk }
-if ($Kind -eq "all" -or $Kind -eq "jumplist") { Validate-JumpList }
-if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
-if ($Kind -eq "all" -or $Kind -eq "srum") { Validate-Srum }
-if ($Kind -eq "all" -or $Kind -eq "amcache") { Validate-Amcache }
-if ($Kind -eq "all" -or $Kind -eq "shimcache") { Validate-ShimCache }
-if ($Kind -eq "all" -or $Kind -eq "prefetch") { Validate-Prefetch }
-
-Write-Section "RESULT"
-if ($script:failures -gt 0) {
-    Write-Host ("FAIL: " + $script:failures + " parser disagreement(s) vs the reference tool.") -ForegroundColor Red
-    exit 1
-}
-if ($script:skipped) {
-    Write-Host "PASS (with skips): no disagreements; some checks were skipped (see SKIP lines above)." -ForegroundColor Yellow
     exit 0
 }
-Write-Host "PASS: 9SEC Evidence Workbench parser output agrees with the Eric Zimmerman reference tools." -ForegroundColor Green
-exit 0
+
+$defaultReviewExe = Join-Path $env:TEMP "9SEC_EvidW_review.exe"
+$reviewBuiltHere = $false
+$exitCode = 0
+try {
+    if (-not (Test-Path -LiteralPath $ReviewExe)) {
+        if ([IO.Path]::GetFullPath($ReviewExe) -ne [IO.Path]::GetFullPath($defaultReviewExe)) {
+            throw "Review executable not found at custom path: $ReviewExe"
+        }
+        Write-Host "[+] Building temporary review executable..." -ForegroundColor Cyan
+        $reviewBuild = Join-Path $repoRoot "build_review.bat"
+        & cmd.exe /d /c "call `"$reviewBuild`""
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ReviewExe)) {
+            throw "Temporary review executable build failed."
+        }
+        $reviewBuiltHere = $true
+    }
+
+    if ($Kind -eq "all" -or $Kind -eq "lnk") { Validate-Lnk }
+    if ($Kind -eq "all" -or $Kind -eq "jumplist") { Validate-JumpList }
+    if ($Kind -eq "all" -or $Kind -eq "mft") { Validate-Mft }
+    if ($Kind -eq "all" -or $Kind -eq "srum") { Validate-Srum }
+    if ($Kind -eq "all" -or $Kind -eq "amcache") { Validate-Amcache }
+    if ($Kind -eq "all" -or $Kind -eq "shimcache") { Validate-ShimCache }
+    if ($Kind -eq "all" -or $Kind -eq "prefetch") { Validate-Prefetch }
+
+    Write-Section "RESULT"
+    if ($script:failures -gt 0) {
+        Write-Host ("FAIL: " + $script:failures + " parser disagreement(s) vs the reference tool.") -ForegroundColor Red
+        $exitCode = 1
+    }
+    elseif ($script:skipped) {
+        Write-Host "PASS (with skips): no disagreements; some checks were skipped (see SKIP lines above)." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "PASS: 9SEC Evidence Workbench parser output agrees with the Eric Zimmerman reference tools." -ForegroundColor Green
+    }
+}
+finally {
+    if ($reviewBuiltHere -and (Test-Path -LiteralPath $ReviewExe)) {
+        Remove-Item -LiteralPath $ReviewExe -Force -ErrorAction SilentlyContinue
+    }
+}
+exit $exitCode

@@ -11,10 +11,9 @@ namespace IR_Collect
     public static class BuildInfo
     {
         public const string ToolName = "9SEC Evidence Workbench";
-        public const string ExecutableBaseName = "9SEC_Evidence_Workbench";
+        public const string ExecutableBaseName = "9SEC_EvidW";
         public const string ExecutableName = ExecutableBaseName + ".exe";
         public const string ReviewExecutableName = ExecutableBaseName + "_review.exe";
-        public const string ReleaseCandidateExecutableName = ExecutableBaseName + "_release_candidate.exe";
         public const string SelfTestResultFileName = ExecutableBaseName + "_TestResult.txt";
 
         private static string _version;

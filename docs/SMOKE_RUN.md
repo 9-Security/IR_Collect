@@ -8,8 +8,8 @@
 
 任選一種方式：
 
-- **GUI**：執行 `9SEC_Evidence_Workbench.exe` → 選「Local Collect」→ 輸入 Evidence ID → 等待收集完成。
-- **CLI**：執行 `9SEC_Evidence_Workbench.exe -c`（自動產生 Evidence ID）或 `9SEC_Evidence_Workbench.exe -c <ID>`（例如 `-c SmokeRunTest`），等待完成。
+- **GUI**：執行 `9SEC_EvidW.exe` → 選「Local Collect」→ 輸入 Evidence ID → 等待收集完成。
+- **CLI**：執行 `9SEC_EvidW.exe -c`（自動產生 Evidence ID）或 `9SEC_EvidW.exe -c <ID>`（例如 `-c SmokeRunTest`），等待完成。
 
 ### 1.1.1 ForensicStrict 保護流程
 

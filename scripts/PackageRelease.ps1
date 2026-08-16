@@ -1,8 +1,8 @@
 #Requires -Version 3.0
 <#
 .SYNOPSIS
-  Zip 9SEC_Evidence_Workbench.exe for GitHub Releases (EXE-only bundle).
-  Optionally run build_release.bat, then create or update a release via GitHub CLI (gh).
+  Zip 9SEC_EvidW.exe for GitHub Releases (EXE-only bundle).
+  By default run regression and the formal release build, then optionally create or update a release via GitHub CLI (gh).
 
 .EXAMPLE
   .\scripts\PackageRelease.ps1
@@ -19,10 +19,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$exePath = Join-Path $root "9SEC_Evidence_Workbench.exe"
+$exePath = Join-Path $root "9SEC_EvidW.exe"
 $specPath = Join-Path $root "docs\SPEC.md"
 
 if (-not $SkipBuild) {
+    Write-Host "[+] Running regression gate..."
+    $regression = Join-Path $root "run_review_regression.bat"
+    & cmd.exe /c "cd /d `"$root`" && call `"$regression`""
+    if ($LASTEXITCODE -ne 0) {
+        throw "run_review_regression.bat failed with exit code $LASTEXITCODE"
+    }
+
     Write-Host "[+] Running build_release.bat..."
     $build = Join-Path $root "build_release.bat"
     & cmd.exe /c "cd /d `"$root`" && call `"$build`""
@@ -32,7 +39,7 @@ if (-not $SkipBuild) {
 }
 
 if (-not (Test-Path -LiteralPath $exePath)) {
-    throw "9SEC_Evidence_Workbench.exe not found at $exePath. Run build_release.bat or use -SkipBuild after building."
+    throw "9SEC_EvidW.exe not found at $exePath. Run build_release.bat or use -SkipBuild after building."
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -65,6 +72,34 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 $Version = $Version.Trim()
 if (-not $Version.StartsWith("v", [StringComparison]::OrdinalIgnoreCase)) {
     $Version = "v$Version"
+}
+
+try {
+    $expectedVersion = [System.Version]::Parse($Version.Substring(1))
+    $fileVersionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath)
+    $actualVersion = [System.Version]::Parse($fileVersionInfo.FileVersion)
+} catch {
+    throw "Could not validate the release EXE version: $($_.Exception.Message)"
+}
+if ($actualVersion.Major -ne $expectedVersion.Major -or
+    $actualVersion.Minor -ne $expectedVersion.Minor -or
+    $actualVersion.Build -ne $expectedVersion.Build) {
+    throw "Release EXE version $actualVersion does not match package version $Version."
+}
+if (-not [string]::Equals($fileVersionInfo.OriginalFilename, "9SEC_EvidW.exe", [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Release EXE OriginalFilename is '$($fileVersionInfo.OriginalFilename)', expected '9SEC_EvidW.exe'."
+}
+
+$signature = Get-AuthenticodeSignature -LiteralPath $exePath
+if (-not $signature.SignerCertificate) {
+    throw "Release EXE is not Authenticode signed."
+}
+if ($signature.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned -or
+    $signature.Status -eq [System.Management.Automation.SignatureStatus]::HashMismatch) {
+    throw "Release EXE signature validation failed: $($signature.Status)."
+}
+if (-not $signature.TimeStamperCertificate) {
+    throw "Release EXE does not contain a trusted timestamp."
 }
 
 $distDir = Join-Path $root "dist"
@@ -112,14 +147,12 @@ Or upload $zipPath and $checksumPath manually in the repo Releases page.
 
 $gh = Get-Command gh -ErrorAction SilentlyContinue
 if (-not $gh) {
-    Write-Warning "GitHub CLI (gh) not in PATH. Install: https://cli.github.com/"
-    Write-Host "Zip is ready: $zipPath"
-    exit 0
+    throw "GitHub CLI (gh) is not in PATH; -Publish cannot continue. The local ZIP remains at $zipPath."
 }
 
 $releaseNotes = $Notes
 if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
-    $releaseNotes = "Portable **9SEC_Evidence_Workbench.exe** only (extract and run). Windows, .NET Framework 4.5+. See repository README."
+    $releaseNotes = "Portable **9SEC_EvidW.exe** only (extract and run). Windows, .NET Framework 4.5+. See repository README."
 }
 
 $tag = $Version

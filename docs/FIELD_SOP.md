@@ -6,7 +6,7 @@ Short on-scene playbook for responders. For full operator documentation see **[U
 
 ## 1. Pre-flight
 
-- Prefer running `9SEC_Evidence_Workbench.exe` **elevated (Administrator)**.
+- Prefer running `9SEC_EvidW.exe` **elevated (Administrator)**.
 - Prefer running from **removable media** and writing output to removable media.
 - Confirm free disk space, especially if Memory acquisition is enabled.
 - For sensitive matters, verify `config.ini` AI / Upload endpoints against policy **before** collection.
@@ -16,7 +16,7 @@ Short on-scene playbook for responders. For full operator documentation see **[U
 
 ### GUI
 
-1. Run `9SEC_Evidence_Workbench.exe`
+1. Run `9SEC_EvidW.exe`
 2. Click `Local Collect`
 3. Enter an `Evidence ID`
 4. Wait for collection to finish
@@ -28,8 +28,8 @@ Enabled memory acquisition/analysis is skipped by default and manual Deep Scan i
 ### CLI
 
 ```cmd
-9SEC_Evidence_Workbench.exe -c
-9SEC_Evidence_Workbench.exe -c Case001
+9SEC_EvidW.exe -c
+9SEC_EvidW.exe -c Case001
 ```
 
 After collection you should see:

@@ -6,26 +6,25 @@
 
 ## 下載
 
-**[最新發行版（ZIP）](https://github.com/9-Security/IR_Collect/releases/latest)** — 僅含 **`9SEC_Evidence_Workbench.exe`**，解壓後執行。
+**[最新發行版（ZIP）](https://github.com/9-Security/IR_Collect/releases/latest)** — Release 提供 ZIP 與對應的 `.zip.sha256` sidecar；請先驗證 ZIP，再解壓執行。目前 source 與 v0.25.1 候選版使用 **`9SEC_EvidW.exe`**，已發布的 v0.25.0 archive 仍保留先前的執行檔名。
 
-本 README 對齊目前 source tree，包含 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 的
-**Unreleased** 項目；已發布版本可能尚未包含全部能力，請以 `-version` 與 release notes
-確認實際執行檔版本。
+**目前 GitHub 正式版：v0.25.0（2026-07-29）；目前 source 目標：v0.25.1。** 候選版強化記錄於 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 的 **Unreleased**。
+請以 `-version`／`--version` 與 release notes 確認任一執行檔的實際能力。
 
 - **執行環境：** .NET Framework 4.5+（一般 Win7 以上已具備）。
-- **圖形介面：** 連點 `9SEC_Evidence_Workbench.exe`。
-- **CLI 收集：** `9SEC_Evidence_Workbench.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
+- **圖形介面：** 連點 `9SEC_EvidW.exe`。
+- **CLI 收集：** `9SEC_EvidW.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
 - 建議將**輸出寫在外接媒體**，降低對受查主機的變動。
 
 ### 離線分析與關聯（不碰 live 主機、不開 GUI）
 
 9SEC Evidence Workbench 也能分析**任何人**已採集好的 artifact —— 指向資料夾或證據封裝，即可跑與載入 case 完全相同的 facts-only 關聯管線：
 
-- `9SEC_Evidence_Workbench.exe -analyze <資料夾或封裝> [out.json]` —— 支援 folder、ZIP、TAR、TAR.GZ/TGZ；UAC 證據會自動辨識、索引並正規化可支援來源 → `summary_v3` JSON。
-- `9SEC_Evidence_Workbench.exe -diff <基線> <目標> [out.json]` —— 透過正規化 facts 比較兩個資料夾或證據封裝 → `diff_v1` Added/Modified/Removed JSON。
-- `9SEC_Evidence_Workbench.exe -correlate <out.json> <路徑A> <路徑B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
-- `9SEC_Evidence_Workbench.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
-- `9SEC_Evidence_Workbench.exe -version` —— 工具名稱 + 版本。
+- `9SEC_EvidW.exe -analyze <資料夾或封裝> [out.json]` —— 支援 folder、ZIP、TAR、TAR.GZ/TGZ；UAC 證據會自動辨識、索引並正規化可支援來源 → `summary_v3` JSON。
+- `9SEC_EvidW.exe -diff <基線> <目標> [out.json]` —— 透過正規化 facts 比較兩個資料夾或證據封裝 → `diff_v1` Added/Modified/Removed JSON。
+- `9SEC_EvidW.exe -correlate <out.json> <路徑A> <路徑B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
+- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
+- `9SEC_EvidW.exe -version` —— 工具名稱 + 版本。
 
 GUI 的 **Diff** 分頁會把目前選取的 target，與另一個已載入且 Fact Store ready 的 case 比較。
 結果可依類別、變更型態與來源篩選，並跳回對應 Facts 或 Timeline 驗證。Added/Removed 只表示
@@ -113,6 +112,6 @@ GitHub 本 repo 之 **`docs/`**。**現場 SOP** 與**使用手冊**為雙語（
 | [docs/SPEC.md](docs/SPEC.md) | 規格、版本歷程、Roadmap |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | 變更紀錄 |
 
-完整程式碼與建置腳本若未鏡像至此 repo，以維護者工作區為準；**執行檔**請自 **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)** 下載。
+原始碼與文件均維護於此 repository。調查時請使用與執行檔相同 tag 的文件；正式執行檔請自 **[Releases](https://github.com/9-Security/IR_Collect/releases/latest)** 下載。
 
 歡迎 **Issues／討論** 回饋。

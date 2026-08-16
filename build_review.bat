@@ -3,15 +3,16 @@ setlocal
 cd /d "%~dp0"
 
 set "CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-set "TARGET_EXE=9SEC_Evidence_Workbench_review.exe"
+set "TARGET_EXE=%TEMP%\9SEC_EvidW_review.exe"
 
 if not exist "%CSC%" (
     echo [!] csc.exe not found at %CSC%
     exit /b 1
 )
 
-echo [+] Compiling %TARGET_EXE% with INCLUDE_TESTS (does not overwrite 9SEC_Evidence_Workbench.exe^)...
-"%CSC%" /nologo /define:INCLUDE_TESTS /out:%TARGET_EXE% @build_common.rsp src\Tests\IRCollectSelfTests.cs src\Tests\FixtureCorpus.cs src\Tests\ParserCli.cs
+if exist "%TARGET_EXE%" del /q "%TARGET_EXE%" >nul 2>&1
+echo [+] Compiling temporary review executable with INCLUDE_TESTS...
+"%CSC%" /nologo /define:INCLUDE_TESTS /out:"%TARGET_EXE%" @build_common.rsp src\Tests\IRCollectSelfTests.cs src\Tests\FixtureCorpus.cs src\Tests\ParserCli.cs
 if errorlevel 1 (
     echo [!] Build failed.
     exit /b 1

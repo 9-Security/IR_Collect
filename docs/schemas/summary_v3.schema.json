@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/summary_v3.schema.json",
   "title": "9SEC Evidence Workbench summary_v3",
-  "description": "Per-host analysis summary — output of `9SEC_Evidence_Workbench.exe -analyze` and the GUI Export Summary JSON.",
+  "description": "Per-host analysis summary — output of `9SEC_EvidW.exe -analyze` and the GUI Export Summary JSON.",
   "type": "object",
   "required": ["export_schema", "generated_at", "tool_name", "tool_version", "host", "fact_count"],
   "properties": {

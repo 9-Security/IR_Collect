@@ -50,6 +50,7 @@ namespace IR_Collect.Analysis.Correlation
             // Pre-allocate to reduce list reallocations (rough estimate)
             int estimatedFacts = 20000;
             store.Facts = new List<Fact>(estimatedFacts);
+            CorrelationCsvHelper.ResetDiagnostics();
 
             string processPath = ResolvePath(c, basePath, ArtifactNames.ProcessListCsv);
             if (!string.IsNullOrEmpty(processPath))
@@ -333,9 +334,24 @@ namespace IR_Collect.Analysis.Correlation
                 store.Facts.AddRange(eventLogFacts);
             }
 
+            AppendCsvDiagnostics(c);
             FactProvenanceHelper.ApplyCaseMetadata(c, store.Facts);
             store.BuildEntityIndex();
             return store;
+        }
+
+        internal static void AppendCsvDiagnostics(CaseData c)
+        {
+            List<string> diagnostics = CorrelationCsvHelper.ConsumeDiagnostics();
+            if (c == null || c.LoadWarnings == null || diagnostics.Count == 0) return;
+            lock (c.LoadWarnings)
+            {
+                foreach (string warning in diagnostics)
+                {
+                    if (!c.LoadWarnings.Any(x => string.Equals(x, warning, StringComparison.OrdinalIgnoreCase)))
+                        c.LoadWarnings.Add(warning);
+                }
+            }
         }
 
         /// <summary>從 Facts 建立實體索引（EntityKey → HashSet of Facts，O(1) add 避免重複）。

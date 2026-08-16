@@ -111,7 +111,7 @@
     {
       "format": "mft",
       "artifact": "Full $MFT",
-      "validationPlan": "Compare against MFTECmd. The run-list fixtures cover only the DATA run-list sub-parser."
+      "validationPlan": "Compare against MFTECmd. Small self-tests cover DATA run lists and resident ATTRIBUTE_LIST FILE_NAME extension references; full and non-resident cases still require a real MFT."
     }
   ]
 }

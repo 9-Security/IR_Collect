@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/9-Security/IR_Collect/docs/schemas/diff_v1.schema.json",
   "title": "9SEC Evidence Workbench diff_v1",
-  "description": "Facts-only baseline-to-target case comparison produced by `9SEC_Evidence_Workbench.exe -diff`.",
+  "description": "Facts-only baseline-to-target case comparison produced by `9SEC_EvidW.exe -diff`.",
   "type": "object",
   "required": [
     "diff_schema",

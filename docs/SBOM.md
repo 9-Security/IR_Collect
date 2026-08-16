@@ -8,13 +8,13 @@ build-input list is [`build_common.rsp`](../build_common.rsp).
 
 - **Name:** 9SEC Evidence Workbench
 - **Version:** single source of truth = `AssemblyVersion` in [`src/AssemblyInfo.cs`](../src/AssemblyInfo.cs),
-  read at runtime by `IR_Collect.BuildInfo` and printed by `9SEC_Evidence_Workbench.exe -version`.
+  read at runtime by `IR_Collect.BuildInfo` and printed by `9SEC_EvidW.exe -version`.
 - **Version surfacing:** stamped as `tool_name` + `tool_version` into every machine-readable
   output (`summary_v3`, `diff_v1`, `correlation_v1`, `graph_v1`, `full_log_v3`).
 
 ## Build
 
-- **Output:** a single portable `9SEC_Evidence_Workbench.exe` (WinForms, `winexe`).
+- **Output:** a single portable `9SEC_EvidW.exe` (WinForms, `winexe`).
 - **Target:** .NET Framework 4.5 / C# 5.
 - **Compiler (pinned):** `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` (the in-box
   .NET Framework compiler). Invoked from [`build.bat`](../build.bat) / [`build_release.bat`](../build_release.bat).

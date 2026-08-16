@@ -56,18 +56,20 @@ namespace IR_Collect.Analysis
             string outPath = outFile;
             if (string.IsNullOrEmpty(outPath))
                 outPath = Path.Combine(Directory.GetCurrentDirectory(), "ir_correlation.json");
+            bool outputWritten = true;
             try { CorrelationExport.SaveToFile(report, outPath); }
             catch (Exception ex)
             {
                 console.WriteLine("[!] Could not write " + outPath + ": " + ex.Message);
                 outPath = "(not written)";
+                outputWritten = false;
             }
 
             console.WriteLine("[+] Correlated " + report.HostCount + " host(s): "
                 + report.SharedEntities.Count + " shared entit(ies), "
                 + report.TemporalCorrelations.Count + " temporal correlation(s).");
             console.WriteLine("[+] Correlation JSON: " + outPath);
-            return 0;
+            return outputWritten ? 0 : 1;
         }
 
         /// <summary>

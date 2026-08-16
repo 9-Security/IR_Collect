@@ -15,7 +15,7 @@ namespace IR_Collect.Tests
     /// file and emits a stable one-line JSON result, so the harness can diff our output against
     /// the corresponding Eric Zimmerman tool (LECmd / JLECmd / MFTECmd / …) on the same file.
     ///
-    /// Invoked via:  9SEC_Evidence_Workbench_review.exe -parse &lt;kind&gt; &lt;file&gt;
+    /// Invoked via:  %TEMP%\9SEC_EvidW_review.exe -parse &lt;kind&gt; &lt;file&gt;
     /// Output (stdout): {"kind":"lnk","file":"...","ok":true,"paths":["C:\\...", ...]}
     /// </summary>
     internal static class ParserCli

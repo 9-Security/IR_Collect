@@ -1,6 +1,8 @@
-# IR 收集項目與可行性評估 (Feasibility Map)
+# 9SEC Evidence Workbench 證據項目與可行性評估 (Artifact Feasibility Map)
 
-**最後更新**: 2026-07-29
+**最後更新**: 2026-08-16
+
+**對齊版本**: v0.25.1 release candidate
 
 以下是本專案目前已實作能力、部分能力與明確範圍外項目的對照；Windows live collection 與 UAC Linux/macOS evidence intake 都納入本表。
 符號說明：
@@ -23,6 +25,7 @@
 - [v] **特權帳號**: Administrators Group 成員.
 - [!] **RDP/SMB/VPN**: Event Log 仍是重要來源，但已另外補入 `logon_sessions.csv`、`network_resources.csv`、`server_connections.csv`、`stored_credentials.txt` (`cmdkey /list`) 與 `kerberos_tickets.txt` (`klist`) 等非 Event-Log 線索，可在弱日誌情境下保留部分身分與橫向移動可觀測性。
 - [v] **ShellBags (資料夾檢視/路徑跡證)**: 匯出 `Registry\ShellBags_<SID>.reg`（BagMRU/Bags）；平台另自動產生 `Registry\shellbags.csv`（第一階段路徑片段／MRU／parser notes；Fact Store／Timeline／UI）。完整細節還原仍可用 Eric Zimmerman ShellBags Explorer 等外部工具。
+- [!] **Jump List 路徑還原**: 已將 bounded MS-SHLLINK byte-scan 結果寫入 `jump_lists.csv` 並串接 Fact Store／Timeline；目前對 JLECmd 差異驗證 path recall 為 140/172（81.4%）。因尚非完整 OLE-CFB parser，raw `.automaticDestinations-ms` / `.customDestinations-ms` 必須保留供深度分析。
 
 ## 三、行程與記憶體 (Process & Memory)
 - [v] **執行中行程**: PID, Parent PID, Path, CommandLine (WMI/ManagementObjectSearcher).
@@ -35,7 +38,7 @@
 - [x] **注入行為/隱藏行程**: 涉及 Rootkit 偵測，C# 實作困難且易被誤判為病毒.
 
 ## 四、檔案系統 (File System)
-- [v] **MFT (Master File Table)**: 已實作 Raw Copy、run list 解析與強化解析 (MACB/路徑/大小).
+- [v] **MFT (Master File Table)**: 已實作 Raw Copy、run list、MACB／路徑／大小，並會追蹤 resident `$ATTRIBUTE_LIST` 的 `$FILE_NAME` extension record 回收 Win32 長檔名。Non-resident attribute list 仍需保留 raw MFT 並以 MFTECmd 等外部工具交叉驗證。
 - [v] **檔案雜湊**: 針對特定目錄 (如 Startup, Temp) 進行 Hash 计算.
 - [v] **MACB 時間**: 透過 MFT 解析取得.
 - [!] **已刪除檔案**: MFT 標記為 Deleted 的紀錄可讀取，但無法救援內容.
@@ -76,7 +79,7 @@
 ## 十一、證據完整性與鑑識紀錄 (Integrity)
 - [v] **收集時間戳**.
 - [v] **工具版本號**.
-- [v] **雜湊驗證**: 打包 Zip 後計算 SHA256.
+- [v] **雜湊驗證**: 打包 Zip 後計算 SHA256；ZIP 與 sidecar 以同目錄 temporary file 完成後發布，相同 Evidence ID 的既有 output/ZIP/SHA 不覆寫。
 - [v] **執行紀錄**: 執行過程的 Log text.
 - [v] **收集覆蓋率報告**: `collection_coverage.json` 會記錄 major artifact groups 的 `complete / partial / failed / skipped / missing` 狀態、缺失項、`collector_user / collector_privilege_state / backup_privilege_status` runtime context，以及 `collection_mode_profile`、`operator_acknowledged_risks`、`restricted_steps`、`skipped_by_profile`、`output_target_class`，供 Summary / HTML / JSON 匯出使用。Event Logs 需逐 log 對上 `.evtx` 與 `*_filtered.csv` 才算 `complete`；若存在 `missing` 或 enabled step 因 profile 略過，overall 會降為 `partial`。`ForensicStrict` 預設略過已啟用的外部 memory acquisition / analysis handoff，阻擋 Deep Scan，並留下可稽核的 profile skip，而不是把略過誤記為成功收集。
 
@@ -84,8 +87,8 @@
 - [v] **Execution / Persistence Extensions**: `bam_dam.csv`、`bits_jobs.csv`、`wmi_persistence.csv`、`shimcache.csv`、`amcache_programs.csv`、`amcache_files.csv`、`shimcache_entries.csv`、`srum_network_usage.csv`、`srum_app_usage.csv` 會進入案卷；`ExecutionArtifacts\` 會保留 raw `Amcache.hve`、`SRUDB.dat`、`SRUDB.log`、`SRUDB.jrs` 等檔案，供後續離線深挖與交叉驗證。
 - [v] **Fact Store / Entity Search / Investigation Workspace**: 以正規化後的 Fact 與 Entity 索引支援分析師查詢與交叉比對，不在工具內直接產生 heuristic/rule 結論；每筆 Fact 另保留 `TimeKind` / `TimeConfidence`，以及 `CollectionStep / CollectionStatus / CollectionPrivilege / ParseLevel / FallbackUsed / SourceFile / RawRef / ParserNote` provenance 欄位。除 Event Log 既有欄位外，亦納入 **Phase 3 lateral movement / identity** 相關結構化實體與 actions（Security/Credential/SMB/RDP 等 EventID，`SubjectUser` / `TargetUser` / `ShareName` / `RemoteIP` / Kerberos 票證欄位補註等，仍 facts-only），以及 `LogonSession`、`NetworkResource`、`ServerConnection`、`StoredCredential`、`KerberosTicketCache`、`Amcache`、`ShimCache`、`SRUM Network`、`SRUM App` 等來源。parser notes 不再只限於 Amcache，USN / ShimCache / Process / Event Log fallback 也會在 Summary/HTML/`summary.json`/`full_log_v3` 以 dedicated 摘要保留。平台另提供可關閉的 Guided Hunt overlay，以 ATT&CK-mapped、可解釋規則與 hypothesis templates 消費上述 facts，但不改寫 Fact Store。跨主機關聯含 investigation workspace（trail、pinned、selected edge、host scope、篩選快照）與 `Open Timeline` graph 脈絡交接；graph 開 Timeline 會先用 structured entity 聚焦，再在缺乏 entity ref 時退回文字比對，不新增非 facts 之判定欄位。
 - [v] **USN Journal 分析路徑**: `usn_journal.csv` 不再只停留在獨立分頁，現在也會進入 Fact Store 與 Timeline；若原始輸出沒有完整路徑，仍可能只能以 `FileName` 層級關聯。
-- [v] **Fact Store 快取新鮮度**: 案卷載入時會檢查 `fact_store.db` 是否比目前 source artifacts 舊；若 stale，會在 Summary / JSON / HTML 與 host 摘要標示 `fact_store_freshness_status/detail`。
-- [v] **Fact Store 增量建置快取**: 可在 **Advanced → Settings** 選擇把 normalized facts 持久化於目前使用者的 Local Application Data（預設關閉）。每個 normalizer input 以相對路徑、大小、mtime、SHA-256 與 normalizer 名稱建立 manifest；完全相符時 `Reused`，只有 filtered Event Log CSV 變更時 `Incremental`，其餘輸入變更、版本／設定不相容或快取損毀均明確回退 `Full`。此 gzip JSON 是可清除的內部效能快取，**不是證據 artifact、不是 source of truth，也不寫回證據根目錄**；可能含敏感 normalized facts。`summary_v3` / `full_log_v3` host metadata 會保留 build mode、時間、原因與 input manifest。
+- [v] **Fact Store 快取新鮮度**: Evidence root 內預置的 `fact_store.db` 只列為 raw evidence，標示 `untrusted_source` 並由 source artifacts 重建；只有本次 analysis workspace 產生的 SQLite 參與 freshness 檢查。
+- [v] **Fact Store 增量建置快取**: 可在 **Advanced → Settings** 選擇把 normalized facts 持久化於目前使用者的 Local Application Data（預設關閉）。Fact Store build 前重驗整體 evidence digest，並重新計算每個 normalizer input 的相對路徑、大小、mtime、SHA-256 與 normalizer 名稱；完全相符時 `Reused`，只有 filtered Event Log CSV 變更時 `Incremental`，其餘輸入變更、版本／設定不相容或快取損毀均明確回退 `Full`。此 gzip JSON 是可清除的內部效能快取，**不是證據 artifact、不是 source of truth，也不寫回證據根目錄**；可能含敏感 normalized facts。CSV 超過 100 MiB、500,000 列或讀取中斷會進入 Load warnings／export。`summary_v3` / `full_log_v3` host metadata 會保留 build mode、時間、原因與 input manifest。
 - [v] **Case Diff / Baseline Diff**: 以兩案已正規化 Fact Store 的 category + primary entity 比較觀察狀態，輸出 Added / Modified / Removed 與雙側 fact references/provenance；case references 另帶 collection coverage 與 Fact Store freshness。GUI 可依類別、變更型態與來源篩選並跳回 Facts / Timeline；CLI `-diff <baseline> <target> [out.json]` 原子寫出 `diff_v1` JSON，最多 50,000 筆並以 `changes_truncated` 標示截斷。Added/Removed 只代表某一側未觀察到相同狀態；收集覆蓋差異仍須由分析師核對。
 - [v] **AI Entry**: Summary JSON 與完整 LOG JSON 匯出供 AI 分析（不外送原始資料）；Summary JSON 另帶 `export_schema=summary_v3`、`analysis_mode=facts_only`、`parser_notes`、`collection_coverage`、`fact_store_freshness_status/detail`、`analyst_workflow`、Fact source/entity type 統計與含 provenance 欄位的 fact samples。完整 LOG JSON 則為 `full_log_v3` envelope，含 host 摘要、workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要與完整 facts。
 
@@ -94,8 +97,7 @@
 
 - [v] **UAC file-hash facts**: `uac_file_hashes.csv` 正規化 UAC `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,sha256}`，欄位為 `Algorithm / Hash / Path / SourceKind / SourcePath / LineNumber / InputFormat`。支援 checksum-path 與 named-digest envelope，最多 250,000 列、64 個來源檔、單檔 512 MiB、單行 65,536 字元；不合格式或超限資料仍保留 raw 並在 load warnings 顯示。`UacFileHash` facts 使用 `Hash / Path / HashAlgorithm` entities，時間維持 unknown/low confidence，不宣稱執行或惡意性。
 
-## Maintenance Notes (2026-03-06)
-- No artifact schema changes in this update.
-- GUI rendering for heavy artifact views is deferred until first open; output files and platform ingestion rules remain unchanged.
-- Case import performance was improved internally by switching artifact discovery to a single recursive scan.
-- **v0.17.2 Code Review**：程式穩定性與防呆（SafeInvoke、MftParser 邊界、大檔不載入、ProcessFile log）；無產出格式或收容規則變更。
+## 文件維護狀態 (Document Maintenance)
+- 本表對齊 `v0.25.1` release candidate 的 collector、UAC intake、ArtifactNames、CaseManager discovery、Fact Store 與輸出 schema；歷史版本差異見 `CHANGELOG.md`。
+- 新增 collected artifact 時，必須同步 platform intake、案卷 discovery、適用的 UI/file-list 與 normalizer/export 管線；無法同次完成時需在規格 backlog 明列，不得留下孤兒產物。
+- 表中 `[v]` 只代表程式已實作，不代表每次收集都完整成功；實案仍須以 `collection_coverage.json`、load warnings、parser notes 與原始證據核對。

@@ -44,6 +44,18 @@ namespace IR_Collect.MFT
             // Convenience timestamps (prefer Standard, fallback to FileName)
             public DateTime Created { get; set; }
             public DateTime Modified { get; set; }
+
+            internal ulong BaseRecordNumber { get; set; }
+            internal ushort RecordSequenceNumber { get; set; }
+            internal ushort BaseRecordSequenceNumber { get; set; }
+            internal int FileNameNamespaceRank { get; set; }
+            internal List<ulong> FileNameExtensionRecordReferences { get; private set; }
+
+            public MftEntry()
+            {
+                FileNameNamespaceRank = -1;
+                FileNameExtensionRecordReferences = new List<ulong>();
+            }
         }
 
         public static List<MftEntry> Parse(string mftFilePath, int limit = 100)
@@ -89,6 +101,8 @@ namespace IR_Collect.MFT
                     }
                     recordIndex++;
                 }
+
+                MergeFileNameExtensionRecords(fs, result, recordSize);
             }
 
             // Build full paths after parsing
@@ -139,6 +153,7 @@ namespace IR_Collect.MFT
 
         internal static MftEntry ParseRecord(byte[] data, uint index)
         {
+            if (data == null || data.Length < 0x30) return null;
             // Simple Parser logic
             // Offset 0x16: Flags (0x01 = InUse, 0x02 = Directory)
             ushort flags = BitConverter.ToUInt16(data, 0x16);
@@ -148,6 +163,10 @@ namespace IR_Collect.MFT
             // To find FileName, we need to walk attributes.
             // First Attribute Offset: 0x14
             ushort firstAttrOffset = BitConverter.ToUInt16(data, 0x14);
+            ushort recordSequenceNumber = BitConverter.ToUInt16(data, 0x10);
+            ulong baseRecordReference = BitConverter.ToUInt64(data, 0x20);
+            ulong baseRecordNumber = baseRecordReference & 0x0000FFFFFFFFFFFF;
+            ushort baseRecordSequenceNumber = (ushort)(baseRecordReference >> 48);
             
             string filename = "";
             int bestNameRank = -1;   // best $FILE_NAME namespace seen so far (prefer Win32 over DOS 8.3)
@@ -163,6 +182,7 @@ namespace IR_Collect.MFT
             DateTime fnModified = DateTime.MinValue;
             DateTime fnMftModified = DateTime.MinValue;
             DateTime fnAccessed = DateTime.MinValue;
+            var fileNameExtensionReferences = new List<ulong>();
 
             int offset = firstAttrOffset;
             while (offset < data.Length - 8)
@@ -174,6 +194,16 @@ namespace IR_Collect.MFT
                 if (attrLen < 8 || offset + attrLen > data.Length) break; // prevent loop / overflow
 
                 byte nonResident = data[offset + 8];
+                if (attrType == 0x20 && nonResident == 0) // resident $ATTRIBUTE_LIST
+                {
+                    foreach (ulong recordReference in ParseAttributeListFileNameReferences(data, offset, attrLen))
+                    {
+                        ulong recordNumber = recordReference & 0x0000FFFFFFFFFFFF;
+                        if (recordNumber != index && !fileNameExtensionReferences.Contains(recordReference))
+                            fileNameExtensionReferences.Add(recordReference);
+                        if (fileNameExtensionReferences.Count >= 64) break;
+                    }
+                }
                 if (attrType == 0x10 && nonResident == 0 && offset + 0x16 <= data.Length) // $STANDARD_INFORMATION
                 {
                     ushort contentOffset = BitConverter.ToUInt16(data, offset + 0x14);
@@ -197,23 +227,18 @@ namespace IR_Collect.MFT
                     byte ns = data[attrContentStart + 65];
                     if (attrContentStart + 66 + (nameLen * 2) <= data.Length)
                     {
-                        // Parent ref and the FN timestamps are identical across a record's $FILE_NAME
-                        // namespaces, so capture them from any one.
-                        parentRef = BitConverter.ToUInt64(data, attrContentStart);
-                        fnCreated = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x08));
-                        fnModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x10));
-                        fnMftModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x18));
-                        fnAccessed = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x20));
-                        // But keep the name from the highest-ranked namespace (Win32 long name beats the
-                        // DOS 8.3 short name) rather than letting the last attribute win.
-                        // KNOWN LIMITATION: this only ranks among $FILE_NAME attributes present in the BASE
-                        // record. Files with several long hardlink names (e.g. WinSxS .cat/.manifest) keep
-                        // the long Win32 names in $ATTRIBUTE_LIST extension records that this parser does
-                        // not follow, so only the short DOS name remains here. Tracked for Phase 2.3.
+                        // Keep the metadata paired with the selected name. Hard links can have different
+                        // parents, so taking timestamps/parent from a lower-ranked DOS name would produce
+                        // an internally inconsistent path.
                         int rank = NamespaceRank(ns);
                         if (rank > bestNameRank)
                         {
                             filename = Encoding.Unicode.GetString(data, attrContentStart + 66, nameLen * 2);
+                            parentRef = BitConverter.ToUInt64(data, attrContentStart);
+                            fnCreated = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x08));
+                            fnModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x10));
+                            fnMftModified = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x18));
+                            fnAccessed = ConvertFileTime(BitConverter.ToInt64(data, attrContentStart + 0x20));
                             bestNameRank = rank;
                         }
                     }
@@ -246,7 +271,7 @@ namespace IR_Collect.MFT
             DateTime created = stdCreated.Year > 1980 ? stdCreated : fnCreated;
             DateTime modified = stdModified.Year > 1980 ? stdModified : fnModified;
 
-            return new MftEntry
+            var entry = new MftEntry
             {
                 RecordNumber = index,
                 InUse = inUse,
@@ -263,8 +288,119 @@ namespace IR_Collect.MFT
                 FnMftModified = fnMftModified,
                 FnAccessed = fnAccessed,
                 Created = created,
-                Modified = modified
+                Modified = modified,
+                BaseRecordNumber = baseRecordNumber,
+                RecordSequenceNumber = recordSequenceNumber,
+                BaseRecordSequenceNumber = baseRecordSequenceNumber,
+                FileNameNamespaceRank = bestNameRank
             };
+            entry.FileNameExtensionRecordReferences.AddRange(fileNameExtensionReferences);
+            return entry;
+        }
+
+        internal static List<ulong> ParseAttributeListFileNameReferences(byte[] data, int attributeOffset, uint attributeLength)
+        {
+            var references = new List<ulong>();
+            if (data == null || attributeOffset < 0 || attributeLength < 0x18 ||
+                (long)attributeOffset + attributeLength > data.Length || attributeOffset + 0x16 > data.Length)
+                return references;
+
+            uint contentLength = BitConverter.ToUInt32(data, attributeOffset + 0x10);
+            ushort contentOffset = BitConverter.ToUInt16(data, attributeOffset + 0x14);
+            long contentStartLong = (long)attributeOffset + contentOffset;
+            long contentEndLong = contentStartLong + contentLength;
+            long attributeEnd = (long)attributeOffset + attributeLength;
+            if (contentStartLong < attributeOffset || contentStartLong > attributeEnd ||
+                contentEndLong < contentStartLong || contentEndLong > attributeEnd || contentEndLong > data.Length)
+                return references;
+
+            int position = (int)contentStartLong;
+            int contentEnd = (int)contentEndLong;
+            while (position + 0x1A <= contentEnd && references.Count < 64)
+            {
+                uint listedType = BitConverter.ToUInt32(data, position);
+                ushort entryLength = BitConverter.ToUInt16(data, position + 4);
+                if (entryLength < 0x1A || position + entryLength > contentEnd) break;
+                if (listedType == 0x30)
+                {
+                    ulong recordReference = BitConverter.ToUInt64(data, position + 0x10);
+                    if (!references.Contains(recordReference)) references.Add(recordReference);
+                }
+                position += entryLength;
+            }
+            return references;
+        }
+
+        private static void MergeFileNameExtensionRecords(FileStream fs, ParseResult result, int recordSize)
+        {
+            if (fs == null || result == null || result.Entries == null || recordSize <= 0) return;
+            long recordCount = fs.Length / recordSize;
+            var parsedExtensions = new Dictionary<ulong, MftEntry>();
+            byte[] buffer = new byte[recordSize];
+
+            foreach (MftEntry baseEntry in result.Entries)
+            {
+                if (baseEntry == null || baseEntry.BaseRecordNumber != 0 ||
+                    baseEntry.FileNameExtensionRecordReferences == null) continue;
+
+                foreach (ulong recordReference in baseEntry.FileNameExtensionRecordReferences)
+                {
+                    ulong reference = recordReference & 0x0000FFFFFFFFFFFF;
+                    ushort expectedSequence = (ushort)(recordReference >> 48);
+                    if (reference >= (ulong)recordCount) continue;
+                    MftEntry extension;
+                    if (!parsedExtensions.TryGetValue(reference, out extension))
+                    {
+                        try
+                        {
+                            fs.Position = checked((long)reference * recordSize);
+                            int total = 0;
+                            while (total < recordSize)
+                            {
+                                int read = fs.Read(buffer, total, recordSize - total);
+                                if (read <= 0) break;
+                                total += read;
+                            }
+                            if (total != recordSize || buffer[0] != 0x46 || buffer[1] != 0x49 ||
+                                buffer[2] != 0x4C || buffer[3] != 0x45)
+                            {
+                                parsedExtensions[reference] = null;
+                                continue;
+                            }
+                            ApplyUsnFixup(buffer, recordSize);
+                            extension = ParseRecord(buffer, (uint)reference);
+                            parsedExtensions[reference] = extension;
+                        }
+                        catch (Exception ex)
+                        {
+                            result.SkippedRecords++;
+                            parsedExtensions[reference] = null;
+                            Logger.Warning("MftParser: skip $ATTRIBUTE_LIST extension record " +
+                                reference + ": " + ex.Message);
+                            continue;
+                        }
+                    }
+
+                    if (extension == null ||
+                        (expectedSequence != 0 && extension.RecordSequenceNumber != expectedSequence) ||
+                        extension.BaseRecordNumber != baseEntry.RecordNumber ||
+                        (extension.BaseRecordSequenceNumber != 0 && baseEntry.RecordSequenceNumber != 0 &&
+                         extension.BaseRecordSequenceNumber != baseEntry.RecordSequenceNumber) ||
+                        extension.FileNameNamespaceRank <= baseEntry.FileNameNamespaceRank ||
+                        string.IsNullOrEmpty(extension.FileName))
+                        continue;
+
+                    baseEntry.FileName = extension.FileName;
+                    baseEntry.ParentRecordNumber = extension.ParentRecordNumber;
+                    baseEntry.FnCreated = extension.FnCreated;
+                    baseEntry.FnModified = extension.FnModified;
+                    baseEntry.FnMftModified = extension.FnMftModified;
+                    baseEntry.FnAccessed = extension.FnAccessed;
+                    baseEntry.FileNameNamespaceRank = extension.FileNameNamespaceRank;
+                    if (baseEntry.StdCreated.Year <= 1980) baseEntry.Created = extension.FnCreated;
+                    if (baseEntry.StdModified.Year <= 1980) baseEntry.Modified = extension.FnModified;
+                }
+            }
         }
 
         private static DateTime ConvertFileTime(long fileTime)

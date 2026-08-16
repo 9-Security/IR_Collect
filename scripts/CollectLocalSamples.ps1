@@ -5,7 +5,7 @@
 .DESCRIPTION
     Read-only acquisition of the artifacts needed to diff 9SEC Evidence Workbench parsers against the
     Eric Zimmerman tools on identical inputs:
-      - $MFT            via 9SEC_Evidence_Workbench_review.exe -dump-mft (raw volume read)
+      - $MFT            via 9SEC_EvidW_review.exe -dump-mft (raw volume read)
       - Amcache.hve     via a temporary Volume Shadow Copy (file is locked while Windows runs)
       - SYSTEM hive     (for AppCompatCache / ShimCache) via the same shadow copy
       - SRUDB.dat       (for SRUM) via the same shadow copy
@@ -44,18 +44,30 @@ if (-not (Test-Admin)) {
     exit 1
 }
 
-$review = Join-Path $repoRoot "9SEC_Evidence_Workbench_review.exe"
+$review = Join-Path $env:TEMP "9SEC_EvidW_review.exe"
+$reviewBuiltHere = $false
 if (-not (Test-Path $review)) {
-    Write-Host "[!] 9SEC_Evidence_Workbench_review.exe not found - build it first (build_review.bat)." -ForegroundColor Red
-    exit 1
+    Write-Host "[*] Building temporary review executable..." -ForegroundColor Cyan
+    $reviewBuild = Join-Path $repoRoot "build_review.bat"
+    & cmd.exe /d /c "call `"$reviewBuild`""
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $review)) {
+        Write-Host "[!] Temporary review executable build failed." -ForegroundColor Red
+        exit 1
+    }
+    $reviewBuiltHere = $true
 }
 
 New-Item -ItemType Directory -Force (Join-Path $OutDir "mft") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $OutDir "hives") | Out-Null
 
 # ---- 1) $MFT via our raw dumper ----
-Write-Host "[*] Dumping `$MFT via 9SEC_Evidence_Workbench_review.exe -dump-mft ..." -ForegroundColor Cyan
+Write-Host "[*] Dumping `$MFT via 9SEC_EvidW_review.exe -dump-mft ..." -ForegroundColor Cyan
 & $review -dump-mft $Drive (Join-Path $OutDir "mft") | Out-Null
+$reviewRc = $LASTEXITCODE
+if ($reviewBuiltHere) {
+    Remove-Item -LiteralPath $review -Force -ErrorAction SilentlyContinue
+}
+if ($reviewRc -ne 0) { Write-Host "    [!] MFT dump command failed with exit code $reviewRc." -ForegroundColor Red }
 $mft = Get-ChildItem (Join-Path $OutDir "mft") -File -ErrorAction SilentlyContinue | Sort-Object Length -Descending | Select-Object -First 1
 if ($mft) { Write-Host ("    [+] " + $mft.FullName + "  (" + [math]::Round($mft.Length/1MB,1) + " MB)") -ForegroundColor Green }
 else { Write-Host "    [!] `$MFT dump produced no file." -ForegroundColor Red }

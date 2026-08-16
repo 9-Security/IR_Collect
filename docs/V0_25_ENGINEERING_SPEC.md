@@ -135,7 +135,7 @@ GUI：
 
 CLI：
 
-1. 新增 `9SEC_Evidence_Workbench.exe -diff <baseline> <target> [out.json]`
+1. 新增 `9SEC_EvidW.exe -diff <baseline> <target> [out.json]`
 
 #### 實際檔案邊界
 

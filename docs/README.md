@@ -4,28 +4,31 @@
 這是一個基於 C# 開發的 Windows 事件回應收集與跨平台證據分析工作台。
 設計目標為**單一 Windows 執行檔 (Portable)**，無需安裝即可執行，支援 GUI 與 CLI；live collection 限 Windows，分析端可直接收容 Windows 案卷及 UAC 產生的 Linux/macOS folder、ZIP、TAR、TAR.GZ/TGZ 證據。
 
+**目前 GitHub 正式版：v0.25.0（2026-07-29）；source 候選版：v0.25.1**。版本來源以 `src/AssemblyInfo.cs` 為準；候選版內容見 `CHANGELOG.md` 的 `Unreleased`，功能契約見 `SPEC.md` 與 `ARTIFACTS.md`。
+
 ## 功能特色
-1.  **免安裝**: 只需一個 `9SEC_Evidence_Workbench.exe` 檔案，支援 Win7 - Win11。
+1.  **免安裝**: 只需一個 `9SEC_EvidW.exe` 檔案，支援 Win7 - Win11。
 2.  **雙模式 (Hybrid Mode)**:
-    *   **GUI 模式**: 視覺化儀表板，支援多案例匯入 (Case Manager)，具備 5 大類別導航與即時 Hash 掃描。
-    *   **CLI 模式**: 使用 `9SEC_Evidence_Workbench.exe -c` 於背景快速收集證據 (System, Network, Logs, Files, MFT, etc.)。
+    *   **GUI 模式**: 視覺化調查工作台，支援多案例匯入 (Case Manager)、Summary／Timeline Analysis 與依跡證領域分組的導覽。
+    *   **CLI 模式**: 使用 `9SEC_EvidW.exe -c` 於背景快速收集證據 (System, Network, Logs, Files, MFT, etc.)。
 3.  **Windows 收集面**: 涵蓋 System Info, Persistence (Autoruns/Tasks), Logs (Event/MFT/Registry), Browser History, File Artifacts (Lnk/Prefetch)。Registry 收集除 Hive／`ShellBags_<SID>.reg` 外，平台會自動產生第一階段結構化 **`Registry\shellbags.csv`**（供 Facts／Timeline／Entity search；非完整 ShellBags 鑑識還原器）。
 
 ## 使用說明
 
 ### 1. 編譯 (Build)
-- **本機建置**：專案根目錄執行 `build.bat`，直接產出並簽章 `9SEC_Evidence_Workbench.exe`；憑證重用會同時確認 code-signing EKU 與私鑰實際可開啟，不會只因 `HasPrivateKey=true` 就誤選 provider 已失效的舊憑證。若使用本機自簽憑證且該 root 尚未受信任，輸出會明確顯示 `LocalSelfSignedUntrusted`；若 timestamp server 在離線或受限環境下不可達，簽章仍會保留，但輸出會明確顯示 `TimestampServerUnavailable` 與 `Timestamp signer: not attached`；若本機無法建立自簽 code-signing 憑證，則顯示 `SkippedLocalCertUnavailable`，避免誤判成一般建置失敗。
-- **正式發佈**：執行 `build_release.bat`，先建立 `9SEC_Evidence_Workbench_release_candidate.exe`；release gate 要求有效簽章與可信時間戳，任一缺失都會 fail closed，不會升級或封裝候選檔。兩者驗證成功後才升級為正式版 `9SEC_Evidence_Workbench.exe`。
-- **GitHub Release（僅 EXE 的 zip）**：執行根目錄 `publish_release.bat` 會先跑 `build_release.bat`，再產生 `dist\9SEC_Evidence_Workbench_vX.Y.Z.zip`（版本讀取 `docs\SPEC.md` 標頭約前 18 行內第一個 `vX.Y.Z`）。僅打包可使用 `publish_release.bat -SkipBuild`。已安裝 [GitHub CLI](https://cli.github.com/) 並 `gh auth login` 後，可 `publish_release.bat -Publish` 建立或上傳至現有 Release；細部參數見 `scripts\PackageRelease.ps1`。
-- **自動化 regression review**：執行 `run_review_regression.bat`，會先建置 `9SEC_Evidence_Workbench_review.exe`（`INCLUDE_TESTS`），再跑 `9SEC_Evidence_Workbench_review.exe -test` 並輸出 `%TEMP%\9SEC_Evidence_Workbench_TestResult.txt`。若要做最終收斂檢查，可直接跑 `run_endpoint_gate.bat`，串起 regression 與正式 `build.bat`。
+- **本機建置**：專案根目錄執行 `build.bat`，在 `%TEMP%\9SEC_EvidW-local-build\` 產出並嘗試簽章 `9SEC_EvidW.exe`，不覆寫專案根目錄的正式檔；憑證重用會同時確認 code-signing EKU 與私鑰實際可開啟。若使用本機自簽憑證且 root 未受信任，輸出顯示 `LocalSelfSignedUntrusted`；timestamp server 不可達時保留簽章並顯示 `TimestampServerUnavailable`；無法建立本機憑證則顯示 `SkippedLocalCertUnavailable`。
+- **正式發佈**：執行 `build_release.bat`，先在 `.release-stage\` 以最終檔名建立 `9SEC_EvidW.exe`；release gate 要求有效簽章與可信時間戳，任一缺失都會 fail closed，不會升級 staging 檔。兩者驗證成功後才搬移到專案根目錄，因此 PE `OriginalFilename` 與正式檔名一致。
+- **GitHub Release（EXE zip + checksum sidecar）**：執行根目錄 `publish_release.bat` 會依序跑 `run_review_regression.bat`、`build_release.bat`，再產生 `dist\9SEC_Evidence_Workbench_vX.Y.Z.zip` 與同名 `.zip.sha256`（版本讀取 `docs\SPEC.md` 標頭約前 18 行內第一個 `vX.Y.Z`）。僅封裝既有正式 EXE 可使用 `publish_release.bat -SkipBuild`，此模式明確略過 regression，但仍驗證 FileVersion、PE `OriginalFilename`、Authenticode 簽章與時間戳。已安裝 [GitHub CLI](https://cli.github.com/) 並 `gh auth login` 後，可加 `-Publish` 建立或更新 Release，兩個資產會一起上傳；缺少 `gh` 時會明確失敗，不回報假成功。細部參數見 `scripts\PackageRelease.ps1`。
+- **自動化 regression review**：執行 `run_review_regression.bat`，會在 `%TEMP%` 建置 `9SEC_EvidW_review.exe`（`INCLUDE_TESTS`），執行 `-test` 後刪除 review EXE，並保留 `%TEMP%\9SEC_EvidW_TestResult.txt`。Parser differential validation 直接執行 `powershell -ExecutionPolicy Bypass -File scripts\DiffValidate.ps1`，腳本會按需建置並清理 review EXE。
 ```cmd
-build.bat          REM 本機建置
-build_release.bat  REM 一鍵正式發佈
+build.bat          REM 本機建置至 %TEMP%，不覆寫正式檔
+build_release.bat  REM 正式版建置、簽章與時間戳 gate
+publish_release.bat REM 正式版建置、封裝；加 -Publish 可上傳 GitHub Release
 ```
-成功後皆產生 `9SEC_Evidence_Workbench.exe`。
+成功後皆產生 `9SEC_EvidW.exe`。
 
 ### 專案文件 (Documentation)
-以下文件皆位於本目錄 `docs/` 內。若在本專案之**公開 GitHub 鏡像**閱讀，目前與原始碼主倉同步釋出的通常為本表內之 FIELD_SOP／USER_MANUAL（雙語）/ SPEC / CHANGELOG／本 README；其餘檔案請另於完整開發工作區或對應發佈渠道取得。
+以下文件皆位於本目錄 `docs/` 內，並與公開 GitHub 原始碼樹一併維護。若 Release 內的單一 EXE 與文件內容不同，應以執行檔 `-version`、該 Release notes 與相同 tag 的文件為準。
 
 **操作文件雙語慣例：** `FIELD_SOP.md` / `USER_MANUAL.md` 為 **英文**；`FIELD_SOP.zh-TW.md` / `USER_MANUAL.zh-TW.md` 為 **繁體中文**；各檔頂端可切換語言連結。
 
@@ -53,15 +56,15 @@ build_release.bat  REM 一鍵正式發佈
 ### 2. 執行 (Usage)
 
 #### 圖形介面 (GUI)
-直接執行 `9SEC_Evidence_Workbench.exe` (建議以系統管理員身分執行以獲取完整資訊)。
+直接執行 `9SEC_EvidW.exe` (建議以系統管理員身分執行以獲取完整資訊)。
 - **Local Collect**: 開始在本機收集資訊；**收集完成後會自動將產出的 ZIP 載入平台**，無需手動 Import，可直接在左側主機列表與右側分頁檢視分析。
 - **Import Case**: 匯入 ZIP、TAR、TAR.GZ/TGZ 或資料夾；可直接選擇 UAC (Unix-like Artifacts Collector) 原始封裝，不需先手動解壓。平台會先計算來源 archive SHA-256，安全解壓並建立 `uac_archive_entries.csv` 對照，再對原始檔建立逐檔 SHA-256 `uac_evidence_index.csv`。目前可正規化 `uac.log` / acquisition log、process snapshots、`bodyfile.txt`、auth/sudo logs、Linux auditd、Linux/macOS 系統文字日誌、Apache/nginx access/error logs、dpkg/RPM/DNF/YUM/pacman/apk/Flatpak/Snap/Homebrew 套件清單、`lsof` / `ss` / `netstat`、`passwd` / `group` / `shadow` 狀態、shell history、`last` / `lastb` / `lastlog` / `utmpdump` 登入歷程，以及 cron/anacron、systemd、`rc.local`、`ld.so.preload`、SSH `authorized_keys` 與 XML/binary launchd plist 持久化設定。`uac_web_server_events.csv` 解析 plain/gzip Common/Combined access log 與 Apache/nginx 預設 error envelope，保存 remote、virtual host、method、request target、status、referrer/user-agent、severity、PID 及來源行號；numeric offset 才產生 UTC。`uac_packages.csv` 保存 manager、name/version、architecture、state/scope、publisher 與來源行號；RPM queryformat epoch 可形成 install metadata time，其他套件輸出只以帶 offset 的 acquisition reference time 形成低信心 state observation，並非 row-level command time。一般系統日誌支援 plain/gzip `syslog`、`messages`、`kern.log`、`daemon.log`、`user.log`、`debug` 與 macOS `system.log`，解析 RFC 3164、RFC 5424 及 ISO timestamp；`auth.log` / `secure` 保留給認證解析器，不重複建立一般系統日誌 facts。Auditd 的 compound records 依相同 event ID 合併，保留 numeric/name syscall 原值、EXECVE command、CWD/PATH、identity、network 與 AVC policy result。Native `.journal` 另解析固定 header metadata，`journalctl --list-boots` 解析 boot range；逐筆 journal entry payload 仍保留為 raw evidence。登入、系統日誌、Web error 或套件觀察來源沒有可靠 numeric offset 時不虛構 UTC。
 - **UAC file-hash intake**: `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,sha256}` 會形成 `uac_file_hashes.csv`，保存演算法、digest、Unix path、來源類型與原始行號。支援 UAC 可能選用的 checksum-path 及 named-digest envelope；解析採 250,000 列、64 個來源檔、單檔 512 MiB、單行 65,536 字元上限。Facts 維持 untimed／低時間信心，只供 IOC、Diff、跨主機 correlation 與 graph pivot，不把 hash observation 當成執行或惡意 verdict。
 - **Archive intake guardrails**: ZIP 先依 central directory 預掃，所有封裝皆受 entry、單檔、總展開量、壓縮比與可用空間限制。解壓先寫入同磁碟 `.partial-*` staging，僅在完整成功後發布；失敗、取消、截斷或超限不留下可載入的半成品案件。
-- **Read-only analysis workspace**: Folder/archive 證據根目錄只讀；canonical CSV、離線重建 Event Log CSV、ShellBags、Fact Store cache 與 CLI 預設報告寫入獨立 `%TEMP%` 分析工作區。`analysis_workspace_v1.json` 記錄工具版本、來源 digest 及各衍生檔 SHA-256，可在 **Logs & Artifacts → Analysis Workspace Manifest** 檢視。UAC 來源內預先存在的同名 canonical 檔只保留為 raw evidence，不作為本次 parser 的可信輸出；analyst workflow 依來源 digest 保存於目前使用者 Local Application Data。
-- **Atomic analysis outputs**: canonical CSV、離線 Event Log CSV、SQLite、workflow、workspace manifest 與 CLI JSON 先寫同目錄 temporary file，writer 完整關閉後才原子發布；失敗時保留既有完整版本並清理 partial file。
+- **Read-only analysis workspace**: Folder/archive 證據根目錄只讀；canonical CSV、離線重建 Event Log CSV、ShellBags、Fact Store cache 與 CLI 預設報告寫入獨立 `%TEMP%` 分析工作區。載入時必須完成逐檔 SHA-256 manifest；無法列舉／雜湊、遇到 reparse point，或 Fact Store build 前來源 digest 已改變時會停止並要求重新匯入，避免報告 digest 與實際分析內容錯配。`analysis_workspace_v1.json` 記錄工具版本、來源 digest 及各衍生檔 SHA-256，可在 **Logs & Artifacts → Analysis Workspace Manifest** 檢視。來源內預先存在的 canonical 檔與 `fact_store.db` 只保留為 raw evidence，不作為本次 parser／Fact Store 的可信輸出；analyst workflow 依來源 digest 保存於目前使用者 Local Application Data。
+- **Atomic outputs**: canonical CSV、離線 Event Log CSV、SQLite、workflow、workspace manifest、CLI JSON 與 collector ZIP/SHA sidecar 先寫同目錄 temporary file，writer 完整關閉後才發布；失敗時保留既有完整版本並清理 partial file。Local Collect 若發現同 Evidence ID 的 `IR_Output_<ID>`、ZIP 或 SHA sidecar 已存在，會在寫入前拒絕執行。
 - **Case Diff / Baseline Diff**: 每個 host 的 **Diff** 分頁可選另一個已載入且 Fact Store ready 的 case 作 baseline，依 Process / Persistence / File / Identity / Network / Fact 與 Added / Modified / Removed 篩選，並可跳回 Facts 或 Timeline。CLI 可用 `-diff <baseline> <target> [out.json]` 直接比較 folder / ZIP / TAR / TAR.GZ / TGZ 並輸出 `diff_v1`。差異只代表兩側 facts 的觀察狀態，不把「未觀察到」宣稱為不存在。
-- **Incremental Fact Store cache**: **Advanced → Settings** 可選擇把 normalized Fact Store 快取保存於目前使用者 Local Application Data（預設關閉）。輸入 SHA-256 全部相同時採 `Reused`；只有 `EventLogs/*_filtered.csv` 改變時採 `Incremental` 並只重跑受影響 EventLog normalizer；其他變更或快取異常會清楚降級為 `Full`。Summary、CLI、`summary_v3` 與 `full_log_v3` 會保留 build mode、時間、原因及 input manifest；快取含敏感 facts，可在 Settings 清除。
+- **Incremental Fact Store cache**: **Advanced → Settings** 可選擇把 normalized Fact Store 快取保存於目前使用者 Local Application Data（預設關閉）。每次 build 重新計算 normalizer input SHA-256；全部相同時採 `Reused`，只有 `EventLogs/*_filtered.csv` 改變時採 `Incremental` 並只重跑受影響 EventLog normalizer；其他變更或快取異常會清楚降級為 `Full`。CSV 超過 100 MiB、超過 500,000 列或讀取中斷時會進入 Load warnings／export，不再只寫內部 log。Summary、CLI、`summary_v3` 與 `full_log_v3` 會保留 build mode、時間、原因及 input manifest；快取含敏感 facts，可在 Settings 清除。
 - **Deep Scan**: 於 File Check 頁面執行 System32 即時完整性掃描；`ForensicStrict` 預設阻擋此手動高 I/O 動作。
 > 若設定 Upload Endpoint，Local Collect 結束後會自動上傳 ZIP 並顯示回應。**v0.22.0**：Upload 與 AI 各有 endpoint **allowlist**（**Advanced → Settings**）；清單為空時預設阻擋對應出站 POST。AI 摘要外送可選 **redaction profile**（僅影響 AI Analyze 的 JSON，不會改寫匯出之 `summary.json` 檔或 ZIP 內容）。**Collection mode profile**（Standard / TriageFast / ForensicStrict）亦在 Settings 設定：`ForensicStrict` 會分類預定輸出位置、強烈警示系統碟輸出、要求風險確認並預設要求第二次確認；同時預設略過已啟用的外部記憶體採集／分析 handoff，並阻擋 Deep Scan、ZIP 上傳與 **AI Analyze**。`collection_coverage.json` 與 analyst 匯出會記錄輸出分類、確認狀態、限制及 profile 略過項目。此模式不代表 zero-footprint、完整鑑識映像或絕對低擾動。
 
@@ -77,12 +80,12 @@ build_release.bat  REM 一鍵正式發佈
 #### 命令列模式 (CLI)
 在 Administrator CMD 或 PowerShell 中執行：
 ```cmd
-9SEC_Evidence_Workbench.exe -c [EvidenceId]
+9SEC_EvidW.exe -c [EvidenceId]
 ```
-若目前 profile 為 `ForensicStrict`，CLI 會先顯示輸出分類與受限步驟，要求輸入 `YES`；預設還需第二次輸入 `FORENSIC-STRICT`。任一確認失敗會以 exit code `3` 結束，且不建立收集輸出目錄。
+若目前 profile 為 `ForensicStrict`，CLI 會先顯示輸出分類與受限步驟，要求輸入 `YES`；預設還需第二次輸入 `FORENSIC-STRICT`。CLI exit code：`0` 完整成功、`1` 執行／輸出失敗、`2` 收集步驟失敗或參數錯誤（依命令）、`3` 操作員取消、`4` 收集完成但有 coverage gap。任一確認失敗不建立收集輸出目錄；`-analyze`／`-correlate`／`-graph` 寫不出指定報告時回傳 `1`。
 或是查看說明：
 ```cmd
-9SEC_Evidence_Workbench.exe --help
+9SEC_EvidW.exe --help
 ```
 ### DFIR 現場保護（是否破壞現場）
 
@@ -122,18 +125,22 @@ build_release.bat  REM 一鍵正式發佈
 
 整次收集不會因單一子項目失敗而中斷；請依主控台摘要與 `logs/ir_collect.log` 確認哪些成功、哪些失敗。
 
-- **打包後暫存目錄**：壓縮完成後預設會**刪除**暫存目錄（`IR_Output_<ID>`），僅保留 ZIP 與 `.sha256`。若需保留暫存目錄以便除錯，可在 `config.ini` 設 `DeleteOutputDirAfterZip=0`。
+- **打包後暫存目錄**：壓縮完成後預設會**刪除**暫存目錄（`IR_Output_<ID>`），僅保留 ZIP 與 `.sha256`。若需保留暫存目錄以便除錯，可在 `config.ini` 設 `DeleteOutputDirAfterZip=0`；下次收集必須使用不同 Evidence ID，工具不會覆寫或混用既有目錄、ZIP、SHA sidecar。
 
 ## 目錄結構
 - `src/`
     - `Program.cs`: 程式入口。
-    - `MainForm.cs`: 視覺化分析介面 (5-tab layout)。
+    - `MainForm.cs`: 視覺化分析介面與分組調查導覽。
     - `Collector.cs`: 收集邏輯控制器。
-- `Analysis/`: 案卷載入、Summary 匯出、Fact Store／關聯分析。
+    - `Analysis/`: 案卷載入、Summary 匯出、Fact Store／關聯分析。
     - `Collectors/`: 各類跡證收集模組 (System, Log, Registry, Browser, Prefetch, Integrity...)。
     - `MFT/`: RAW NTFS MFT 解析器。
     - `Utils/`: 共用工具與集中式 Logger。
-- `build.bat`: 本機建置腳本；`build_release.bat`: 正式版建置／簽章腳本。
+- `build.bat`: 本機建置入口。
+- `build_review.bat`: `%TEMP%` review/self-test 建置 helper。
+- `run_review_regression.bat`: 回歸測試入口。
+- `build_release.bat`: 正式版簽章與可信時間戳建置 gate。
+- `publish_release.bat`: 回歸、正式建置、Release 封裝與選用的 GitHub 上傳入口。
 
 ## 目前狀態 (Current Status)
 - [x] **Core Collection**: System, Network, Process, Software.
@@ -146,10 +153,11 @@ build_release.bat  REM 一鍵正式發佈
 - [x] **Case Diff / Baseline Diff**: GUI host-level **Diff** 分頁與 CLI `-diff <baseline> <target> [out.json]` 共用 Fact Store 比較器；以主要 entity 分組，標示 Added / Modified / Removed，保留雙側 fact provenance、來源與 collection coverage 提示，最多輸出 50,000 筆並以 `changes_truncated` 明示截斷。`diff_v1` 契約見 `docs/schemas/diff_v1.schema.json`；不將未觀察到轉成存在性或惡意 verdict。
 - [x] **Large Case / Incremental Fact Store**: 以每個 normalizer input 的相對路徑、大小、mtime、SHA-256 與 normalizer 名稱判斷 invalidation；exact match 可重用完整 facts，filtered Event Log 單獨變更可局部重建，其餘情況 fail-safe 回退 full rebuild。持久化 cache 預設關閉、位於 Local Application Data、原子寫入且可由 Settings 清除。
 - [x] **UAC Evidence Intake**: GUI、`-analyze`、`-correlate`、`-graph` 共用 folder / ZIP / TAR / TAR.GZ / TGZ intake。所有 UAC 原始檔都會雜湊、分類、列入 UI Evidence Index 與 `UacEvidence` facts；process、bodyfile、auth/sudo、Linux auditd、Linux/macOS system-text logs、Apache/nginx web logs、package inventory、network、accounts、shell history、Linux/macOS persistence、journal header metadata、boot ranges 與 login events 另產生 canonical CSV 並進入 Fact Store / Timeline / Correlation / JSON export。`uac_web_server_events.csv` 支援 plain/gzip Apache/nginx Common/Combined access log 與預設 error envelope；每案最多 50,000 列、每檔最多解碼 268,435,456 個字元、每行最多 1,048,576 字元，request/header/message 有界限且保留 truncation marker。Access timestamp 含 numeric offset 才產生 `EventTime`；預設 error local time 維持 untimed。Remote address、referrer、user-agent 可能受 proxy/client 控制，HTTP status 只是 response outcome，均不形成惡意 verdict。自訂 JSON、ModSecurity audit、Tomcat 與不支援格式仍為 `indexed-raw`。`uac_packages.csv` 支援 UAC 官方 dpkg、RPM、DNF/YUM、pacman、apk、Flatpak、Snap 與 macOS Homebrew command outputs；每案最多 50,000 列、每個來源檔最多 64 MiB、每行最多 65,536 字元，canonical description/details 有界限且保留 truncation marker。RPM install epoch 是 package DB metadata time；其他輸出只以帶明確 offset 的 UAC acquisition reference time 作低信心 observation time，並非 row-level command time；缺少可靠時間則維持 untimed。錯誤/警告行不形成套件 fact，原始檔仍保留。套件存在不證明近期安裝、執行或惡意。`uac_system_log_events.csv` 支援 plain/gzip RFC 3164、RFC 5424 與 ISO timestamp，每案最多 50,000 列、每檔最多解碼 268,435,456 個字元、canonical message 最多 4,096 個字元；超限內容不改寫原始證據，並透過 warning / evidence index 保持可見。缺少年份或 numeric offset 時不產生 UTC；每列僅表示 message observed，不代表動作成功或惡意。`auth.log` / `secure` 僅走 auth normalizer，避免重複。`uac_audit_events.csv` 依 audit event ID 合併 SYSCALL / EXECVE / CWD / PATH / USER_* / AVC 等 records，支援 plain 與 gzip audit logs，並保留來源行號及 bounded-grouping 狀態；不將 audit/AVC 記錄轉成惡意 verdict。`uac_login_events.csv` 支援 UAC `last` / `lastb` / `lastlog` / `utmpdump` 文字輸出，無可靠 offset 的本地時間不轉成 UTC。`uac_persistence.csv` 支援 cron/anacron、systemd service/timer、`rc.local`、`ld.so.preload`、SSH `authorized_keys` 及 XML/binary launchd plist。`uac_journal_files.csv` 僅解析 native journal header，`uac_boot_sessions.csv` 解析 `journalctl --list-boots`；逐筆 binary journal entry、損壞/不支援 plist、瀏覽器資料庫與未實作格式仍為 `indexed-raw`；加密 ZIP 不在支援範圍。
+- [x] **UAC File Hash Intake**: `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,sha256}` 會正規化為 `uac_file_hashes.csv` 與 untimed `UacFileHash` facts；保存 algorithm、digest、Unix path、source kind、來源檔與行號，供 IOC、Diff、Correlation、Graph pivot，不把 hash observation 當成執行或惡意 verdict。
 - [x] **Fact Store**: 載入案卷時預設自動建置（可於 Settings 關閉）；含 Process/**LogonSession / NetworkResource / ServerConnection / StoredCredential / KerberosTicketCache**/Autorun/**Service**/ActivityTimeline/MFT/ScheduledTask/EventLog/USN/BAM/DAM/BITS/**Jump List**/WMI Persistence/**Amcache/ShimCache Entries/SRUM Network/SRUM App/ShellBags/Memory acquisition / Memory analysis handoff** Normalizer、實體索引與查詢，並保留 `TimeKind` / `TimeConfidence`；每筆 fact 另帶 `CollectionStep / CollectionStatus / CollectionPrivilege / ParseLevel / FallbackUsed / SourceFile / RawRef / ParserNote` provenance，不在工具內直接下判斷。UI 另提供 **Rebuild Selected Host Fact Store**，供分析師在單機層級手動刷新。
 - [x] **Collection Coverage**: 收集完成時輸出 `collection_coverage.json`，標示 major artifact groups 為 `complete / partial / failed / skipped / missing`，並保留 `collector_user / collector_privilege_state / backup_privilege_status` runtime context；若有 `missing` 或啟用項目因 profile 略過，overall 會降為 `partial`。另記錄 `collection_mode_profile`、`operator_acknowledged_risks`、`restricted_steps`、`skipped_by_profile` 與 `output_target_class`。Event Logs 只有在每個 `.evtx` 都有對應 `*_filtered.csv` 時才會是 `complete`。Summary、HTML、Summary JSON 與 full LOG host 摘要都會帶出，避免把「沒看到」誤判成「不存在」。
 - [x] **Low Impact / Forensic Strict**: 收集前分類輸出位置為 `system_disk / removable / network / unknown`，系統碟輸出有強警示並要求操作員確認，預設再要求第二次確認；已啟用的外部記憶體採集／分析 handoff 預設略過，手動 Deep Scan、收集後 ZIP 上傳與 AI Analyze 受阻擋。所有限制與略過項目可在 coverage 及分析匯出中稽核；此 profile 不宣稱 zero-footprint。
-- [x] **Fact Store Cache Awareness**: 載入案卷時會檢查 `fact_store.db` 是否比目前 source artifacts 舊；若為 stale，Summary、匯出與 Load warnings 會標示，提醒分析師重建 Fact Store，而不是在不知情下沿用過期快取。
+- [x] **Fact Store Cache Awareness**: 匯入 evidence root 內預置的 `fact_store.db` 會標示 `untrusted_source` 並要求由 source artifacts 重建；本次 analysis workspace 所產生的 DB 若落後於 source artifacts，Summary、匯出與 Load warnings 會標示 stale。
 - [x] **Correlation / Investigation Workspace**: 以 Fact Store、Entity search 與時間範圍交叉比對為主，協助分析師自行判讀跨來源關聯；Dashboard 現含 **Find Shared Entities**、**Find Related Entities**、**Build Investigation Graph**、**Find Time-Window Entity Correlation**、**Back To Last Shared Pivot**，並支援 `Source / Confidence / Host / From / To / Window` 篩選。`Build Investigation Graph` 已升級為可持續探索的 workspace：可 `Expand From Selected Edge`、`Back`、`Forward`、`Reset To Original Seed`、`Pin Edge`，且可用 host scope（all/edge hosts/host filter）限制後續展開；trail 上每一步會記住當時的篩選與 scope（導覽時先還原再重算 graph）。Selected edge 會隨結果集驗證，避免舊 edge 的主機列表在「Current edge hosts」下被誤用。`Open Timeline` 除切到該 host 外，會帶入 graph edge 的 entity 與 trail，並以**分鐘級**時間窗聚焦相關列；Timeline 會先做 structured entity match，只有在 row 沒有 entity ref 時才退回文字比對（可用「Show full timeline」還原）。
 - [x] **Execution / Persistence Extensions**: 新增 `bam_dam.csv`、`bits_jobs.csv`、`wmi_persistence.csv`、`shimcache.csv`，並進一步補 `amcache_programs.csv`、`amcache_files.csv`、`shimcache_entries.csv`、`srum_network_usage.csv`、`srum_app_usage.csv`；同時保留 `ExecutionArtifacts\` raw `Amcache.hve` / `SRUDB.dat` / `SRUDB.log` / `SRUDB.jrs` 不被覆蓋。Host UI 可直接檢視上述結構化 CSV 與 raw execution artifacts。
 - [x] **Parser Notes Visibility**: parser/fallback notes 不再只限於 Amcache；USN、ShimCache、Process 與 Event Log fallback 也會保留於 facts 與匯出。Summary/HTML/`summary.json`/`full_log_v3` 會用 dedicated parser-note 摘要顯示，不依賴 fact sample 截斷或時間排序。
@@ -161,8 +169,8 @@ build_release.bat  REM 一鍵正式發佈
 - [x] **Timeline Analysis (全方位時間軸)**: Process + MFT + EventLog + USN + BAM/DAM + BITS + **Amcache + ShimCache Entries + SRUM Network/App + Activity**（activity_timeline.csv；其中 **Jump List** 跡證已由 builder 併入，`Source=JumpList`，**不**再對 `jump_lists.csv` 重複匯入 Timeline）合併為單一時間軸；支援 **Time Type / Confidence**、**Source / 時間區間篩選**、**Export CSV/JSON**。時間篩選會 honor 到分鐘，不再把 graph handoff 視窗擴大成整天。（原 Activity Timeline 分頁已移除，活動資料於此檢視。）
 - [x] **Event Log**: 預設完整 `.evtx` + filtered CSV 雙輸出（`EventLogDays=0` 代表使用預設 7 天分析窗；`>0` 為自訂窗）；filtered CSV 另含 `Computer / UserId / TaskDisplayName / EventData` 結構化欄位，供 Fact Store、Timeline、Summary 與 AI 匯出共用；**Phase 3** 針對橫向移動／身分濫用相關事件加深正規化（如 4624–4625、4648、4672、4768–4769、4776、5140/5145、1149、4688、4697、4698/4702、7045），actions 為描述性語意（如 `KerberosServiceTicketRequested`、`ExplicitCredentialUsed`、`ShareAccessChecked`、`RemoteDesktopAuthenticated`），並強化 `SubjectUser` / `TargetUser` 與 SMB path 等實體；`5145` 存取之 `RelativeTargetName` 以 `Path` 呈現。若載入的是 **EVTX-only** 舊案卷，平台會於匯入時離線重建 `*_filtered.csv`，分析窗以各 `.evtx` 內**最新事件時間**為錨點回推；EVTX 檢視支援 **Description | Parsed fields | Raw XML**。UI 另提供 **Rebuild Selected Host Event Logs**。手動 fixture：`scripts/phase3_lateral_movement_fixture.csv`。
 - [x] **Logger**: 集中記錄 (logs/ir_collect.log)；**ZipFile** 壓縮/解壓（無需 PowerShell）。
-- [x] **Phase B3**: Fact Store 可選寫入 SQLite（Settings 勾選；各 host `ExtractPath\fact_store.db`；SchemaVersion 3）；**Export full LOG JSON**（Dashboard，`full_log_v3` envelope：`analysis_mode=facts_only`、host 摘要、workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要、完整 facts）；未放置 System.Data.SQLite.dll 時僅略過 SQLite 寫入。同 DLL 亦用於 **BrowsingHistoryView** Chrome/Firefox「Last visit」欄位（有則顯示造訪時間）。
-- [x] **Jump Lists**：CSV 產出含 Path；解析 .automaticDestinations-ms / .customDestinations-ms 內 LNK 結構（MS-SHLLINK）擷取 LocalBasePath，減少 Custom 項目 Path 為空。
+- [x] **Phase B3**: Fact Store 可選寫入 SQLite（Settings 勾選；各 host 的 analysis workspace `fact_store.db`；SchemaVersion 3）；**Export full LOG JSON**（Dashboard，`full_log_v3` envelope：`analysis_mode=facts_only`、host 摘要、workflow、load warnings、parser notes、collection coverage / fact store freshness 摘要、完整 facts）；未放置 System.Data.SQLite.dll 時僅略過 SQLite 寫入。同 DLL 亦用於 **BrowsingHistoryView** Chrome/Firefox「Last visit」欄位（有則顯示造訪時間）。
+- [x] **Jump Lists**：CSV 產出含 Path；以 bounded byte-scan 找出 .automaticDestinations-ms / .customDestinations-ms 內候選 LNK 結構（MS-SHLLINK）並擷取 LocalBasePath。目前差異驗證資料集對 JLECmd 的 path recall 為 140/172（81.4%）；尚非完整 OLE-CFB parser，raw Jump List 仍保留供外部工具深挖。
 - [x] **案卷 Temp 清理**：關閉程式或右鍵「Clear Host Data」時自動刪除 %TEMP% 下該案解壓目錄。
 - [x] **Process User**: process_list.csv 的 User 欄位已由 WMI Win32_Process.GetOwner 補齊（另含 PPID/SessionId/ThreadCount/WorkingSetSize）。
 - [x] **Memory acquisition / handoff**: 已支援外部記憶體採集工具編排與後續外部分析 handoff；平台保留 sidecar 與輸出檔，不內建 dump 解析。
@@ -173,14 +181,9 @@ build_release.bat  REM 一鍵正式發佈
 
 ## 最近更新 (Recent Updates)
 
-- **v0.18.6**：Event Log 可拉伸線改為「資訊區(表格)｜Per page」之間；MFT View Path/Max size 標籤完整顯示。
-- **2026-04-08 acceptance hardening**：`collection_coverage` 的 Event Logs 需逐 log 對上 EVTX/filtered CSV 才算 `complete`；Summary/HTML/`summary.json` 統一顯示跨來源 parser notes 與 Memory `Coverage / Sidecar`；Timeline graph handoff 改為 structured entity match + 分鐘級時間窗。
-- **v0.18.5**：Event Logs Event ID/Source 標籤顯示完整；Event detail 資訊區可拉伸與垂直捲軸；MFT View 標籤簡短、Apply/Reset 可見（AutoScroll）。
-- **v0.18.4**：Dashboard 圖示並排與 Entity search 間隔；Timeline/Per page/MFT View 標籤不裁切與間隔；Event Log 篩選不遮與搜尋；Event detail View 不遮選單、選項無 "View:"。
-- **v0.18.3**：Timeline From/To/Source 間距與字顯示；Per page 不遮下拉、分頁列右移；MFT View Path 長度與間距、Min/Max 篩選 Refresh 生效。
-- **v0.18.2**：Recent Files 僅 LNK、排除 desktop.ini；Lnk Dump 先複製再寫 CSV；MFT View 篩選不遮、Min/Max 防呆；Timeline Source/CSV・JSON 對齊；USN Journal 篩選區與 Reset/Exclude 寬度修正。
-- **v0.17.9**：Settings 對話框補齊（AI/Upload 端點與 Key、EventLogDays/MaxEvents、DeleteOutputDirAfterZip）；Activity Timeline 日期防呆（From/To 1980–2100、From>To 自動對調）；About/AssemblyInfo 0.17.8。
-- **v0.17.8**：VirusTotal hash 僅允許 32/64 字元十六進位；MFT 磁碟代號強制 A–Z；設定匯出拒絕系統目錄；規則引擎 Regex 逾時 2 秒防 ReDoS。
-- **v0.17.5–v0.17**：分頁列與 USN 篩選區 UX、LOG 分頁（五類、自動切頁）、BrowsingHistoryView 瀏覽時間、Jump List Path 解析、案卷 Temp 自動清理、Event Log 詳情 View/背景載入、CSV/USN 表格 NotSortable。
+- **v0.25.0（2026-07-29）**：UAC Linux/macOS folder/archive intake、逐檔 evidence index 與 read-only analysis workspace；支援的 process/bodyfile/auth/auditd/system/web/package/network/account/history/persistence/journal/login/file-hash 來源進入 Fact Store。新增 Case Diff、persistent Fact Store cache 與完整化 Forensic Strict；衍生輸出採 atomic publish。
+- **v0.24.2（2026-07-20）**：加入合成雙主機教學案卷與雙語導覽，並強化 Prefetch parser 的版本誠實標記、邊界與 malformed input 自測。
+- **v0.24.1（2026-06-16）**：新增 Guided Hunt 規則與 `summary_v3`、`correlation_v1`、`graph_v1` JSON Schema 漂移守門。
+- **v0.24.0（2026-06-16）**：Prefetch `.pf` 解析器與 normalizer 進入 Fact Store、Timeline 與執行證據關聯。
 
 **完整版本歷程**見 **CHANGELOG.md**；Roadmap 與 Backlog 見 **SPEC.md §5–6**。

@@ -3,15 +3,22 @@ setlocal
 cd /d "%~dp0"
 
 set "CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-set "TARGET_EXE=9SEC_Evidence_Workbench.exe"
+set "LOCAL_BUILD_DIR=%TEMP%\9SEC_EvidW-local-build"
+set "TARGET_EXE=%LOCAL_BUILD_DIR%\9SEC_EvidW.exe"
 
 if not exist "%CSC%" (
     echo [!] csc.exe not found at %CSC%
     exit /b 1
 )
 
-echo [+] Compiling 9SEC Evidence Workbench...
-"%CSC%" /out:%TARGET_EXE% @build_common.rsp
+if not exist "%LOCAL_BUILD_DIR%" mkdir "%LOCAL_BUILD_DIR%"
+if errorlevel 1 (
+    echo [!] Failed to create local build directory: %LOCAL_BUILD_DIR%
+    exit /b 1
+)
+
+echo [+] Compiling local build: %TARGET_EXE%...
+"%CSC%" /out:"%TARGET_EXE%" @build_common.rsp
 if errorlevel 1 (
     echo [!] Build failed.
     exit /b 1
