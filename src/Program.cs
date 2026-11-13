@@ -209,17 +209,22 @@ namespace IR_Collect
                     // -graph <seedType> <seedValue> <maxDepth> <out.json> <folderA> [...]. Phase 3.2b:
                     // multi-hop investigation graph expanded from a seed entity across >=1 folder(s).
                     int rc;
+                    int maxDepth;
                     if (args.Length < 6)
                     {
                         Console.WriteLine("\n[!] Usage: " + BuildInfo.ExecutableName + " -graph <seedType> <seedValue> <maxDepth> <out.json> <pathA> [...]");
+                        rc = 2;
+                    }
+                    else if (!IR_Collect.Analysis.GraphCli.TryParseMaxDepth(args[3], out maxDepth))
+                    {
+                        Console.WriteLine("\n[!] -graph <maxDepth> must be a positive integer (got: " + args[3] + ").");
+                        Console.WriteLine("[!] Usage: " + BuildInfo.ExecutableName + " -graph <seedType> <seedValue> <maxDepth> <out.json> <pathA> [...]");
                         rc = 2;
                     }
                     else
                     {
                         string seedType = args[1];
                         string seedValue = args[2];
-                        int maxDepth;
-                        if (!int.TryParse(args[3], out maxDepth)) maxDepth = 2;
                         string outFile = args[4];
                         var folders = new System.Collections.Generic.List<string>();
                         for (int i = 5; i < args.Length; i++) folders.Add(args[i]);

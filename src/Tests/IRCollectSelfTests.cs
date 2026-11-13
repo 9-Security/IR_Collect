@@ -198,6 +198,7 @@ namespace IR_Collect.Tests
             failed += RunOne("CollectionResult_profile_skip_sets_coverage_gap", CollectionResult_profile_skip_sets_coverage_gap, sb) ? 0 : 1;
             failed += RunOne("CollectionExitCode_distinguishes_errors_gaps_and_success", CollectionExitCode_distinguishes_errors_gaps_and_success, sb) ? 0 : 1;
             failed += RunOne("AnalysisClis_output_failure_returns_nonzero", AnalysisClis_output_failure_returns_nonzero, sb) ? 0 : 1;
+            failed += RunOne("GraphCli_max_depth_rejects_non_positive_or_non_numeric", GraphCli_max_depth_rejects_non_positive_or_non_numeric, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard", ZipUpload_gate_uses_run_profile_ForensicStrict_even_if_settings_Standard, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict", ZipUpload_gate_run_Standard_not_blocked_when_settings_ForensicStrict, sb) ? 0 : 1;
             failed += RunOne("ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict", ZipUpload_gate_null_run_falls_back_to_settings_ForensicStrict, sb) ? 0 : 1;
@@ -5481,6 +5482,20 @@ namespace IR_Collect.Tests
                 CaseManager.CleanupAll();
                 TryDeleteDir(work);
             }
+        }
+
+        private static bool GraphCli_max_depth_rejects_non_positive_or_non_numeric()
+        {
+            int depth;
+            bool okOne = GraphCli.TryParseMaxDepth("1", out depth) && depth == 1;
+            bool okThree = GraphCli.TryParseMaxDepth(" 3 ", out depth) && depth == 3;
+            string[] invalid = { null, "", "  ", "0", "-1", "+2", "two", "2.5", "1e2", "99999999999" };
+            foreach (string text in invalid)
+            {
+                if (GraphCli.TryParseMaxDepth(text, out depth) || depth != 0)
+                    return false;
+            }
+            return okOne && okThree;
         }
 
         private static string CreateTempDir(string prefix)

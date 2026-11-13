@@ -79,6 +79,20 @@ namespace IR_Collect.Analysis
         private const int NodeCap = 600;
         private const int EdgeCap = 3000;
 
+        /// <summary>Parses the CLI maxDepth argument. Only a positive base-10 integer is accepted, so a typo
+        /// such as "two" or "0" is rejected as a usage error instead of being silently replaced.</summary>
+        public static bool TryParseMaxDepth(string text, out int maxDepth)
+        {
+            maxDepth = 0;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            int parsed;
+            if (!int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out parsed))
+                return false;
+            if (parsed < 1) return false;
+            maxDepth = parsed;
+            return true;
+        }
+
         public static int Run(string seedType, string seedValue, int maxDepth, string outFile, IList<string> folders, TextWriter console)
         {
             if (string.IsNullOrWhiteSpace(seedType) || string.IsNullOrWhiteSpace(seedValue))
