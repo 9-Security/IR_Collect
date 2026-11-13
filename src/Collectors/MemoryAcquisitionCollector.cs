@@ -74,11 +74,22 @@ namespace IR_Collect.Collectors
                 return;
             }
 
-            string toolPath = (cfg.Get("MemoryAcquireToolPath") ?? "").Trim();
-            if (string.IsNullOrEmpty(toolPath))
+            string configuredTool = (cfg.Get("MemoryAcquireToolPath") ?? "").Trim();
+            string toolPath;
+            string toolResolveError;
+            if (!MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(configuredTool, out toolPath, out toolResolveError))
             {
-                rec.Status = "skipped";
-                rec.Detail = MemoryHandoffHelper.AcquisitionToolPathNotConfiguredDetail();
+                if (string.IsNullOrEmpty(configuredTool))
+                {
+                    rec.Status = "skipped";
+                    rec.Detail = MemoryHandoffHelper.AcquisitionToolPathNotConfiguredDetail();
+                }
+                else
+                {
+                    rec.Status = "failed";
+                    rec.ToolPath = configuredTool;
+                    rec.Detail = "Memory acquisition tool path must be an absolute path: " + toolResolveError;
+                }
                 MemoryHandoffHelper.ApplyAcquisitionDiagnostics(rec);
                 FinishRecord(rec, jsonPath);
                 return;
@@ -140,6 +151,7 @@ namespace IR_Collect.Collectors
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.CreateNoWindow = true;
+                Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
 
                 var sw = Stopwatch.StartNew();
                 var outp = new StringBuilder();

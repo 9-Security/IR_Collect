@@ -29,10 +29,10 @@ build-input list is [`build_common.rsp`](../build_common.rsp).
 
 | Component | Origin | How loaded | Governance |
 |---|---|---|---|
-| **.NET Framework 4.5 BCL** | OS | static reference (`/r:` in `build_common.rsp`: System, System.Core, System.Management, System.Windows.Forms, System.Drawing, System.Runtime.Serialization, System.Data, System.IO.Compression[.FileSystem]) | shipped with Windows |
+| **.NET Framework 4.5 BCL** | OS | static reference (`/r:` in `build_common.rsp`: System, System.Core, System.Management, System.Windows.Forms, System.Drawing, System.Runtime.Serialization, System.Data, System.IO.Compression[.FileSystem], System.Security) | shipped with Windows (`System.Security` used for DPAPI-wrapped API keys in `config.ini`) |
 | **esent.dll** | Windows system DLL | P/Invoke (`src/Utils/EseReader.cs`) | system-provided ESE engine; reads SRUM `SRUDB.dat`. Replaced the former ACE/Jet OLE DB dependency — no external Access engine is needed. |
 | **wintrust.dll** | Windows system DLL | P/Invoke (`src/SignatureHelper.cs`) | Authenticode verification (`WinVerifyTrust`) |
-| **System.Data.SQLite.dll** | optional, external | `Assembly.LoadFrom` **only if Authenticode-trusted** (`FactStorePersistence.IsTrustedSqliteModule`) | anti-DLL-planting gate: loaded only when signature status is `Signed-Trusted`; absence degrades the Fact Store SQLite cache and in-app browser-history parsing gracefully. |
+| **System.Data.SQLite.dll** | optional, external | `Assembly.LoadFrom` only when Authenticode-trusted, assembly version ≥ 1.0.118.0, and adjacent `SQLite.Interop.dll` (if present) is signed-trusted; validation holds `FileShare.Read` until load | anti-DLL-planting gate; absence degrades SQLite features gracefully. |
 
 ## Not linked / not bundled
 

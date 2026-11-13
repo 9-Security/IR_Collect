@@ -38,10 +38,10 @@ Local Collect 屬於 **Live Response**；folder/archive 分析會維持 evidence
 
 `config.ini` 可能包含：
 
-- `VirusTotalApiKey`
-- `AiApiKey`
-- `UploadApiKey`
-- Upload / AI endpoint
+- `AiApiKey` / `UploadApiKey`（儲存後以 `dpapi:` 前綴表示 Windows DPAPI 加密，僅限目前使用者；複製 `config.ini` 至其他使用者或電腦時，須於 **Advanced → Settings** **重新輸入**金鑰；解密失敗時欄位顯示說明，僅變更其他設定而不輸入新金鑰時 **Save** 會保留原密文；使用 **Clear** 可明確清除）
+- **匯出設定** 會重新序列化並以 `dpapi:` 保護金鑰，不會把 live `config.ini` 中的明文金鑰原樣複製出去
+- 外部記憶體擷取／分析工具路徑必須為 Windows **完整限定**路徑：磁碟機路徑 `X:\...` 或 UNC `\\server\share\...`（磁碟相對 `G:tool.exe`、根相對 `\tool.exe`、相對檔名、含引號路徑與 `\\?\`／`\\.\` 裝置命名空間路徑於收集時會被拒絕；資料夾或檔名可含撇號）
+- Upload / AI endpoint（須為 **https**；**http** 僅允許 loopback：`localhost`、`127.0.0.0/8`、以及 `IPAddress.IsLoopback` 判定之 IPv4／IPv6 字面位址，含展開的 `::1`；IPv4 對映 IPv6 如 `http://[::ffff:127.0.0.1]` **不**視為 loopback）
 - `AiEndpointAllowlist` / `UploadEndpointAllowlist`（以 `|` 分隔的 URL 前綴；**空清單**則阻擋該管道出站 POST）
 - `CollectionModeProfile`（`Standard` / `TriageFast` / `ForensicStrict`；與其他選項一併於 **Advanced → Settings** 設定）
 - `AiExportRedactionProfile`（`None` / `Basic` / `Strict`；**僅**影響 **AI Analyze** 要 POST 的 JSON）
@@ -53,7 +53,7 @@ Local Collect 屬於 **Live Response**；folder/archive 分析會維持 evidence
 - 將 `config.ini` 放在僅當前操作者可讀寫的位置
 - 不要將 `config.ini` 放在共用且可寫的目錄
 - 不要把 AI / Upload endpoint 指向未受控的外部服務
-- 於 **Advanced → Settings** 設定 **AI** 與 **Upload** 各自允許的 `http(s)://主機:埠/路徑前綴`；**allowlist 為空時，該管道預設不允許 POST**，直到至少加入一筆與設定之 endpoint 相符的前綴
+- 於 **Advanced → Settings** 設定 **AI** 與 **Upload** 各自允許的 `https://主機:埠/路徑前綴`（loopback 主機可用 `http://`）；**allowlist 為空時，該管道預設不允許 POST**，直到至少加入一筆與設定之 endpoint 相符的前綴
 - **AI Analyze** 會依 **redaction profile** 處理「即將送出」的 JSON；**匯出 Summary JSON** 與 **ZIP 上傳**不會被 profile 改寫內容（上傳僅做允許／拒絕目的地）
 - **Collection mode profile**：`collection_coverage.json` 與 analyst 匯出（`summary.json`、`full_log_v3` 的 host 摘要、以及 Summary／HTML／parser notes 於有案卷紀錄時）會帶入本次模式。**TriageFast** 以標記與收集前提示為主。**ForensicStrict** 會分類預定輸出位置、強烈警示系統碟輸出、要求明確風險確認，且預設再做第二次確認；同時預設略過已啟用的外部記憶體採集／分析 handoff，並禁止手動 **Deep Scan**、**AI Analyze** 與 Local Collect 後自動 **ZIP 上傳**。限制與 profile 略過項目會保留於 coverage 和匯出。此模式**不**主張 zero-footprint、鑑識映像或單靠本工具即構成完整低擾動鑑識方案。
 
@@ -522,8 +522,11 @@ alias。`-analyze -` 由 stdin 讀取證據路徑。`-graph` 的 `maxDepth` 只�
 
 注意：
 
-- 若未提供 `System.Data.SQLite.dll`，SQLite 寫入可能會被略過
-- GUI 仍可運作，但會少一層持久化
+- 須提供官方 **Signed-Trusted** 的 `System.Data.SQLite.dll`（組件版本 **≥ 1.0.118.0**）。若存在獨立原生 `SQLite.Interop.dll`（與 managed DLL 同目錄或於 `x86\`／`x64\`），亦須為 **Signed-Trusted**。
+- 若存在 `System.Data.SQLite.dll.config`、`No_PreLoadSQLite`，或任何可能覆寫原生 preload 的 `PreLoadSQLite_*` 環境變數，工具會**拒絕**載入 SQLite。
+- 首次開啟連線後，程序內已載入的 `SQLite.Interop.dll` 必須符合本程序架構下已驗證的 interop 路徑（mixed-mode、無獨立 interop 模組時視為可接受）。
+- 拒絕原因會寫入 `logs/ir_collect.log`（`Logger.Warning`），並可能出現在 Summary 或案卷工作區的 Fact Store 載入／建置警告中。
+- 若無可信賴模組，SQLite 寫入會被略過；GUI 仍可運作（僅記憶體內 Fact Store）。
 
 ### 9.3 Persist Fact Store cache in Local AppData
 

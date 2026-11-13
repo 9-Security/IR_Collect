@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -185,6 +186,27 @@ namespace IR_Collect.Tests
             failed += RunOne("EndpointGovernance_prefix_allows_child_path", EndpointGovernance_prefix_allows_child_path, sb) ? 0 : 1;
             failed += RunOne("EndpointGovernance_different_host_rejected", EndpointGovernance_different_host_rejected, sb) ? 0 : 1;
             failed += RunOne("EndpointGovernance_path_case_mismatch_rejected", EndpointGovernance_path_case_mismatch_rejected, sb) ? 0 : 1;
+            failed += RunOne("Security_ResolveSystemTool_absolute_under_system32", Security_ResolveSystemTool_absolute_under_system32, sb) ? 0 : 1;
+            failed += RunOne("Security_ResolveSystemTool_rejects_unknown", Security_ResolveSystemTool_rejects_unknown, sb) ? 0 : 1;
+            failed += RunOne("Security_DefaultDllImportSearchPaths_system32", Security_DefaultDllImportSearchPaths_system32, sb) ? 0 : 1;
+            failed += RunOne("Security_EndpointGovernance_rejects_remote_http", Security_EndpointGovernance_rejects_remote_http, sb) ? 0 : 1;
+            failed += RunOne("Security_EndpointGovernance_allows_loopback_http", Security_EndpointGovernance_allows_loopback_http, sb) ? 0 : 1;
+            failed += RunOne("Security_OutboundTls_excludes_legacy", Security_OutboundTls_excludes_legacy, sb) ? 0 : 1;
+            failed += RunOne("Security_OutboundTls_protocol_acceptance_predicate", Security_OutboundTls_protocol_acceptance_predicate, sb) ? 0 : 1;
+            failed += RunOne("Security_RegistrySid_validator", Security_RegistrySid_validator, sb) ? 0 : 1;
+            failed += RunOne("Security_EscapeArgForCmd_rejects_percent", Security_EscapeArgForCmd_rejects_percent, sb) ? 0 : 1;
+            failed += RunOne("Security_QuoteProcessArgument_follows_argv_rules", Security_QuoteProcessArgument_follows_argv_rules, sb) ? 0 : 1;
+            failed += RunOne("Security_Sqlite_version_floor", Security_Sqlite_version_floor, sb) ? 0 : 1;
+            failed += RunOne("Security_ConfigSecret_dpapi_roundtrip_and_legacy", Security_ConfigSecret_dpapi_roundtrip_and_legacy, sb) ? 0 : 1;
+            failed += RunOne("Security_BuildCmdExeWrappedCommandArguments", Security_BuildCmdExeWrappedCommandArguments, sb) ? 0 : 1;
+            failed += RunOne("Security_Sqlite_preload_refusal_and_interop_path_gate", Security_Sqlite_preload_refusal_and_interop_path_gate, sb) ? 0 : 1;
+            failed += RunOne("Security_EndpointGovernance_loopback_ip_parsing", Security_EndpointGovernance_loopback_ip_parsing, sb) ? 0 : 1;
+            failed += RunOne("Security_RegistrySid_collection_inclusion_length_gate", Security_RegistrySid_collection_inclusion_length_gate, sb) ? 0 : 1;
+            failed += RunOne("Security_ConfigSecret_preserve_ciphertext_on_unchanged_save", Security_ConfigSecret_preserve_ciphertext_on_unchanged_save, sb) ? 0 : 1;
+            failed += RunOne("Security_ConfigSecret_clear_and_save_flows", Security_ConfigSecret_clear_and_save_flows, sb) ? 0 : 1;
+            failed += RunOne("Security_MemoryHandoff_fully_qualified_paths", Security_MemoryHandoff_fully_qualified_paths, sb) ? 0 : 1;
+            failed += RunOne("Security_ConfigManager_export_never_plaintext_secrets", Security_ConfigManager_export_never_plaintext_secrets, sb) ? 0 : 1;
+            failed += RunOne("Security_ConfigManager_export_readonly_live_config", Security_ConfigManager_export_readonly_live_config, sb) ? 0 : 1;
             failed += RunOne("CollectionModeProfile_normalize_and_cases", CollectionModeProfile_normalize_and_cases, sb) ? 0 : 1;
             failed += RunOne("CollectionModeProfile_forensic_strict_blocks_outbound_helpers", CollectionModeProfile_forensic_strict_blocks_outbound_helpers, sb) ? 0 : 1;
             failed += RunOne("CollectionModeProfile_standard_allows_outbound_helpers", CollectionModeProfile_standard_allows_outbound_helpers, sb) ? 0 : 1;
@@ -5561,6 +5583,316 @@ namespace IR_Collect.Tests
             const string allow = "https://api.example.com/API/v1";
             return !EndpointGovernance.IsEndpointAllowed("https://api.example.com/api/v1/chat", allow) &&
                 EndpointGovernance.IsEndpointAllowed("https://api.example.com/API/v1/chat", allow);
+        }
+
+        private static bool Security_ResolveSystemTool_absolute_under_system32()
+        {
+            string sys = Environment.SystemDirectory ?? "";
+            if (string.IsNullOrEmpty(sys)) return false;
+            string reg = Collector.CommandHelper.ResolveSystemTool("reg");
+            if (!Path.IsPathRooted(reg)) return false;
+            if (reg.IndexOf(sys, StringComparison.OrdinalIgnoreCase) != 0) return false;
+            try
+            {
+                string wmic = Collector.CommandHelper.ResolveSystemTool("wmic");
+                if (wmic.IndexOf(Path.Combine(sys, "wbem"), StringComparison.OrdinalIgnoreCase) < 0) return false;
+                if (!File.Exists(wmic)) return false;
+            }
+            catch (FileNotFoundException)
+            {
+                // WMIC removed on some current Windows builds; reg resolution is sufficient for this gate.
+            }
+            return File.Exists(reg);
+        }
+
+        private static bool Security_ResolveSystemTool_rejects_unknown()
+        {
+            bool threw = false;
+            try { Collector.CommandHelper.ResolveSystemTool("calc"); }
+            catch (ArgumentException) { threw = true; }
+            return threw;
+        }
+
+        private static bool Security_DefaultDllImportSearchPaths_system32()
+        {
+            var attrs = typeof(Program).Assembly.GetCustomAttributes(
+                typeof(System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute), false);
+            if (attrs == null || attrs.Length == 0) return false;
+            var a = (System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute)attrs[0];
+            return a.Paths == System.Runtime.InteropServices.DllImportSearchPath.System32;
+        }
+
+        private static bool Security_EndpointGovernance_rejects_remote_http()
+        {
+            const string allow = "http://example.com/";
+            return !EndpointGovernance.IsEndpointAllowed("http://example.com/x", allow);
+        }
+
+        private static bool Security_EndpointGovernance_allows_loopback_http()
+        {
+            const string allow = "http://127.0.0.1:8080/";
+            return EndpointGovernance.IsEndpointAllowed("http://127.0.0.1:8080/x", allow);
+        }
+
+        private static bool Security_OutboundTls_excludes_legacy()
+        {
+            IList<string> names = OutboundTlsHelper.GetEnabledProtocolNamesForTest();
+            if (names == null) return false;
+            if (!names.Contains("Tls12")) return false;
+            foreach (string bad in new string[] { "Ssl3", "Tls", "Tls11" })
+            {
+                if (names.Contains(bad)) return false;
+            }
+            return true;
+        }
+
+        private static bool Security_OutboundTls_protocol_acceptance_predicate()
+        {
+            if (!OutboundTlsHelper.ProtocolSelectionIsAcceptable(SecurityProtocolType.Tls12)) return false;
+            if (OutboundTlsHelper.ProtocolSelectionIsAcceptable(SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls12)) return false;
+            if (OutboundTlsHelper.ProtocolSelectionIsAcceptable(SecurityProtocolType.Tls)) return false;
+            return true;
+        }
+
+        private static bool Security_RegistrySid_validator()
+        {
+            if (!RegistrySidHelper.IsValidLoadedUserSid("S-1-5-18")) return false;
+            if (!RegistrySidHelper.IsValidLoadedUserSid("S-1-5-21-1-2-3-1001")) return false;
+            if (RegistrySidHelper.IsValidLoadedUserSid(".DEFAULT")) return false;
+            if (RegistrySidHelper.IsValidLoadedUserSid(@"S-1-5-21-1..\x")) return false;
+            if (RegistrySidHelper.IsValidLoadedUserSid("S-1-5-%PATH%")) return false;
+            if (RegistrySidHelper.IsValidLoadedUserSid("S-1-5-21\"&calc")) return false;
+            return true;
+        }
+
+        private static bool Security_EscapeArgForCmd_rejects_percent()
+        {
+            bool threw = false;
+            try { Collector.CommandHelper.EscapeArgForCmd("S-1-5-%PATH%"); }
+            catch (ArgumentException) { threw = true; }
+            return threw;
+        }
+
+        private static bool Security_QuoteProcessArgument_follows_argv_rules()
+        {
+            Func<string, string, bool> eq = (input, expected) =>
+                string.Equals(Collector.CommandHelper.QuoteProcessArgument(input), expected, StringComparison.Ordinal);
+            return eq(null, "\"\"") &&
+                eq("", "\"\"") &&
+                eq(@"HKLM\SYSTEM", @"HKLM\SYSTEM") &&
+                eq(@"C:\Out Dir\a.hiv", "\"C:\\Out Dir\\a.hiv\"") &&
+                eq(@"C:\Out Dir\", "\"C:\\Out Dir\\\\\"") &&
+                eq("a\"b c", "\"a\\\"b c\"") &&
+                eq("x\\\"y z", "\"x\\\\\\\"y z\"");
+        }
+
+        private static bool Security_Sqlite_version_floor()
+        {
+            if (!FactStorePersistence.MeetsSqliteVersionFloor(new Version(1, 0, 118, 0))) return false;
+            if (!FactStorePersistence.MeetsSqliteVersionFloor(new Version(2, 0, 0, 0))) return false;
+            if (FactStorePersistence.MeetsSqliteVersionFloor(new Version(1, 0, 117, 0))) return false;
+            if (FactStorePersistence.MeetsSqliteVersionFloor(null)) return false;
+            return true;
+        }
+
+        private static bool Security_ConfigSecret_dpapi_roundtrip_and_legacy()
+        {
+            string plain = "unit-test-secret-" + Guid.NewGuid().ToString("N");
+            string enc = ConfigSecretProtection.ProtectForStorage(plain);
+            if (string.IsNullOrEmpty(enc) || enc.IndexOf(ConfigSecretProtection.DpapiPrefix, StringComparison.Ordinal) != 0)
+                return false;
+            if (ConfigSecretProtection.UnprotectForUse(enc, "AiApiKey") != plain) return false;
+            if (ConfigSecretProtection.UnprotectForUse("legacy-plain-key", "UploadApiKey") != "legacy-plain-key")
+                return false;
+
+            string dir = CreateTempDir("IRCollectDpapiCfg_");
+            try
+            {
+                string cfg = Path.Combine(dir, "config.ini");
+                var cm = new ConfigManager();
+                var pathField = typeof(ConfigManager).GetField("configPath",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                if (pathField == null) return false;
+                pathField.SetValue(cm, cfg);
+                cm.Set("AiApiKey", plain);
+                cm.Save();
+                string disk = File.ReadAllText(cfg);
+                if (disk.IndexOf("dpapi:", StringComparison.Ordinal) < 0) return false;
+                var cm2 = new ConfigManager();
+                pathField.SetValue(cm2, cfg);
+                cm2.Load();
+                return cm2.Get("AiApiKey") == plain;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool Security_BuildCmdExeWrappedCommandArguments()
+        {
+            string normal = Collector.CommandHelper.BuildCmdExeWrappedCommandArguments(
+                @"C:\Windows\System32\chcp.com", @"C:\Windows\System32\reg.exe", "export HKLM\\SYSTEM x /y");
+            if (normal.IndexOf("/d", StringComparison.Ordinal) < 0) return false;
+            if (normal.IndexOf("/v:off", StringComparison.Ordinal) < 0) return false;
+            if (normal.IndexOf("/s /c \"", StringComparison.Ordinal) < 0) return false;
+            string spaced = Collector.CommandHelper.BuildCmdExeWrappedCommandArguments(
+                @"D:\Win Root\System32\chcp.com", @"D:\Win Root\System32\reg.exe", "/?");
+            if (spaced.IndexOf("\"/d", StringComparison.Ordinal) >= 0) return false;
+            if (spaced.IndexOf("\"D:\\Win Root\\System32\\chcp.com\"", StringComparison.Ordinal) < 0) return false;
+            if (spaced.IndexOf("\"D:\\Win Root\\System32\\reg.exe\"", StringComparison.Ordinal) < 0) return false;
+            return true;
+        }
+
+        private static bool Security_Sqlite_preload_refusal_and_interop_path_gate()
+        {
+            string dir = CreateTempDir("IRCollectSqliteGate_");
+            try
+            {
+                string managed = Path.Combine(dir, "System.Data.SQLite.dll");
+                File.WriteAllText(managed, "stub");
+                if (!FactStorePersistence.SqlitePreloadOverridePresent(managed, delegate(string n)
+                {
+                    return string.Equals(n, "PreLoadSQLite_64_Directory", StringComparison.OrdinalIgnoreCase) ? @"C:\temp" : null;
+                }))
+                    return false;
+                string cfgPath = Path.Combine(dir, "System.Data.SQLite.dll.config");
+                File.WriteAllText(cfgPath, "<configuration/>");
+                if (!FactStorePersistence.SqlitePreloadOverridePresent(managed, delegate(string n) { return null; }))
+                    return false;
+                var allowed = new List<string> { Path.GetFullPath(Path.Combine(dir, "SQLite.Interop.dll")) };
+                if (!FactStorePersistence.IsLoadedSqliteInteropModuleAllowed(allowed[0], allowed)) return false;
+                if (FactStorePersistence.IsLoadedSqliteInteropModuleAllowed(Path.Combine(dir, "evil", "SQLite.Interop.dll"), allowed))
+                    return false;
+                if (FactStorePersistence.IsLoadedSqliteInteropModuleAllowed("C:\\any\\SQLite.Interop.dll", new List<string>()))
+                    return false;
+                return true;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool Security_EndpointGovernance_loopback_ip_parsing()
+        {
+            const string allow = "http://[::1]:8080/";
+            Uri u;
+            if (!Uri.TryCreate("http://[::1]:8080/x", UriKind.Absolute, out u)) return false;
+            if (!EndpointGovernance.IsEndpointAllowed("http://[::1]:8080/x", allow)) return false;
+            if (!Uri.TryCreate("http://[0000:0000:0000:0000:0000:0000:0000:0001]:8080/x", UriKind.Absolute, out u)) return false;
+            if (!EndpointGovernance.IsLoopbackEndpoint(u)) return false;
+            if (!EndpointGovernance.IsEndpointAllowed("http://127.5.6.7/", "http://127.5.6.7/")) return false;
+            if (EndpointGovernance.IsEndpointAllowed("http://127.0.0.1.evil.com/", "http://127.0.0.1.evil.com/")) return false;
+            if (!Uri.TryCreate("http://[::ffff:127.0.0.1]/", UriKind.Absolute, out u)) return false;
+            if (EndpointGovernance.IsLoopbackEndpoint(u)) return false;
+            if (!Uri.TryCreate("http://user@evil.com/", UriKind.Absolute, out u)) return false;
+            if (EndpointGovernance.IsLoopbackEndpoint(u)) return false;
+            return true;
+        }
+
+        private static bool Security_RegistrySid_collection_inclusion_length_gate()
+        {
+            if (RegistrySidHelper.ShouldCollectRegistryForLoadedUserSid("S-1-5-18")) return false;
+            if (!RegistrySidHelper.ShouldCollectRegistryForLoadedUserSid("S-1-5-21-1-2-3-1001")) return false;
+            if (RegistrySidHelper.ShouldCollectRegistryForLoadedUserSid("S-1-5-%PATH%")) return false;
+            return true;
+        }
+
+        private static bool Security_ConfigSecret_preserve_ciphertext_on_unchanged_save()
+        {
+            const string cipher = "dpapi:QUJDREVGRw==";
+            string resolved = ConfigSecretProtection.ResolveSecretForSave(cipher, ConfigSecretProtection.UiDecryptFailedPlaceholder, false, true);
+            if (!string.Equals(resolved, cipher, StringComparison.Ordinal)) return false;
+            resolved = ConfigSecretProtection.ResolveSecretForSave(cipher, "brand-new-key", false, true);
+            return string.Equals(resolved, "brand-new-key", StringComparison.Ordinal);
+        }
+
+        private static bool Security_ConfigSecret_clear_and_save_flows()
+        {
+            const string cipher = "dpapi:QUJDREVGRw==";
+            string r = ConfigSecretProtection.ResolveSecretForSave(cipher, "replacement-after-clear", true, false);
+            if (!string.Equals(r, "replacement-after-clear", StringComparison.Ordinal)) return false;
+            r = ConfigSecretProtection.ResolveSecretForSave(cipher, "", true, false);
+            if (!string.Equals(r, "", StringComparison.Ordinal)) return false;
+            r = ConfigSecretProtection.ResolveSecretForSave(cipher, ConfigSecretProtection.UiDecryptFailedPlaceholder, true, true);
+            if (!string.Equals(r, "", StringComparison.Ordinal)) return false;
+            r = ConfigSecretProtection.ResolveSecretForSave(cipher, ConfigSecretProtection.UiDecryptFailedPlaceholder, false, true);
+            return string.Equals(r, cipher, StringComparison.Ordinal);
+        }
+
+        private static bool Security_MemoryHandoff_fully_qualified_paths()
+        {
+            string fp;
+            string err;
+            if (!MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"C:\Tools\WinPMEM.exe", out fp, out err)) return false;
+            if (!MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"\\fileserver\share\tool.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"G:tool.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"\tool.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath("tool.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath("\"C:\\Tools\\x.exe\"", out fp, out err)) return false;
+            if (!MemoryHandoffHelper.IsFullyQualifiedWindowsPath(@"D:\a\b.exe")) return false;
+            if (MemoryHandoffHelper.IsFullyQualifiedWindowsPath(@"G:rel.exe")) return false;
+            // Apostrophes are legal in file names; device / extended-length namespaces are not accepted.
+            if (!MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"C:\Analyst's Tools\winpmem.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"\\?\C:\Tools\x.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"\\.\C:\Tools\x.exe", out fp, out err)) return false;
+            if (MemoryHandoffHelper.TryResolveAbsoluteExternalToolPath(@"\\?\UNC\server\share\x.exe", out fp, out err)) return false;
+            return true;
+        }
+
+        private static bool Security_ConfigManager_export_never_plaintext_secrets()
+        {
+            const string secret = "export-must-not-leak-plaintext";
+            string dir = CreateTempDir("IRCollectCfgExport_");
+            try
+            {
+                string live = Path.Combine(dir, "config.ini");
+                File.WriteAllText(live, "AiApiKey=" + secret + Environment.NewLine + "UploadApiKey=legacy-plain" + Environment.NewLine, Encoding.UTF8);
+                string exportPath = Path.Combine(dir, "exported.ini");
+                var cm = new ConfigManager();
+                var pathField = typeof(ConfigManager).GetField("configPath", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (pathField == null) return false;
+                pathField.SetValue(cm, live);
+                cm.Load();
+                if (!cm.Export(exportPath)) return false;
+                string exported = File.ReadAllText(exportPath);
+                if (exported.IndexOf(secret, StringComparison.Ordinal) >= 0) return false;
+                if (exported.IndexOf("legacy-plain", StringComparison.Ordinal) >= 0) return false;
+                if (exported.IndexOf("VirusTotalApiKey", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                return exported.IndexOf("dpapi:", StringComparison.Ordinal) >= 0;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
+        }
+
+        private static bool Security_ConfigManager_export_readonly_live_config()
+        {
+            string dir = CreateTempDir("IRCollectCfgExportRo_");
+            try
+            {
+                string live = Path.Combine(dir, "config.ini");
+                File.WriteAllText(live, "AiApiKey=live-secret" + Environment.NewLine, Encoding.UTF8);
+                File.SetAttributes(live, FileAttributes.ReadOnly);
+                string exportPath = Path.Combine(dir, "exported_ro.ini");
+                var cm = new ConfigManager();
+                var pathField = typeof(ConfigManager).GetField("configPath", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (pathField == null) return false;
+                pathField.SetValue(cm, live);
+                cm.Load();
+                bool ok = cm.Export(exportPath);
+                File.SetAttributes(live, FileAttributes.Normal);
+                if (!ok || !File.Exists(exportPath)) return false;
+                string exported = File.ReadAllText(exportPath);
+                if (exported.IndexOf("live-secret", StringComparison.Ordinal) >= 0) return false;
+                return exported.IndexOf("dpapi:", StringComparison.Ordinal) >= 0;
+            }
+            finally
+            {
+                TryDeleteDir(dir);
+            }
         }
 
         private static bool AiRedaction_basic_masks_collection_coverage_identity()

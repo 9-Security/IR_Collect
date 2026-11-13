@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 
 namespace IR_Collect.Utils
 {
@@ -39,6 +40,10 @@ namespace IR_Collect.Utils
                 !string.Equals(candidate.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 return false;
 
+            if (string.Equals(candidate.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+                !IsLoopbackEndpoint(candidate))
+                return false;
+
             var entries = ParseAllowlistEntries(allowlistRaw);
             if (entries == null || entries.Count == 0)
                 return false;
@@ -70,6 +75,23 @@ namespace IR_Collect.Utils
                     return true;
             }
 
+            return false;
+        }
+
+        internal static bool IsLoopbackEndpoint(Uri u)
+        {
+            if (u == null) return false;
+            if (!string.IsNullOrEmpty(u.UserInfo))
+                return false;
+            string host = u.Host ?? "";
+            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+                return true;
+            string literal = host.Trim();
+            if (literal.Length > 0 && literal[0] == '[')
+                literal = literal.TrimStart('[').TrimEnd(']');
+            IPAddress addr;
+            if (IPAddress.TryParse(literal, out addr))
+                return IPAddress.IsLoopback(addr);
             return false;
         }
 

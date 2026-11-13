@@ -38,10 +38,10 @@ root read-only, but the tool is not a full disk-imaging forensics platform.
 
 `config.ini` may contain:
 
-- `VirusTotalApiKey`
-- `AiApiKey`
-- `UploadApiKey`
-- Upload / AI endpoints
+- `AiApiKey` / `UploadApiKey` (stored with a `dpapi:` prefix after save — Windows DPAPI, current user only; copy `config.ini` to another user or machine and you must **re-enter** keys in **Advanced → Settings**; if decryption fails the field shows a placeholder and **Save** keeps the stored ciphertext unless you type a new key or use **Clear**)
+- **Export settings** writes a fresh `config.ini` with keys still protected (`dpapi:`), never a verbatim copy of legacy plaintext from the live file
+- External memory acquire/analyze tool paths must be **fully qualified** Windows paths: a drive path `X:\...` or UNC `\\server\share\...` (drive-relative `G:tool.exe`, root-relative `\tool.exe`, relative names, quoted paths, and `\\?\` / `\\.\` device-namespace paths are rejected at collection time; apostrophes in folder or file names are allowed)
+- Upload / AI endpoints (**https** required; **http** allowed only for loopback: `localhost`, `127.0.0.0/8`, any `IPAddress.IsLoopback` literal including compressed/expanded IPv6 `::1`; IPv4-mapped IPv6 such as `http://[::ffff:127.0.0.1]` is **not** treated as loopback)
 - `AiEndpointAllowlist` / `UploadEndpointAllowlist` (pipe-separated URL prefixes; empty list blocks outbound for that path)
 - `CollectionModeProfile` (`Standard` / `TriageFast` / `ForensicStrict`; controlled in **Advanced → Settings** alongside other options—do not rely on undocumented `config.ini`-only toggles)
 - `AiExportRedactionProfile` (`None` / `Basic` / `Strict`; affects **AI Analyze** POST body only)
@@ -53,7 +53,7 @@ Recommendations:
 - Keep `config.ini` in a location readable/writable only by the current operator.
 - Do not place `config.ini` in a world-writable shared folder.
 - Do not point AI / Upload endpoints at untrusted services.
-- Configure **Advanced → Settings** allowlists: each outbound channel (AI vs Upload) must list allowed `http(s)://host:port/path-prefix` entries. An **empty** allowlist **blocks** POSTs for that channel until you add at least one prefix that matches your configured endpoint.
+- Configure **Advanced → Settings** allowlists: each outbound channel (AI vs Upload) must list allowed `https://host:port/path-prefix` entries (or `http://` only for loopback hosts as above). An **empty** allowlist **blocks** POSTs for that channel until you add at least one prefix that matches your configured endpoint.
 - **AI Analyze** applies the selected **redaction profile** to the JSON being posted. **Export Summary JSON** and **ZIP upload** are not rewritten by the profile (upload is allow/deny only).
 - **Collection mode profile** is recorded in `collection_coverage.json` and analyst exports (`summary.json`, `full_log_v3` host summaries, Summary/HTML/parser notes when present). **TriageFast** is mainly labeling plus an informational pre-collect reminder. **ForensicStrict** classifies the planned output target, strongly warns for system-disk output, requires explicit risk acknowledgement and, by default, a second confirmation. It skips enabled external memory acquisition/analysis handoff by default and blocks manual **Deep Scan**, **AI Analyze**, and automatic **ZIP upload**. Restrictions and profile skips remain visible in coverage and exports. It does **not** claim zero-footprint, forensic disk imaging, or a complete low-touch forensic program by itself.
 
@@ -450,7 +450,7 @@ Default **on**: faster path to Facts, entity search, and full LOG JSON export.
 
 Writes `fact_store.db` under each host's separate analysis workspace without modifying the evidence root. A database already present in imported evidence is retained as raw evidence and rebuilt from source artifacts before use.
 
-Requires `System.Data.SQLite.dll` beside the EXE for SQLite writes; GUI still works without it (in-memory path only).
+Requires an official **signed-trusted** `System.Data.SQLite.dll` beside the EXE (assembly version **≥ 1.0.118.0**). If a separate native `SQLite.Interop.dll` is present next to the managed DLL or under `x86\` / `x64\`, it must also be **Signed-Trusted**. The tool **refuses** SQLite when any of the following is present: `System.Data.SQLite.dll.config`, `No_PreLoadSQLite`, or any `PreLoadSQLite_*` environment variable that could override native preload. After the first connection opens, any loaded `SQLite.Interop.dll` must match the verified interop path for this process architecture (mixed-mode deployments with no separate interop module are accepted). Refusal reasons are written to `logs/ir_collect.log` (`Logger.Warning`) and may surface as Fact Store load/build warnings in Summary or the case workspace. Without a trusted module, SQLite writes are skipped and the GUI still works (in-memory Fact Store path only).
 
 ### 9.3 Persist Fact Store cache in Local AppData
 

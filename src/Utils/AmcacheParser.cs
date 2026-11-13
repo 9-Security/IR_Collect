@@ -264,7 +264,7 @@ namespace IR_Collect.Utils
 
         private static bool RunRegQuery(string keyPath, out string output, out string error)
         {
-            var psi = new ProcessStartInfo("reg.exe", "query \"" + keyPath + "\" /s")
+            var psi = new ProcessStartInfo(IR_Collect.Collector.CommandHelper.ResolveSystemTool("reg"), "query \"" + keyPath + "\" /s")
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -273,6 +273,7 @@ namespace IR_Collect.Utils
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
+            IR_Collect.Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
             using (var p = Process.Start(psi))
             {
                 output = p.StandardOutput.ReadToEnd();
@@ -284,7 +285,7 @@ namespace IR_Collect.Utils
 
         private static bool RunRegCommand(string command, out string stdErr)
         {
-            var psi = new ProcessStartInfo("reg.exe", command)
+            var psi = new ProcessStartInfo(IR_Collect.Collector.CommandHelper.ResolveSystemTool("reg"), command)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -293,6 +294,7 @@ namespace IR_Collect.Utils
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
+            IR_Collect.Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
             using (var p = Process.Start(psi))
             {
                 p.StandardOutput.ReadToEnd();

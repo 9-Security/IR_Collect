@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+
 // General Information
 [assembly: AssemblyTitle("9SEC Evidence Workbench")]
 [assembly: AssemblyDescription("Windows DFIR collection, evidence intake, and analysis workbench")]

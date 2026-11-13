@@ -784,5 +784,72 @@ namespace IR_Collect.Utils
                 return false;
             }
         }
+
+        /// <summary>Requires a drive-qualified (X:\...) or UNC (\\server\share\...) path; returns normalized full path for launch and provenance.</summary>
+        public static bool TryResolveAbsoluteExternalToolPath(string configuredPath, out string fullPath, out string error)
+        {
+            fullPath = "";
+            error = "";
+            try
+            {
+                if (string.IsNullOrWhiteSpace(configuredPath))
+                {
+                    error = "path is empty";
+                    return false;
+                }
+                string trimmed = configuredPath.Trim();
+                // '"' is illegal in Windows paths, so any double quote means a quoted/malformed value.
+                // Apostrophes are legal in file names and are therefore allowed.
+                if (trimmed.IndexOf('"') >= 0)
+                {
+                    error = "quoted paths are not allowed";
+                    return false;
+                }
+                if (!IsFullyQualifiedWindowsPath(trimmed))
+                {
+                    error = "path must be a full drive path (X:\\...) or UNC (\\\\server\\share\\...); drive-relative and root-relative paths are rejected";
+                    return false;
+                }
+                if (trimmed.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+                {
+                    error = "path contains invalid characters";
+                    return false;
+                }
+                fullPath = Path.GetFullPath(trimmed);
+                if (string.IsNullOrEmpty(fullPath))
+                {
+                    error = "path resolution failed";
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message ?? "path resolution failed";
+                return false;
+            }
+        }
+
+        /// <summary>Drive-qualified X:\... or UNC \\server\share\... only (not drive-relative G:tool or root-relative \tool).</summary>
+        internal static bool IsFullyQualifiedWindowsPath(string trimmed)
+        {
+            if (string.IsNullOrEmpty(trimmed)) return false;
+            if (trimmed.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                // Reject Win32 device / extended-length namespaces (\\?\, \\.\, \??\-style forms):
+                // they bypass normal path parsing and are not ordinary UNC shares.
+                if (trimmed.Length >= 4 && (trimmed[2] == '?' || trimmed[2] == '.') && trimmed[3] == '\\')
+                    return false;
+                string rest = trimmed.Substring(2);
+                if (string.IsNullOrEmpty(rest)) return false;
+                int sep = rest.IndexOf('\\');
+                if (sep < 0) return false;
+                return rest.Length > sep + 1;
+            }
+            if (trimmed.Length < 3) return false;
+            char drive = trimmed[0];
+            bool letter = (drive >= 'A' && drive <= 'Z') || (drive >= 'a' && drive <= 'z');
+            return letter && trimmed[1] == ':' && trimmed[2] == '\\';
+        }
     }
 }
