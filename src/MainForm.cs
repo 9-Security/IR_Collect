@@ -2495,7 +2495,16 @@ namespace IR_Collect
 
         private string SendAiRequest(string endpoint, string apiKey, string summaryJson)
         {
+            try
+            {
+                IR_Collect.Utils.OutboundTlsHelper.EnsureModernTlsForOutboundRequests();
+            }
+            catch (InvalidOperationException tex)
+            {
+                throw new Exception("Outbound TLS configuration failed: " + tex.Message);
+            }
             var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(endpoint);
+            request.AllowAutoRedirect = false;
             request.Method = "POST";
             request.ContentType = "application/json";
             if (!string.IsNullOrEmpty(apiKey))
@@ -2524,9 +2533,10 @@ namespace IR_Collect
             try
             {
                 using (var response = (System.Net.HttpWebResponse)request.GetResponse())
-                using (var reader = new StreamReader(response.GetResponseStream()))
                 {
-                    return reader.ReadToEnd();
+                    ThrowIfRedirectResponse(response);
+                    using (var reader = new StreamReader(response.GetResponseStream()))
+                        return reader.ReadToEnd();
                 }
             }
             catch (System.Net.WebException wex)
@@ -2620,10 +2630,30 @@ namespace IR_Collect
             }
         }
 
+        private static void ThrowIfRedirectResponse(HttpWebResponse response)
+        {
+            if (response == null) return;
+            int code = (int)response.StatusCode;
+            if (code >= 300 && code < 400)
+            {
+                string location = response.Headers != null ? (response.Headers["Location"] ?? "") : "";
+                throw new Exception("HTTP redirect not followed (status " + code + "). Location: " + location);
+            }
+        }
+
         private string UploadCase(string endpoint, string apiKey, string zipPath, string sha256)
         {
             string boundary = "----IRCollectBoundary" + DateTime.Now.Ticks;
+            try
+            {
+                IR_Collect.Utils.OutboundTlsHelper.EnsureModernTlsForOutboundRequests();
+            }
+            catch (InvalidOperationException tex)
+            {
+                throw new Exception("Outbound TLS configuration failed: " + tex.Message);
+            }
             var request = (HttpWebRequest)WebRequest.Create(endpoint);
+            request.AllowAutoRedirect = false;
             request.Method = "POST";
             request.ContentType = "multipart/form-data; boundary=" + boundary;
             request.SendChunked = true;

@@ -2,27 +2,38 @@ name: build-and-test
 
 # Run the repository regression gate on every push to main and every pull request.
 # .NET Framework's csc is preinstalled on the windows-latest runner.
+# Third-party actions are pinned to full commit SHAs (tag noted in the trailing comment).
 
 on:
   push:
     branches: [ main ]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run regression self-tests
         shell: cmd
+        # run_review_regression.bat writes %TEMP%\9SEC_EvidW_TestResult.txt; point TEMP/TMP at
+        # runner.temp so the upload step below finds the file (runner context is step-level only).
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: call run_review_regression.bat
 
       - name: Upload test result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: self-test-result
           path: ${{ runner.temp }}\9SEC_EvidW_TestResult.txt
-          if-no-files-found: ignore
+          if-no-files-found: warn

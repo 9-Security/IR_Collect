@@ -1,8 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -651,7 +654,19 @@ namespace IR_Collect.Analysis.Correlation
 
         #region SQLite via reflection (no compile-time reference) — cached MethodInfo
 
+        private static readonly object _sqliteInitLock = new object();
         private static Assembly _sqliteAssembly;
+        private static bool _sqlitePermanentlyUnavailable;
+        private static bool _sqliteLoadedModulesVerified;
+        private static bool _sqliteVerifiedInteropPathsFrozen;
+        private static FileStream _sqliteManagedValidationLock;
+        private static readonly List<FileStream> _sqliteInteropValidationLocks = new List<FileStream>();
+        private static readonly List<string> _verifiedSqliteInteropPaths = new List<string>();
+
+        private const uint LoadLibrarySearchFlagsAltered = 0x00000008;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
 
         // Cached types and methods to avoid per-call GetType/GetMethod overhead
         private static Type _connType;
@@ -669,48 +684,322 @@ namespace IR_Collect.Analysis.Correlation
         private static System.Reflection.MethodInfo _miReaderFieldCount;
         private static System.Reflection.PropertyInfo _piParameters;
 
-        /// <summary>
-        /// True only if <paramref name="path"/> carries a valid, Authenticode-trusted signature.
-        /// Fail-safe: any error or a non-trusted status returns false (do not load). Logs the signer
-        /// for audit, and explains a rejection so the operator knows SQLite features were disabled.
-        /// </summary>
-        internal static bool IsTrustedSqliteModule(string path)
+        internal static readonly Version SqliteMinimumAssemblyVersion = new Version(1, 0, 118, 0);
+
+        /// <summary>Pure version-floor check (no signature / disk I/O beyond reading assembly metadata).</summary>
+        internal static bool MeetsSqliteVersionFloor(Version assemblyVersion)
         {
+            if (assemblyVersion == null) return false;
+            return assemblyVersion >= SqliteMinimumAssemblyVersion;
+        }
+
+        internal static bool MeetsSqliteVersionFloorAtPath(string path, out string reason)
+        {
+            reason = "";
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    reason = "assembly missing";
+                    return false;
+                }
+                AssemblyName name = AssemblyName.GetAssemblyName(path);
+                if (!MeetsSqliteVersionFloor(name.Version))
+                {
+                    reason = "version " + (name.Version != null ? name.Version.ToString() : "unknown") +
+                        " is below minimum " + SqliteMinimumAssemblyVersion;
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                reason = ex.Message ?? "version read failed";
+                return false;
+            }
+        }
+
+        private static bool IsSignedTrustedAtPath(string path, string label, out string reason)
+        {
+            reason = "";
             try
             {
                 string signer;
                 string status = IR_Collect.SignatureHelper.GetSignatureStatus(path, out signer);
                 if (string.Equals(status, "Signed-Trusted", StringComparison.Ordinal))
-                {
-                    Logger.Info("System.Data.SQLite.dll signature trusted (signer: " + signer + ").");
                     return true;
-                }
-                Logger.Warning("System.Data.SQLite.dll present but signature status is '" + status + "' (signer: " + signer +
-                    "). Refusing to load it to avoid DLL planting / stale-engine risk; SQLite features disabled. Use the official signed System.Data.SQLite build.");
+                reason = label + " signature status is '" + status + "' (signer: " + signer + ")";
                 return false;
             }
             catch (Exception ex)
             {
-                Logger.Warning("System.Data.SQLite.dll signature check failed: " + (ex.Message ?? "") + "; refusing to load.");
+                reason = label + " signature check failed: " + (ex.Message ?? "");
                 return false;
             }
         }
 
+        private static IEnumerable<string> EnumerateSqliteInteropCandidates(string managedDllPath)
+        {
+            string dir = Path.GetDirectoryName(managedDllPath) ?? "";
+            yield return Path.Combine(dir, "SQLite.Interop.dll");
+            yield return Path.Combine(dir, "x86", "SQLite.Interop.dll");
+            yield return Path.Combine(dir, "x64", "SQLite.Interop.dll");
+        }
+
+        /// <summary>True if SQLite preload override config or environment is present (fail-closed).</summary>
+        internal static bool SqlitePreloadOverridePresent(string managedDllPath, Func<string, string> getEnvironmentVariable)
+        {
+            if (string.IsNullOrEmpty(managedDllPath)) return false;
+            string dir = Path.GetDirectoryName(managedDllPath) ?? "";
+            string configPath = Path.Combine(dir, "System.Data.SQLite.dll.config");
+            if (File.Exists(configPath)) return true;
+            if (getEnvironmentVariable == null) return false;
+            if (!string.IsNullOrEmpty(getEnvironmentVariable("No_PreLoadSQLite"))) return true;
+            string[] names = new string[]
+            {
+                "PreLoadSQLite_32_AssemblyDirectory",
+                "PreLoadSQLite_32_InteropDirectory",
+                "PreLoadSQLite_32_Directory",
+                "PreLoadSQLite_32_File",
+                "PreLoadSQLite_64_AssemblyDirectory",
+                "PreLoadSQLite_64_InteropDirectory",
+                "PreLoadSQLite_64_Directory",
+                "PreLoadSQLite_64_File",
+                "PreLoadSQLite_AssemblyDirectory",
+                "PreLoadSQLite_InteropDirectory",
+                "PreLoadSQLite_Directory",
+                "PreLoadSQLite_File"
+            };
+            foreach (string n in names)
+            {
+                if (!string.IsNullOrEmpty(getEnvironmentVariable(n))) return true;
+            }
+            return false;
+        }
+
+        internal static bool SqlitePreloadOverridePresentFromProcessEnvironment(string managedDllPath)
+        {
+            if (SqlitePreloadOverridePresent(managedDllPath, delegate(string name) { return Environment.GetEnvironmentVariable(name); }))
+                return true;
+            try
+            {
+                foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+                {
+                    string key = entry.Key != null ? entry.Key.ToString() : "";
+                    if (string.IsNullOrEmpty(key)) continue;
+                    if (string.Equals(key, "No_PreLoadSQLite", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (key.StartsWith("PreLoadSQLite_", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch { /* best-effort */ }
+            return false;
+        }
+
+        internal static bool IsLoadedSqliteInteropModuleAllowed(string moduleFullPath, IList<string> verifiedInteropPathsNormalized)
+        {
+            if (string.IsNullOrEmpty(moduleFullPath)) return false;
+            if (verifiedInteropPathsNormalized == null || verifiedInteropPathsNormalized.Count == 0)
+                return false;
+            string full;
+            try { full = Path.GetFullPath(moduleFullPath); }
+            catch { return false; }
+            foreach (string allowed in verifiedInteropPathsNormalized)
+            {
+                if (string.IsNullOrEmpty(allowed)) continue;
+                if (string.Equals(full, allowed, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static void DisableSqliteForProcess(string reason)
+        {
+            _sqlitePermanentlyUnavailable = true;
+            _sqliteAssembly = null;
+            _connType = null;
+            Logger.Warning(reason);
+        }
+
+        private static bool EnsureSqliteInteropModulesMatchVerified()
+        {
+            var normalized = new List<string>();
+            foreach (string p in _verifiedSqliteInteropPaths)
+            {
+                try { normalized.Add(Path.GetFullPath(p)); }
+                catch { return false; }
+            }
+            try
+            {
+                Process proc = Process.GetCurrentProcess();
+                foreach (ProcessModule mod in proc.Modules)
+                {
+                    if (mod == null || mod.ModuleName == null) continue;
+                    if (!string.Equals(mod.ModuleName, "SQLite.Interop.dll", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    string fileName = mod.FileName ?? "";
+                    if (!IsLoadedSqliteInteropModuleAllowed(fileName, normalized))
+                    {
+                        DisableSqliteForProcess("SQLite.Interop.dll loaded from unexpected path '" + fileName +
+                            "'; SQLite features disabled for this process.");
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DisableSqliteForProcess("SQLite native module verification failed: " + (ex.Message ?? "") +
+                    "; SQLite features disabled for this process.");
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsInteropPathForCurrentProcessArch(string path)
+        {
+            string norm;
+            try { norm = Path.GetFullPath(path).Replace('/', '\\'); }
+            catch { return false; }
+            bool is64 = Environment.Is64BitProcess;
+            bool hasX86 = norm.IndexOf("\\x86\\", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool hasX64 = norm.IndexOf("\\x64\\", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (is64)
+            {
+                if (hasX64) return true;
+                return !hasX86 && !hasX64;
+            }
+            if (hasX86) return true;
+            return !hasX86 && !hasX64;
+        }
+
+        private static void TryPreloadSingleVerifiedInteropForProcess(IList<string> interopVerified)
+        {
+            if (interopVerified == null || interopVerified.Count == 0) return;
+            var forArch = new List<string>();
+            foreach (string p in interopVerified)
+            {
+                if (IsInteropPathForCurrentProcessArch(p))
+                    forArch.Add(p);
+            }
+            if (forArch.Count != 1) return;
+            string preload = forArch[0];
+            try
+            {
+                string full = Path.GetFullPath(preload);
+                IntPtr h = LoadLibraryEx(full, IntPtr.Zero, LoadLibrarySearchFlagsAltered);
+                if (h == IntPtr.Zero)
+                    Logger.Warning("System.Data.SQLite: LoadLibraryEx preload failed for " + full + " (error " + Marshal.GetLastWin32Error() + ").");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning("System.Data.SQLite: interop preload failed: " + (ex.Message ?? ""));
+            }
+        }
+
+        /// <summary>
+        /// True only if <paramref name="path"/> carries a valid, Authenticode-trusted signature and meets the minimum version.
+        /// Fail-safe: any error or a non-trusted status returns false (do not load).
+        /// </summary>
+        internal static bool IsTrustedSqliteModule(string path)
+        {
+            return TryValidateSqliteModule(path, null);
+        }
+
+        private static bool TryValidateSqliteModule(string path, FileStream heldManaged)
+        {
+            string reason;
+            if (!MeetsSqliteVersionFloorAtPath(path, out reason))
+            {
+                Logger.Warning("System.Data.SQLite.dll refused: " + reason + "; SQLite features disabled.");
+                return false;
+            }
+            if (!IsSignedTrustedAtPath(path, "System.Data.SQLite.dll", out reason))
+            {
+                Logger.Warning("System.Data.SQLite.dll present but " + reason +
+                    ". Refusing to load it to avoid DLL planting / stale-engine risk; SQLite features disabled. Use the official signed System.Data.SQLite build.");
+                return false;
+            }
+            foreach (string interop in EnumerateSqliteInteropCandidates(path))
+            {
+                if (!File.Exists(interop)) continue;
+                if (!IsSignedTrustedAtPath(interop, "SQLite.Interop.dll", out reason))
+                {
+                    Logger.Warning("SQLite.Interop.dll beside managed module: " + reason +
+                        "; refusing SQLite load (interop must be signed-trusted).");
+                    return false;
+                }
+            }
+            Logger.Info("System.Data.SQLite.dll trusted (version and signature verified).");
+            return true;
+        }
+
         private static Assembly GetSqliteAssembly()
         {
+            lock (_sqliteInitLock)
+            {
+                return GetSqliteAssemblyLocked();
+            }
+        }
+
+        private static Assembly GetSqliteAssemblyLocked()
+        {
+            if (_sqlitePermanentlyUnavailable) return null;
             if (_sqliteAssembly != null) return _sqliteAssembly;
             string baseDir = AppDomain.CurrentDomain.BaseDirectory ?? "";
             string path = Path.Combine(baseDir, "System.Data.SQLite.dll");
             if (!File.Exists(path)) return null;
-            // Anti-DLL-planting / anti-stale-engine gate: we LoadFrom a DLL sitting next to the exe and
-            // then parse UNTRUSTED SQLite files (copied browser History/places.sqlite) with it, so a
-            // planted or obviously-unofficial DLL is a real RCE vector. Only load one carrying a valid,
-            // Authenticode-trusted signature; otherwise refuse (SQLite features degrade gracefully, same
-            // as the DLL being absent). The official System.Data.SQLite build is signed, so this does not
-            // break legitimate use.
-            if (!IsTrustedSqliteModule(path)) return null;
+            if (SqlitePreloadOverridePresentFromProcessEnvironment(path))
+            {
+                DisableSqliteForProcess("System.Data.SQLite.dll refused: preload override config or PreLoadSQLite_/No_PreLoadSQLite environment detected; SQLite features disabled.");
+                return null;
+            }
             try
             {
+                if (_sqliteManagedValidationLock == null)
+                    _sqliteManagedValidationLock = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var interopOnDisk = new List<string>();
+                foreach (string interop in EnumerateSqliteInteropCandidates(path))
+                {
+                    if (!File.Exists(interop)) continue;
+                    interopOnDisk.Add(interop);
+                    bool alreadyHeld = false;
+                    foreach (FileStream held in _sqliteInteropValidationLocks)
+                    {
+                        try
+                        {
+                            if (held != null && string.Equals(held.Name, interop, StringComparison.OrdinalIgnoreCase))
+                            {
+                                alreadyHeld = true;
+                                break;
+                            }
+                        }
+                        catch { }
+                    }
+                    if (!alreadyHeld)
+                    {
+                        try
+                        {
+                            _sqliteInteropValidationLocks.Add(new FileStream(interop, FileMode.Open, FileAccess.Read, FileShare.Read));
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warning("System.Data.SQLite: could not open interop for validation lock: " + interop + " (" + (ex.Message ?? "") + ")");
+                            return null;
+                        }
+                    }
+                }
+                // Validate the managed DLL and every interop candidate (version floor + Authenticode)
+                // while their handles are held, BEFORE any native code is mapped: LoadLibraryEx runs
+                // DllMain, so preloading an unverified interop would execute it before rejection.
+                if (!TryValidateSqliteModule(path, _sqliteManagedValidationLock)) return null;
+                if (!_sqliteVerifiedInteropPathsFrozen)
+                {
+                    foreach (string p in interopOnDisk)
+                        _verifiedSqliteInteropPaths.Add(p);
+                    _sqliteVerifiedInteropPathsFrozen = true;
+                }
+                TryPreloadSingleVerifiedInteropForProcess(interopOnDisk);
                 _sqliteAssembly = Assembly.LoadFrom(path);
                 _connType  = _sqliteAssembly.GetType("System.Data.SQLite.SQLiteConnection");
                 _cmdType   = _sqliteAssembly.GetType("System.Data.SQLite.SQLiteCommand");
@@ -735,25 +1024,49 @@ namespace IR_Collect.Analysis.Correlation
 
         private static object CreateSqliteConnection(string dbPath)
         {
-            if (GetSqliteAssembly() == null || _connType == null) return null;
-            try
+            lock (_sqliteInitLock)
             {
-                object conn = Activator.CreateInstance(_connType, "Data Source=" + dbPath);
-                _miOpen.Invoke(conn, null);
-                return conn;
+                if (_sqlitePermanentlyUnavailable) return null;
+                if (GetSqliteAssemblyLocked() == null || _connType == null) return null;
+                object conn = null;
+                try
+                {
+                    conn = Activator.CreateInstance(_connType, "Data Source=" + dbPath);
+                    _miOpen.Invoke(conn, null);
+                    if (!_sqliteLoadedModulesVerified)
+                    {
+                        if (!EnsureSqliteInteropModulesMatchVerified())
+                        {
+                            CloseConnection(conn, dbPath);
+                            return null;
+                        }
+                        _sqliteLoadedModulesVerified = true;
+                    }
+                    return conn;
+                }
+                catch (Exception ex)
+                {
+                    CloseConnection(conn, dbPath);
+                    Logger.Warning("CreateSqliteConnection: " + (ex.Message ?? ""));
+                    return null;
+                }
             }
-            catch (Exception ex) { Logger.Warning("CreateSqliteConnection: " + (ex.Message ?? "")); return null; }
         }
 
         private static void CloseConnection(object conn, string dbPath)
         {
+            if (conn == null) return;
+            // Close and Dispose are attempted independently so a throwing Close() cannot skip Dispose().
             try
             {
-                if (conn == null) return;
                 if (_miClose != null) _miClose.Invoke(conn, null);
+            }
+            catch (Exception ex) { Logger.Warning("CloseConnection (close): " + (ex.Message ?? "")); }
+            try
+            {
                 var d = conn as IDisposable; if (d != null) d.Dispose();
             }
-            catch (Exception ex) { Logger.Warning("CloseConnection: " + (ex.Message ?? "")); }
+            catch (Exception ex) { Logger.Warning("CloseConnection (dispose): " + (ex.Message ?? "")); }
         }
 
         private static void CreateTable(object conn, string dbPath)

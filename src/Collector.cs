@@ -1193,21 +1193,212 @@ namespace IR_Collect
                 public int ExitCode;
             }
 
+            /// <summary>Maps an allow-listed tool name to an absolute path under %SystemRoot%\System32 (cmd.exe builtins excepted).</summary>
+            public static string ResolveSystemTool(string name)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    throw new ArgumentException("Tool name is required.", "name");
+                string key = name.Trim();
+                if (key.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    key = key.Substring(0, key.Length - 4);
+                if (key.EndsWith(".com", StringComparison.OrdinalIgnoreCase))
+                    key = key.Substring(0, key.Length - 4);
+
+                if (string.Equals(key, "echo", StringComparison.OrdinalIgnoreCase))
+                    return "echo";
+
+                string relative = MapAllowListedToolRelative(key);
+                if (relative == null)
+                    throw new ArgumentException("Tool is not allow-listed for external execution: " + name, "name");
+
+                string sysDir = Environment.SystemDirectory ?? "";
+                if (string.IsNullOrEmpty(sysDir))
+                    throw new InvalidOperationException("System directory is unknown.");
+                string full = Path.Combine(sysDir, relative);
+                if (!File.Exists(full) && string.Equals(key, "wmic", StringComparison.OrdinalIgnoreCase))
+                {
+                    string alt = Path.Combine(sysDir, Path.Combine("wbem", "wmic.exe"));
+                    if (File.Exists(alt)) return alt;
+                }
+                if (!File.Exists(full))
+                    throw new FileNotFoundException("System tool not found: " + full, full);
+                return full;
+            }
+
+            private static string MapAllowListedToolRelative(string key)
+            {
+                if (string.Equals(key, "wmic", StringComparison.OrdinalIgnoreCase))
+                    return Path.Combine("wbem", "WMIC.exe");
+                if (string.Equals(key, "powershell", StringComparison.OrdinalIgnoreCase))
+                    return Path.Combine("WindowsPowerShell", "v1.0", "powershell.exe");
+                if (string.Equals(key, "chcp", StringComparison.OrdinalIgnoreCase))
+                    return "chcp.com";
+
+                string[] plain = new string[]
+                {
+                    "cmd", "schtasks", "systeminfo", "cmdkey", "klist", "fsutil", "reg", "netstat",
+                    "wevtutil", "esentutl", "arp", "ipconfig"
+                };
+                foreach (string p in plain)
+                {
+                    if (string.Equals(key, p, StringComparison.OrdinalIgnoreCase))
+                        return p + ".exe";
+                }
+                return null;
+            }
+
+            private static string TokenForCmdLine(string executablePath)
+            {
+                if (string.IsNullOrEmpty(executablePath)) return "\"\"";
+                if (executablePath.IndexOf(' ') >= 0)
+                    return "\"" + executablePath + "\"";
+                return executablePath;
+            }
+
+            /// <summary>Builds cmd.exe Arguments for /d /v:off /s /c wrapped UTF-8 chcp + tool invocation.</summary>
+            internal static string BuildCmdExeWrappedCommandArguments(string chcpExecutable, string toolExecutable, string toolArgs)
+            {
+                string chcp = TokenForCmdLine(chcpExecutable ?? "");
+                string tool = TokenForCmdLine(toolExecutable ?? "");
+                string argsPart = toolArgs ?? "";
+                if (argsPart.Length > 0)
+                    argsPart = " " + argsPart;
+                string inner = chcp + " 65001 > nul && " + tool + argsPart;
+                return "/d /v:off /s /c \"" + inner + "\"";
+            }
+
+            internal static void ApplyNoDefaultCurrentDirectoryInExePath(ProcessStartInfo psi)
+            {
+                try
+                {
+                    if (psi.EnvironmentVariables != null)
+                        psi.EnvironmentVariables["NoDefaultCurrentDirectoryInExePath"] = "1";
+                }
+                catch { /* best-effort */ }
+            }
+
+            /// <summary>Quote one argument for a direct CreateProcess command line (no cmd.exe), following
+            /// the CommandLineToArgvW / MSVC CRT rules: backslashes are literal unless they precede a
+            /// double quote, so a run of N backslashes before an embedded quote becomes 2N+1, and a
+            /// trailing run before the closing quote becomes 2N (e.g. a path ending in '\').</summary>
+            public static string QuoteProcessArgument(string arg)
+            {
+                if (arg == null || arg.Length == 0) return "\"\"";
+                if (arg.IndexOfAny(new char[] { ' ', '\t', '\n', '\v', '"' }) < 0)
+                    return arg;
+                var sb = new System.Text.StringBuilder(arg.Length + 2);
+                sb.Append('"');
+                int backslashes = 0;
+                foreach (char ch in arg)
+                {
+                    if (ch == '\\')
+                    {
+                        backslashes++;
+                        continue;
+                    }
+                    if (ch == '"')
+                    {
+                        sb.Append('\\', backslashes * 2 + 1);
+                        sb.Append('"');
+                    }
+                    else
+                    {
+                        sb.Append('\\', backslashes);
+                        sb.Append(ch);
+                    }
+                    backslashes = 0;
+                }
+                sb.Append('\\', backslashes * 2);
+                sb.Append('"');
+                return sb.ToString();
+            }
+
+            /// <summary>Run an allow-listed tool without cmd.exe (e.g. reg save / reg export).</summary>
+            public static void RunProcessDirect(string toolName, string arguments)
+            {
+                CommandResult result = RunProcessDirectCore(toolName, arguments);
+                if (result.ExitCode != 0)
+                {
+                    string detail = !string.IsNullOrWhiteSpace(result.Error) ? result.Error : result.Output;
+                    string message = string.Format("{0} exited with code {1}", toolName, result.ExitCode);
+                    if (!string.IsNullOrWhiteSpace(detail))
+                    {
+                        detail = detail.Replace("\r", " ").Replace("\n", " ").Trim();
+                        if (detail.Length > 240) detail = detail.Substring(0, 237) + "...";
+                        message += ": " + detail;
+                    }
+                    Logger.Warning("CommandHelper.RunProcessDirect " + toolName + ": " + message);
+                    throw new InvalidOperationException(message);
+                }
+            }
+
+            private static CommandResult RunProcessDirectCore(string toolName, string arguments)
+            {
+                try
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = ResolveSystemTool(toolName);
+                    psi.Arguments = arguments ?? "";
+                    psi.RedirectStandardOutput = true;
+                    psi.RedirectStandardError = true;
+                    psi.UseShellExecute = false;
+                    psi.CreateNoWindow = true;
+                    psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+                    psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+                    ApplyNoDefaultCurrentDirectoryInExePath(psi);
+                    using (Process p = Process.Start(psi))
+                    {
+                        var errSb = new System.Text.StringBuilder();
+                        var errThread = new System.Threading.Thread(delegate()
+                        {
+                            try { errSb.Append(p.StandardError.ReadToEnd()); }
+                            catch { }
+                        });
+                        errThread.IsBackground = true;
+                        errThread.Start();
+                        string output;
+                        try { output = p.StandardOutput.ReadToEnd(); }
+                        catch { output = ""; }
+                        if (!p.WaitForExit(CommandTimeoutMs))
+                        {
+                            try { p.Kill(); } catch { }
+                            errThread.Join(2000);
+                            throw new TimeoutException(string.Format("{0} timed out after {1} ms", toolName, CommandTimeoutMs));
+                        }
+                        p.WaitForExit();
+                        errThread.Join(2000);
+                        return new CommandResult
+                        {
+                            Output = output,
+                            Error = errSb.ToString(),
+                            ExitCode = p.ExitCode
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning("CommandHelper.RunProcessDirectCore " + toolName + ": " + ex.Message);
+                    throw;
+                }
+            }
+
             /// <summary>Escape one argument for cmd.exe so that space, ", and &amp; do not break parsing. Call when building args that contain paths.</summary>
             public static string EscapeArgForCmd(string arg)
             {
                 if (arg == null) return "\"\"";
+                if (arg.IndexOf('%') >= 0)
+                    throw new ArgumentException("Argument must not contain '%' (cmd expands variables even inside quotes).", "arg");
                 // Windows path/identifier arguments cannot legally contain a double-quote.
                 // Strip any stray '"' defensively: cmd.exe treats '"' as a quote toggle, so an
                 // embedded quote could break out of the wrapping below and expose the tail to the
                 // shell. Removing it cannot corrupt a real path (the char is illegal in paths).
                 string sanitized = arg.IndexOf('"') >= 0 ? arg.Replace("\"", "") : arg;
-                // Quote when the value contains a space or any cmd metacharacter.
-                if (sanitized.IndexOfAny(new char[] { ' ', '&', '^', '|', '<', '>', '(', ')', '%', '!', '"' }) < 0)
+                // Quote when the value contains a space or any cmd metacharacter (% rejected above).
+                if (sanitized.IndexOfAny(new char[] { ' ', '&', '^', '|', '<', '>', '(', ')', '!', '"' }) < 0)
                     return sanitized;
-                // Inside double quotes cmd.exe does NOT process & | < > ^ ( ), so the value is passed
-                // through verbatim. The previous `^&` / `\"` escaping was wrong: caret is literal
-                // inside quotes (it injected a stray '^'), and `\"` ends cmd's quote state early.
+                // Inside double quotes cmd.exe does not process & | < > ^ ( ), so the value is passed
+                // through verbatim. It DOES still expand %VAR% inside quotes, which is why '%' is
+                // rejected above rather than quoted.
                 return "\"" + sanitized + "\"";
             }
 
@@ -1240,13 +1431,14 @@ namespace IR_Collect
                 try
                 {
                     ProcessStartInfo psi = new ProcessStartInfo();
-                    psi.FileName = "cmd.exe";
-                    // Force UTF-8 (cp65001) before running the command
-                    psi.Arguments = string.Format("/c chcp 65001 > nul && {0} {1}", fileName, args);
+                    psi.FileName = ResolveSystemTool("cmd");
+                    psi.Arguments = BuildCmdExeWrappedCommandArguments(
+                        ResolveSystemTool("chcp"), ResolveSystemTool(fileName), args);
                     psi.RedirectStandardOutput = true;
                     psi.RedirectStandardError = true;
                     psi.UseShellExecute = false;
                     psi.CreateNoWindow = true;
+                    ApplyNoDefaultCurrentDirectoryInExePath(psi);
                     // Important: Set encoding to UTF8 to read the 65001 output correctly
                     psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
                     psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
@@ -1301,12 +1493,14 @@ namespace IR_Collect
                 try
                 {
                     ProcessStartInfo psi = new ProcessStartInfo();
-                    psi.FileName = "cmd.exe";
-                    psi.Arguments = string.Format("/c chcp 65001 > nul && {0} {1}", fileName, args);
+                    psi.FileName = ResolveSystemTool("cmd");
+                    psi.Arguments = BuildCmdExeWrappedCommandArguments(
+                        ResolveSystemTool("chcp"), ResolveSystemTool(fileName), args);
                     psi.RedirectStandardOutput = true;
                     psi.RedirectStandardError = true;
                     psi.UseShellExecute = false;
                     psi.CreateNoWindow = true;
+                    ApplyNoDefaultCurrentDirectoryInExePath(psi);
                     psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
                     psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
 

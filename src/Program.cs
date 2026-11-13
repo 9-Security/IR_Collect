@@ -27,6 +27,7 @@ namespace IR_Collect
         [STAThread]
         static void Main(string[] args)
         {
+            IR_Collect.Utils.NativeDllSearchPolicy.TryApplyAtStartup();
             // Hybrid Mode Logic
             if (args.Length > 0)
             {

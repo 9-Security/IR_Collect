@@ -167,17 +167,31 @@ namespace IR_Collect
             CheckBox chkStrictSkipDeepScan = new CheckBox() { Text = "Block manual Deep Scan of local System32", Left = 20, Top = y, Width = 460, Checked = config.Get("ForensicStrictSkipDeepScan") != "0" }; y += 26;
             CheckBox chkStrictSecondConfirm = new CheckBox() { Text = "Require a second explicit confirmation before Local Collect", Left = 20, Top = y, Width = 460, Checked = config.Get("ForensicStrictRequireSecondConfirmation") != "0" }; y += 32;
 
-            Label l1 = new Label() { Text = "VirusTotal API Key (for future API use; Query VT opens browser):", Left = 20, Top = y, Width = 460 }; y += 22;
-            TextBox t1 = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("VirusTotalApiKey"), UseSystemPasswordChar = true }; y += 28;
-
-            Label l2 = new Label() { Text = "AI API Endpoint (URL):", Left = 20, Top = y, Width = 460 }; y += 22;
+            Label l2 = new Label() { Text = "AI API Endpoint (URL, https only except loopback http):", Left = 20, Top = y, Width = 460 }; y += 22;
             TextBox t2Endpoint = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("AiApiEndpoint") }; y += 28;
             Label l2b = new Label() { Text = "AI API Key:", Left = 20, Top = y, Width = 460 }; y += 22;
-            TextBox t2 = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("AiApiKey"), UseSystemPasswordChar = true }; y += 28;
+            bool aiKeyDecryptFailed;
+            string aiKeyDisplay;
+            config.GetProtectedKeyForSettingsUi("AiApiKey", out aiKeyDisplay, out aiKeyDecryptFailed);
+            bool clearAiKey = false;
+            TextBox t2 = new TextBox() { Left = 20, Top = y, Width = 340, Text = aiKeyDisplay, UseSystemPasswordChar = true };
+            Button btnClearAiKey = new Button() { Text = "Clear", Left = 368, Top = y, Width = 112, Height = 24 };
+            btnClearAiKey.Click += (s, e) => { clearAiKey = true; t2.Text = ""; t2.Focus(); };
+            if (aiKeyDecryptFailed)
+            {
+                Label lAiKeyHint = new Label()
+                {
+                    Text = "Stored AI key is present but cannot be decrypted on this user/machine. Saving other settings without entering a new key keeps the stored ciphertext.",
+                    Left = 20, Top = y + 26, Width = 460, Height = 32
+                };
+                f.Controls.Add(lAiKeyHint);
+                y += 34;
+            }
+            y += 28;
 
             Label l2c = new Label()
             {
-                Text = "AI endpoint allowlist (https/http URL prefixes; one per line or use | . Empty list blocks all AI POST):",
+                Text = "AI endpoint allowlist (https URL prefixes; http only for localhost/127.0.0.0/8/::1; one per line or use | . Empty list blocks all AI POST):",
                 Left = 20, Top = y, Width = 460, Height = 32
             };
             y += 34;
@@ -197,10 +211,27 @@ namespace IR_Collect
             else cbAiRedact.SelectedIndex = 1;
             y += 28;
 
-            Label l3a = new Label() { Text = "Upload Endpoint (URL, after Local Collect):", Left = 20, Top = y, Width = 460 }; y += 22;
+            Label l3a = new Label() { Text = "Upload Endpoint (URL after Local Collect; https only except loopback http):", Left = 20, Top = y, Width = 460 }; y += 22;
             TextBox tUploadEndpoint = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("UploadEndpoint") }; y += 28;
             Label l3b = new Label() { Text = "Upload API Key:", Left = 20, Top = y, Width = 460 }; y += 22;
-            TextBox tUploadKey = new TextBox() { Left = 20, Top = y, Width = 460, Text = config.Get("UploadApiKey"), UseSystemPasswordChar = true }; y += 28;
+            bool uploadKeyDecryptFailed;
+            string uploadKeyDisplay;
+            config.GetProtectedKeyForSettingsUi("UploadApiKey", out uploadKeyDisplay, out uploadKeyDecryptFailed);
+            bool clearUploadKey = false;
+            TextBox tUploadKey = new TextBox() { Left = 20, Top = y, Width = 340, Text = uploadKeyDisplay, UseSystemPasswordChar = true };
+            Button btnClearUploadKey = new Button() { Text = "Clear", Left = 368, Top = y, Width = 112, Height = 24 };
+            btnClearUploadKey.Click += (s, e) => { clearUploadKey = true; tUploadKey.Text = ""; tUploadKey.Focus(); };
+            if (uploadKeyDecryptFailed)
+            {
+                Label lUploadKeyHint = new Label()
+                {
+                    Text = "Stored upload key is present but cannot be decrypted on this user/machine. Saving other settings without entering a new key keeps the stored ciphertext.",
+                    Left = 20, Top = y + 26, Width = 460, Height = 32
+                };
+                f.Controls.Add(lUploadKeyHint);
+                y += 34;
+            }
+            y += 28;
 
             Label l3c = new Label()
             {
@@ -327,13 +358,12 @@ namespace IR_Collect
                 config.Set("ForensicStrictSkipMemoryHandoff", chkStrictSkipMemory.Checked ? "1" : "0");
                 config.Set("ForensicStrictSkipDeepScan", chkStrictSkipDeepScan.Checked ? "1" : "0");
                 config.Set("ForensicStrictRequireSecondConfirmation", chkStrictSecondConfirm.Checked ? "1" : "0");
-                config.Set("VirusTotalApiKey", t1.Text.Trim());
                 config.Set("AiApiEndpoint", t2Endpoint.Text.Trim());
-                config.Set("AiApiKey", t2.Text.Trim());
+                config.Set("AiApiKey", ConfigManager.ResolveProtectedKeyForSave(config, "AiApiKey", t2.Text, clearAiKey, aiKeyDecryptFailed));
                 config.Set("AiEndpointAllowlist", AllowlistDisplayToStorage(tAiAllow.Text));
                 config.Set("AiExportRedactionProfile", cbAiRedact.SelectedItem != null ? cbAiRedact.SelectedItem.ToString() : "Basic");
                 config.Set("UploadEndpoint", tUploadEndpoint.Text.Trim());
-                config.Set("UploadApiKey", tUploadKey.Text.Trim());
+                config.Set("UploadApiKey", ConfigManager.ResolveProtectedKeyForSave(config, "UploadApiKey", tUploadKey.Text, clearUploadKey, uploadKeyDecryptFailed));
                 config.Set("UploadEndpointAllowlist", AllowlistDisplayToStorage(tUploadAllow.Text));
                 int mftMax = 100000;
                 int n;
@@ -409,10 +439,9 @@ namespace IR_Collect
             f.Controls.Add(chkStrictSkipMemory);
             f.Controls.Add(chkStrictSkipDeepScan);
             f.Controls.Add(chkStrictSecondConfirm);
-            f.Controls.Add(l1); f.Controls.Add(t1);
-            f.Controls.Add(l2); f.Controls.Add(t2Endpoint); f.Controls.Add(l2b); f.Controls.Add(t2);
+            f.Controls.Add(l2); f.Controls.Add(t2Endpoint); f.Controls.Add(l2b); f.Controls.Add(t2); f.Controls.Add(btnClearAiKey);
             f.Controls.Add(l2c); f.Controls.Add(tAiAllow); f.Controls.Add(l2d); f.Controls.Add(cbAiRedact);
-            f.Controls.Add(l3a); f.Controls.Add(tUploadEndpoint); f.Controls.Add(l3b); f.Controls.Add(tUploadKey);
+            f.Controls.Add(l3a); f.Controls.Add(tUploadEndpoint); f.Controls.Add(l3b); f.Controls.Add(tUploadKey); f.Controls.Add(btnClearUploadKey);
             f.Controls.Add(l3c); f.Controls.Add(tUploadAllow);
             f.Controls.Add(l4); f.Controls.Add(t3);
             f.Controls.Add(l5); f.Controls.Add(t4);

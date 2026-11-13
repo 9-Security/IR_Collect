@@ -67,8 +67,12 @@ namespace IR_Collect.Collectors
             try
             {
                 Console.WriteLine("    Exporting " + safeName + "...");
-                string arg = "epl " + IR_Collect.Collector.CommandHelper.EscapeArgForCmd(logName) + " " + IR_Collect.Collector.CommandHelper.EscapeArgForCmd(outFile);
-                ProcessStartInfo psi = new ProcessStartInfo("wevtutil", arg);
+                string arg = "epl " + IR_Collect.Collector.CommandHelper.QuoteProcessArgument(logName) + " " +
+                    IR_Collect.Collector.CommandHelper.QuoteProcessArgument(outFile);
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = IR_Collect.Collector.CommandHelper.ResolveSystemTool("wevtutil");
+                psi.Arguments = arg;
+                IR_Collect.Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
                 psi.WindowStyle = ProcessWindowStyle.Hidden;
                 psi.CreateNoWindow = true;
                 psi.UseShellExecute = false;

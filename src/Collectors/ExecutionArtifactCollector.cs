@@ -115,7 +115,10 @@ namespace IR_Collect.Collectors
                     "@{Name='LocalName';Expression={ if ($_.FileList) { ($_.FileList | ForEach-Object { $_.LocalName }) -join '; ' } else { '' } }}," +
                     "Description | ConvertTo-Csv -NoTypeInformation } }";
 
-                ProcessStartInfo psi = new ProcessStartInfo("powershell.exe", "-NoProfile -Command \"" + script.Replace("\"", "\\\"") + "\"");
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = IR_Collect.Collector.CommandHelper.ResolveSystemTool("powershell");
+                psi.Arguments = "-NoProfile -Command \"" + script.Replace("\"", "\\\"") + "\"";
+                IR_Collect.Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.UseShellExecute = false;
@@ -395,7 +398,10 @@ namespace IR_Collect.Collectors
         {
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("esentutl.exe", "/y \"" + srcPath + "\" /d \"" + destPath + "\" /o");
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = IR_Collect.Collector.CommandHelper.ResolveSystemTool("esentutl");
+                psi.Arguments = "/y \"" + srcPath + "\" /d \"" + destPath + "\" /o";
+                IR_Collect.Collector.CommandHelper.ApplyNoDefaultCurrentDirectoryInExePath(psi);
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.UseShellExecute = false;

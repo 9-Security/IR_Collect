@@ -1,7 +1,7 @@
 # 9SEC Evidence Workbench 潛在安全性風險檢測報告
 
-**文件版本**: 1.6
-**檢測日期**: 2026-07-29（v1.6：補充 UAC file-hash parser 資源邊界）
+**文件版本**: 1.7
+**檢測日期**: 2026-11-13（v1.7：F1–F5 安全強化 — 系統工具路徑、TLS／端點治理、Registry SID、SQLite 信任門、DPAPI 金鑰）
 **範圍**: 專案所有功能（收集、匯入、CLI、設定、檔案/登錄處理、Fact Store、匯出、Entity Search、規則引擎等）
 
 ---
@@ -42,7 +42,7 @@
 
 ### 3.1 已緩解
 
-- **config.ini**：內含 `VirusTotalApiKey`、`AiApiKey`、`UploadApiKey` 等。存放於 `AppDomain.CurrentDomain.BaseDirectory`，依部署方式決定是否僅限當前使用者寫入。
+- **config.ini**：`AiApiKey` / `UploadApiKey` 以 DPAPI（`dpapi:` 前綴、`ProtectedData.CurrentUser`）儲存；另以 best-effort NTFS ACL 限制為目前使用者。舊版明文金鑰仍可讀取，下次儲存會加密。`VirusTotalApiKey` 已自 Settings 移除（瀏覽器 VT 查詢仍僅用 hash，不儲存 VT API 金鑰）。
 - **日誌**：`Logger` 僅寫入 `message` 與 `ex.Message`，未發現直接記錄 API Key 或密碼的程式碼。
 - **SQLite**：`FactStorePersistence` 使用參數化查詢（`@id`、`@t`、`@src`、`@ek`、`@json`、`@ver`），**無 SQL 注入**。`ExecuteQuery` 中 `LIMIT` 使用 `Math.Max(1, Math.Min(maxRows, 50000))` 數值運算，未拼接字串。
 - **持久化 Fact Store build cache**：預設關閉；啟用後寫入 `%LOCALAPPDATA%\9SEC Evidence Workbench\FactStoreCache\`，可能包含帳號、路徑、命令列、網路端點等 normalized facts。寫入採原子發布並以 best effort 限制 ACL 為目前使用者；讀取限制為壓縮 1 GiB、解壓 4 GiB，損毀或不相容時不信任內容而回退 full rebuild。Settings 提供明確清除入口。此 cache 不是證據 source of truth。
@@ -59,7 +59,10 @@
 
 ### 4.1 已緩解
 
-- **CommandHelper.Run**：透過 `cmd.exe /c chcp 65001 > nul && <fileName> <args>` 執行；`args` 由各 Collector 組裝並經 `EscapeArgForCmd` 處理。
+- **CommandHelper**：allow-list 工具經 `ResolveSystemTool` 以 System32 絕對路徑執行；`RunCore`／`RunToFile` 以 `/d /v:off /s /c "…"` 停用 AutoRun／延遲展開；`cmd.exe` 子程序設定 `NoDefaultCurrentDirectoryInExePath=1`；`reg save` / `reg export` 直接呼叫 `reg.exe`；組件 `DefaultDllImportSearchPaths(System32)` + 啟動時 `SetDefaultDllDirectories`（可略過）。
+- **出站 HTTP(S)**：`OutboundTlsHelper` 於 `WebRequest.Create` 前套用，排除 SSL3/TLS1.0/TLS1.1；若無法設定現代 TLS 則拒絕送出；`EndpointGovernance` 拒絕遠端 `http://`（loopback 以 `IPAddress.IsLoopback` 解析，含展開 `::1`；**不含** IPv4-mapped `::ffff:127.0.0.1`）；AI/Upload `AllowAutoRedirect=false`，3xx 不跟隨。
+- **SQLite**：拒絕 `System.Data.SQLite.dll.config` 與 `PreLoadSQLite_*`／`No_PreLoadSQLite` 覆寫；要求 Signed-Trusted 與最低組件版本；驗證用檔案鎖保持至程序結束；同步初始化；首次開連線後檢查程序內 `SQLite.Interop.dll`（空 allowlist 時任一已載入 interop 皆拒絕；mixed-mode 無獨立 interop 模組可接受）。此為降低 DLL 植入風險之閘門，**無法**保證已載入惡意原生碼未執行初始化程式碼。
+- **設定**：`Export` 序列化受 DPAPI 保護的內容至目的地（不需先寫回 live 檔）；解密失敗金鑰以 **Clear**（欄位仍空時）或輸入新值才變更；記憶體外部工具路徑須為 `X:\...` 或 UNC。
 - **LogCollector**：`wevtutil epl` 的 log 名稱與輸出路徑來自內建清單與 `Path.Combine`，非使用者字串。
 - **以管理員重新啟動**：`MainFormCollection.TryRunElevated` 使用 `Application.ExecutablePath`，未使用使用者輸入。
 

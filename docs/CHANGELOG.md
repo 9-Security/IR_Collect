@@ -7,6 +7,29 @@
 
 ## [Unreleased]
 
+### Security
+- **Round 3 TLS 失敗處理（T1）**：`OutboundTlsHelper` 無法套用現代 TLS 時不標記已配置，並以例外阻擋 AI／Upload 送出。
+- **Round 3 SQLite 模組驗證（N1–N2,N7）**：空 allowlist 仍檢查已載入 `SQLite.Interop.dll`；初始化與首次驗證同步鎖定；managed DLL 與所有 interop 候選完成版本／Authenticode 驗證**之後**，才將符合架構之單一 interop 以 `LoadLibraryEx` 預載（避免未驗證原生碼先執行 DllMain）；模組拒絕時分別關閉與釋放已開連線。
+- **Round 3 Settings Clear（N3）**：Clear 僅在儲存時欄位仍空才清除；Clear 後輸入新金鑰會儲存替換值。
+- **Round 3 Registry 探測（N4）**：UsrClass／ShellBags 區分 Present／Absent／ProbeError；僅確認 Absent 才 skip，探測錯誤仍嘗試收集；ShellBags 匯出失敗計入 registry 失敗項目。
+- **Round 3 記憶體工具路徑（N5）**：僅接受 `X:\...` 或 UNC；拒絕磁碟相對、根相對、引號與 `\\?\`／`\\.\` 裝置命名空間路徑（檔名可含撇號）；驗證全程在 try／catch 內。
+- **Round 3 設定匯出（N6）**：`Export` 不再要求 live `config.ini` 可寫，直接序列化受保護設定至目的地。
+- **Round 3 文件（N8）**：手冊補齊 SQLite 接受／拒絕條件、記憶體路徑規則與 `::ffff:127.0.0.1` 非 loopback 說明；SECURITY／CHANGELOG 避免過度宣稱驗證範圍。
+- **Round 2 cmd.exe 包裝（R1）**：`RunCore`／`RunToFile` 改為 `/d /v:off /s /c "…"` 單一引號對包住 chcp + 工具路徑，停用 AutoRun 與延遲展開，並修正 System32 路徑含空白時的引號語意。
+- **Round 2 SQLite 門閘（R2）**：拒絕 `System.Data.SQLite.dll.config` 與 `PreLoadSQLite_*`／`No_PreLoadSQLite` 環境覆寫；驗證鎖定 handle 於程序生命週期內保持開啟；首次連線後比對已載入 `SQLite.Interop.dll` 模組路徑。
+- **Round 2 TLS 時序（R3）**：AI／Upload 在 `WebRequest.Create` **之前**套用 `OutboundTlsHelper`；協定在鎖內套用，且僅於成功時標記已配置（Round 3 補強失敗路徑）。
+- **Round 2 Loopback 解析（R4）**：`EndpointGovernance.IsLoopbackEndpoint` 以 `IPAddress.TryParse`／`IsLoopback` 判斷 IPv4／IPv6（含展開 `::1`）；`user@host` 一律視為非 loopback。
+- **Round 2 Registry 使用者 hive（R5）**：恢復 SID 長度 > 10 的收集門檻；`_Classes`／ShellBags 於鍵不存在時記錄 skip 而非計入失敗。
+- **Round 2 Settings 金鑰（R6）**：DPAPI 解密失敗時顯示說明並保留原密文；AI／Upload 金鑰旁新增 **Clear**；未變更即 Save 不再覆寫密文。
+- **Round 2 設定匯出（R7）**：`Export` 直接序列化受保護設定（原子寫入），不再 `File.Copy` 現場 `config.ini`；匯出不含 `VirusTotalApiKey` 明文。
+- **Round 2 記憶體工具路徑（R8）**：記憶體擷取／分析外部工具須為完整限定路徑（`X:\...` 或 UNC）；Round 3 拒絕磁碟／根相對與引號路徑；啟動與側錄使用同一解析結果；子程序設定 `NoDefaultCurrentDirectoryInExePath=1`。
+- **Round 2 HKU 列舉（R9）**：含引號之名稱不再靜默略過，交由 SID 驗證器記錄拒絕。
+- **F1 DLL／命令植入緩解**：`CommandHelper.ResolveSystemTool` 將 allow-list 內建系統工具解析為 `%SystemRoot%\\System32` 絕對路徑；子程序 `cmd.exe` 設定 `NoDefaultCurrentDirectoryInExePath=1`；組件層 `DefaultDllImportSearchPaths(System32)` 並於啟動時 best-effort 呼叫 `SetDefaultDllDirectories`（Win7 無 KB 時略過）；`reg save`／`reg export` 改為直接執行 `reg.exe`（不再經 `cmd.exe`）。
+- **F2 出站 HTTP**：`OutboundTlsHelper` 強制 TLS 1.2（可用則含 TLS 1.3）、`EndpointGovernance` 拒絕非 loopback 的 `http://`；AI／Upload POST 停用自動重導向並將 3xx 與 `Location` 呈報為錯誤。
+- **F3 Registry SID**：`HKEY_USERS` 子鍵名稱僅接受 `S-1-…` SID 格式；輸出路徑強制落在 `registryDir`；`EscapeArgForCmd` 拒絕 `%`。
+- **F4 SQLite 信任門**：除 Authenticode 外要求 `System.Data.SQLite.dll` 版本 ≥ 1.0.118.0，鄰近 `SQLite.Interop.dll` 亦須 Signed-Trusted；驗證至 `LoadFrom` 前持有 `FileShare.Read` 鎖。
+- **F5 機密儲存**：`AiApiKey`／`UploadApiKey` 以 DPAPI（`dpapi:` 前綴）寫入 `config.ini`；移除 Settings 中的 `VirusTotalApiKey`（右鍵 Query VT 仍開瀏覽器）。
+
 ### Fixed
 - **`-graph` maxDepth 驗證**：`maxDepth` 非正整數（如 `two`、`0`、`-1`、`2.5`）時改回傳 usage error（exit code `2`），不再靜默改用預設深度 2 或 1；新增自測 `GraphCli_max_depth_rejects_non_positive_or_non_numeric`。
 - **Execution artifact 檔名來源**：`ExecutionArtifactCollector` 的 Amcache／SRUM raw 檔名改由 `ArtifactNames` 常數推導，消除 `SrumLog`／`SrumJrs` 未使用常數與字面字串重複；輸出路徑不變。

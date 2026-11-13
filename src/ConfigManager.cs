@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Linq;
+using IR_Collect.Utils;
 
 namespace IR_Collect
 {
@@ -18,7 +19,6 @@ namespace IR_Collect
             configPath = defaultConfigPath;
             Settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             // Defaults
-            Settings["VirusTotalApiKey"] = "";
             Settings["AiApiKey"] = "";
             Settings["AiApiEndpoint"] = "";
             Settings["AiEndpointAllowlist"] = "";
@@ -85,23 +85,69 @@ namespace IR_Collect
             }
         }
 
-        public void Save()
+        public bool Save()
         {
             try
             {
-                StringBuilder sb = new StringBuilder();
-                foreach (var kvp in Settings)
-                {
-                    sb.AppendLine(string.Format("{0}={1}", kvp.Key, kvp.Value));
-                }
-                File.WriteAllText(configPath, sb.ToString(), new System.Text.UTF8Encoding(false));
-                // config.ini holds API keys / endpoints in cleartext. Restrict it to the current user
-                // so it is not world-readable at its predictable location next to the exe.
-                TryRestrictAclToCurrentUser(configPath);
+                WriteSettingsToPath(configPath);
+                return true;
             }
             catch (Exception ex)
             {
                 IR_Collect.Utils.Logger.Warning("ConfigManager.Save: " + ex.Message);
+                return false;
+            }
+        }
+
+        internal static string GetStoredRaw(ConfigManager cm, string key)
+        {
+            if (cm == null || cm.Settings == null || string.IsNullOrEmpty(key)) return "";
+            if (!cm.Settings.ContainsKey(key)) return "";
+            return cm.Settings[key] ?? "";
+        }
+
+        internal static string ResolveProtectedKeyForSave(ConfigManager cm, string key, string uiText, bool userRequestedClear, bool uiShowsDecryptFailure)
+        {
+            string stored = GetStoredRaw(cm, key);
+            return ConfigSecretProtection.ResolveSecretForSave(stored, uiText, userRequestedClear, uiShowsDecryptFailure);
+        }
+
+        private string BuildSettingsFileContent()
+        {
+            Settings.Remove("VirusTotalApiKey");
+            var sb = new StringBuilder();
+            foreach (var kvp in Settings)
+            {
+                if (string.Equals(kvp.Key, "VirusTotalApiKey", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string value = kvp.Value ?? "";
+                if (ConfigSecretProtection.IsProtectedKey(kvp.Key))
+                {
+                    if (!string.IsNullOrEmpty(value) && !value.StartsWith(ConfigSecretProtection.DpapiPrefix, StringComparison.Ordinal))
+                        value = ConfigSecretProtection.ProtectForStorage(value);
+                }
+                sb.AppendLine(string.Format("{0}={1}", kvp.Key, value));
+            }
+            return sb.ToString();
+        }
+
+        private void WriteSettingsToPath(string destinationPath)
+        {
+            string content = BuildSettingsFileContent();
+            string dir = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            string temp = AtomicFile.CreateTempPath(destinationPath);
+            try
+            {
+                File.WriteAllText(temp, content, new UTF8Encoding(false));
+                AtomicFile.Commit(temp, destinationPath);
+                temp = null;
+                TryRestrictAclToCurrentUser(destinationPath);
+            }
+            finally
+            {
+                AtomicFile.TryDelete(temp);
             }
         }
 
@@ -142,7 +188,44 @@ namespace IR_Collect
         public string Get(string key)
         {
             if (string.IsNullOrEmpty(key)) return "";
-            return Settings.ContainsKey(key) ? Settings[key] : "";
+            if (!Settings.ContainsKey(key)) return "";
+            string stored = Settings[key] ?? "";
+            if (ConfigSecretProtection.IsProtectedKey(key))
+                return ConfigSecretProtection.UnprotectForUse(stored, key);
+            return stored;
+        }
+
+        /// <summary>Load protected key for Settings UI; sets decryptFailed when dpapi ciphertext cannot be opened.</summary>
+        public void GetProtectedKeyForSettingsUi(string key, out string displayText, out bool decryptFailed)
+        {
+            decryptFailed = false;
+            displayText = "";
+            if (string.IsNullOrEmpty(key) || !Settings.ContainsKey(key)) return;
+            string stored = Settings[key] ?? "";
+            if (!ConfigSecretProtection.IsProtectedKey(key))
+            {
+                displayText = stored;
+                return;
+            }
+            if (string.IsNullOrEmpty(stored))
+            {
+                displayText = "";
+                return;
+            }
+            if (!stored.StartsWith(ConfigSecretProtection.DpapiPrefix, StringComparison.Ordinal))
+            {
+                displayText = stored;
+                return;
+            }
+            bool failed;
+            string plain = ConfigSecretProtection.UnprotectForUse(stored, key, out failed);
+            if (failed)
+            {
+                decryptFailed = true;
+                displayText = ConfigSecretProtection.UiDecryptFailedPlaceholder;
+            }
+            else
+                displayText = plain;
         }
 
         public void Set(string key, string value)
@@ -196,8 +279,7 @@ namespace IR_Collect
                     IR_Collect.Utils.Logger.Warning("ConfigManager.Export: path is under system directory, export refused.");
                     return false;
                 }
-                Save();
-                File.Copy(configPath, path, true);
+                WriteSettingsToPath(fullPath);
                 return true;
             }
             catch (Exception ex)
