@@ -305,7 +305,7 @@ namespace IR_Collect.Collectors
         private static bool CollectAmcache(string executionDir)
         {
             string src = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "AppCompat", "Programs", "Amcache.hve");
-            string dest = Path.Combine(executionDir, "Amcache.hve");
+            string dest = Path.Combine(executionDir, Path.GetFileName(ArtifactNames.AmcacheHive));
             try
             {
                 if (!File.Exists(src))
@@ -325,7 +325,7 @@ namespace IR_Collect.Collectors
 
         private static bool CollectAmcacheStructured(string executionDir, string outputDir)
         {
-            string hivePath = Path.Combine(executionDir, "Amcache.hve");
+            string hivePath = Path.Combine(executionDir, Path.GetFileName(ArtifactNames.AmcacheHive));
             string programsCsv = Path.Combine(outputDir, ArtifactNames.AmcacheProgramsCsv);
             string filesCsv = Path.Combine(outputDir, ArtifactNames.AmcacheFilesCsv);
             try
@@ -346,7 +346,7 @@ namespace IR_Collect.Collectors
         private static bool CollectSrum(string executionDir)
         {
             string srcDb = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sru", "SRUDB.dat");
-            string destDb = Path.Combine(executionDir, "SRUDB.dat");
+            string destDb = Path.Combine(executionDir, Path.GetFileName(ArtifactNames.SrumDb));
             try
             {
                 if (!File.Exists(srcDb))
@@ -355,8 +355,11 @@ namespace IR_Collect.Collectors
                 if (!TryCopyLockedFileWithEsentutl(srcDb, destDb))
                     File.Copy(srcDb, destDb, true);
 
-                CopyIfExists(Path.Combine(Path.GetDirectoryName(srcDb) ?? "", "SRUDB.log"), Path.Combine(executionDir, "SRUDB.log"));
-                CopyIfExists(Path.Combine(Path.GetDirectoryName(srcDb) ?? "", "SRUDB.jrs"), Path.Combine(executionDir, "SRUDB.jrs"));
+                string srcDir = Path.GetDirectoryName(srcDb) ?? "";
+                string logName = Path.GetFileName(ArtifactNames.SrumLog);
+                string jrsName = Path.GetFileName(ArtifactNames.SrumJrs);
+                CopyIfExists(Path.Combine(srcDir, logName), Path.Combine(executionDir, logName));
+                CopyIfExists(Path.Combine(srcDir, jrsName), Path.Combine(executionDir, jrsName));
                 Console.WriteLine("    + SRUM database copied.");
                 return true;
             }
@@ -370,7 +373,7 @@ namespace IR_Collect.Collectors
 
         private static bool CollectSrumStructured(string executionDir, string outputDir)
         {
-            string dbPath = Path.Combine(executionDir, "SRUDB.dat");
+            string dbPath = Path.Combine(executionDir, Path.GetFileName(ArtifactNames.SrumDb));
             string networkCsv = Path.Combine(outputDir, ArtifactNames.SrumNetworkUsageCsv);
             string appCsv = Path.Combine(outputDir, ArtifactNames.SrumAppUsageCsv);
             try

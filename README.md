@@ -14,17 +14,17 @@ same-tag documentation to confirm any binary's actual capability set.
 
 - **Runtime:** .NET Framework 4.5 or later (typical on Windows 7+).
 - **GUI:** double-click `9SEC_EvidW.exe`.
-- **CLI collection:** `9SEC_EvidW.exe -c` (prefer an elevated prompt for full logs, raw volumes, etc.).
+- **CLI collection:** `9SEC_EvidW.exe -c [EvidenceID]` (alias `--collect`; prefer an elevated prompt for full logs, raw volumes, etc.).
 - Prefer collection **output on removable media** to limit change on the examined system.
 
 ### Offline analysis & correlation (no live host, no GUI)
 
 9SEC Evidence Workbench can also analyze artifacts **anyone** already collected — point it at a folder or evidence archive and it runs the same facts-only correlation pipeline:
 
-- `9SEC_EvidW.exe -analyze <folder-or-archive> [out.json]` — ingest a folder or ZIP/TAR/TAR.GZ/TGZ archive; UAC output is detected, indexed, and normalized where supported → `summary_v3` JSON.
+- `9SEC_EvidW.exe -analyze <folder-or-archive> [out.json]` — ingest a folder or ZIP/TAR/TAR.GZ/TGZ archive; UAC output is detected, indexed, and normalized where supported → `summary_v3` JSON. Pass `-` instead of a path to read the evidence path from stdin.
 - `9SEC_EvidW.exe -diff <baseline> <target> [out.json]` — compare two folders or evidence archives through their normalized facts → `diff_v1` Added/Modified/Removed JSON.
 - `9SEC_EvidW.exe -correlate <out.json> <pathA> <pathB> [...]` — cross-host shared-entity + temporal correlation → `correlation_v1` JSON.
-- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>` — multi-hop investigation graph from a seed entity → `graph_v1` JSON.
+- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <path...>` — multi-hop investigation graph from a seed entity → `graph_v1` JSON. `maxDepth` must be a positive integer; any other value is rejected with exit code `2`.
 - `9SEC_EvidW.exe -version` — tool name + version.
 
 The GUI **Diff** tab compares the selected target with another loaded case whose Fact Store is ready.
@@ -99,7 +99,7 @@ Best when you need fast answers to:
 
 ## Governance (v0.22+)
 
-Separate **AI** and **Upload** endpoint allowlists; optional **redaction profile** applies only to the JSON sent for **AI Analyze** (not to exported Summary files or ZIP contents). **Collection mode profile** (`Standard` / `TriageFast` / `ForensicStrict`) in **Advanced → Settings** is recorded in `collection_coverage.json`. `ForensicStrict` classifies the planned output target, requires explicit risk acknowledgement (and, by default, a second confirmation), warns strongly for system-disk output, skips enabled external memory acquisition/analysis handoff by default, blocks manual **Deep Scan**, post-collect ZIP upload, and in-app **AI Analyze**, and records all restrictions/profile skips in coverage and analyst exports. It is still **not** a zero-footprint guarantee. Details: `docs/SECURITY.md`, `docs/USER_MANUAL.md`.
+Separate **AI** and **Upload** endpoint allowlists; the **redaction profile** (`None` / `Basic` / `Strict`, default `Basic`) applies only to the JSON sent for **AI Analyze** (not to exported Summary files or ZIP contents). **Collection mode profile** (`Standard` / `TriageFast` / `ForensicStrict`) in **Advanced → Settings** is recorded in `collection_coverage.json`. `ForensicStrict` classifies the planned output target, requires explicit risk acknowledgement (and, by default, a second confirmation), warns strongly for system-disk output, by default skips enabled external memory acquisition/analysis handoff and blocks manual **Deep Scan** (both adjustable in Settings), always blocks post-collect ZIP upload and in-app **AI Analyze**, and records all restrictions/profile skips in coverage and analyst exports. It is still **not** a zero-footprint guarantee. Details: `docs/SECURITY.md`, `docs/USER_MANUAL.md`.
 
 ## In one sentence
 

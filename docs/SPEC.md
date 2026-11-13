@@ -13,7 +13,7 @@
 ### 核心設計原則
 - **Portable**: 單一執行檔 (.exe)，無需安裝，依賴最少 (僅需 .NET Framework 4.5+)。
 - **Hybrid Mode**: 同時支援 CLI (自動化派送收集) 與 GUI (分析與檢視)。
-- **Forensic Soundness**: 使用原生 API 與標準工具 (schtasks, netstat, wmic) 收集，盡量減少對系統的改動。僅讀取／匯出登錄、事件日誌、MFT 與檔案，不刪改原始資料；惟輸出目錄若在受調查磁碟上會寫入新資料，建議將輸出寫至外接磁碟以降低對現場的影響。詳見 README「DFIR 現場保護」。
+- **Forensic Soundness**: 使用原生 API 與標準工具 (schtasks, netstat, wmic) 收集，盡量減少對系統的改動。僅讀取／匯出登錄、事件日誌、MFT 與檔案，不刪改原始資料；惟輸出目錄若在受調查磁碟上會寫入新資料，建議將輸出寫至外接磁碟以降低對現場的影響。詳見 `docs/README.md`「DFIR 現場保護」。
 - **Encoding Safety**: 強制所有收集指令與檔案輸出使用 UTF-8 (No BOM)，確保跨語系分析時無亂碼。
 - **Settings 集中管理**: 所有可讓使用者調整的設定，一律規劃並實作於 **Settings** 對話框 (Advanced → Settings)，由 `ConfigManager` 讀寫並寫入 config.ini；不新增僅能透過手動編輯 config.ini 的選項。
 

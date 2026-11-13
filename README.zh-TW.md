@@ -12,17 +12,17 @@
 
 - **執行環境：** .NET Framework 4.5+（一般 Win7 以上已具備）。
 - **圖形介面：** 連點 `9SEC_EvidW.exe`。
-- **CLI 收集：** `9SEC_EvidW.exe -c`（需完整日誌、原始磁區時建議**提高權限**執行）。
+- **CLI 收集：** `9SEC_EvidW.exe -c [EvidenceID]`（別名 `--collect`；需完整日誌、原始磁區時建議**提高權限**執行）。
 - 建議將**輸出寫在外接媒體**，降低對受查主機的變動。
 
 ### 離線分析與關聯（不碰 live 主機、不開 GUI）
 
 9SEC Evidence Workbench 也能分析**任何人**已採集好的 artifact —— 指向資料夾或證據封裝，即可跑與載入 case 完全相同的 facts-only 關聯管線：
 
-- `9SEC_EvidW.exe -analyze <資料夾或封裝> [out.json]` —— 支援 folder、ZIP、TAR、TAR.GZ/TGZ；UAC 證據會自動辨識、索引並正規化可支援來源 → `summary_v3` JSON。
+- `9SEC_EvidW.exe -analyze <資料夾或封裝> [out.json]` —— 支援 folder、ZIP、TAR、TAR.GZ/TGZ；UAC 證據會自動辨識、索引並正規化可支援來源 → `summary_v3` JSON。路徑改填 `-` 時由 stdin 讀取證據路徑。
 - `9SEC_EvidW.exe -diff <基線> <目標> [out.json]` —— 透過正規化 facts 比較兩個資料夾或證據封裝 → `diff_v1` Added/Modified/Removed JSON。
 - `9SEC_EvidW.exe -correlate <out.json> <路徑A> <路徑B> [...]` —— 跨機 shared-entity + 時間關聯 → `correlation_v1` JSON。
-- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。
+- `9SEC_EvidW.exe -graph <seedType> <seedValue> <maxDepth> <out.json> <路徑...>` —— 從 seed 實體多跳展開的調查圖 → `graph_v1` JSON。`maxDepth` 須為正整數，其他值會以 exit code `2` 拒絕。
 - `9SEC_EvidW.exe -version` —— 工具名稱 + 版本。
 
 GUI 的 **Diff** 分頁會把目前選取的 target，與另一個已載入且 Fact Store ready 的 case 比較。
@@ -88,7 +88,7 @@ UAC `hash_executables.{md5,sha1,sha256}` 與 `hash_running_processes.{md5,sha1,s
 
 ## 治理（v0.22+）
 
-**AI** 與 **ZIP 上傳** 各有 endpoint **allowlist**；**AI Analyze** 可選 **redaction profile**，**僅**作用於即將送出的 JSON，**不**改寫已匯出之 Summary 檔或 ZIP 內文。**Collection mode profile**（`Standard`／`TriageFast`／`ForensicStrict`）在 **Advanced → Settings**，會寫入 `collection_coverage.json`。`ForensicStrict` 會分類預定輸出位置、要求明確風險確認（預設再做第二次確認）、強烈警示系統碟輸出，並預設略過已啟用的外部記憶體採集／分析 handoff、阻擋手動 **Deep Scan**、收集後 ZIP 上傳與程式內 **AI Analyze**；限制與 profile 略過項目都會寫入 coverage 與分析匯出。此模式**仍非**零足跡承諾。詳見 `docs/SECURITY.md`、`docs/USER_MANUAL.md`。
+**AI** 與 **ZIP 上傳** 各有 endpoint **allowlist**；**AI Analyze** 套用 **redaction profile**（`None`／`Basic`／`Strict`，預設 `Basic`），**僅**作用於即將送出的 JSON，**不**改寫已匯出之 Summary 檔或 ZIP 內文。**Collection mode profile**（`Standard`／`TriageFast`／`ForensicStrict`）在 **Advanced → Settings**，會寫入 `collection_coverage.json`。`ForensicStrict` 會分類預定輸出位置、要求明確風險確認（預設再做第二次確認）、強烈警示系統碟輸出，預設略過已啟用的外部記憶體採集／分析 handoff 並阻擋手動 **Deep Scan**（兩者可於 Settings 調整），且一律阻擋收集後 ZIP 上傳與程式內 **AI Analyze**；限制與 profile 略過項目都會寫入 coverage 與分析匯出。此模式**仍非**零足跡承諾。詳見 `docs/SECURITY.md`、`docs/USER_MANUAL.md`。
 
 ## 一句話結論
 

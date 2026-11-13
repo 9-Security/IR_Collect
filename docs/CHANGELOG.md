@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **`-graph` maxDepth 驗證**：`maxDepth` 非正整數（如 `two`、`0`、`-1`、`2.5`）時改回傳 usage error（exit code `2`），不再靜默改用預設深度 2 或 1；新增自測 `GraphCli_max_depth_rejects_non_positive_or_non_numeric`。
+- **Execution artifact 檔名來源**：`ExecutionArtifactCollector` 的 Amcache／SRUM raw 檔名改由 `ArtifactNames` 常數推導，消除 `SrumLog`／`SrumJrs` 未使用常數與字面字串重複；輸出路徑不變。
+
+### Changed
+- **文件校準**：README（雙語）更正 AI redaction profile 預設為 `Basic`（非選用關閉）、ForensicStrict 的 Deep Scan 阻擋與記憶體 handoff 略過皆為可調整的預設值；補上 `--collect` 別名、`-analyze -`（stdin）與 `-graph` maxDepth 規則；USER_MANUAL 同步；SPEC「DFIR 現場保護」交叉引用改指 `docs/README.md`。
+
 ## [0.25.2] — 2026-08-17
 
 ### Added

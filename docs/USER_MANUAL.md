@@ -296,7 +296,8 @@ This removes **all** loaded data, not just “analysis cache.”
 ```
 
 `--collect` is an alias for `-c`; `--version` is an alias for `-version`; `-h` is an alias for
-`--help`.
+`--help`. `-analyze -` reads the evidence path from stdin. `-graph` accepts only a positive
+integer `maxDepth`; any other value is a usage error (exit code `2`).
 
 ### 5.2 Typical uses
 

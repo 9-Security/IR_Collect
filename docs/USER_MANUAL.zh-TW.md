@@ -324,7 +324,8 @@ Full rebuild 並顯示原因。這是為了維持正確性，不是 partial-succ
 ```
 
 `--collect` 是 `-c` 的 alias；`--version` 是 `-version` 的 alias；`-h` 是 `--help` 的
-alias。
+alias。`-analyze -` 由 stdin 讀取證據路徑。`-graph` 的 `maxDepth` 只接受正整數，其他值視為
+用法錯誤（exit code `2`）。
 
 ### 5.2 CLI 典型用途
 
